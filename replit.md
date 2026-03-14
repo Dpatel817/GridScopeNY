@@ -1,46 +1,64 @@
 # GridScope NY
 
-A NYISO market intelligence dashboard with a React + Vite frontend and Python FastAPI backend.
+A premium NYISO market intelligence dashboard with a React + Vite frontend and Python FastAPI backend.
 
 ## Architecture
 
-- **Frontend**: React + Vite (TypeScript), port 5000 — sidebar navigation, Recharts charts, all 8 pages
+- **Frontend**: React + Vite (TypeScript), port 5000 — premium dark sidebar, Inter font, insight-driven pages
 - **Backend**: FastAPI (Python), port 8000 — serves processed NYISO data as JSON REST API with resolution aggregation
 - **Data Layer**: Pandas-based ETL that fetches and processes CSV data from NYISO MIS
 - **Entry point**: `start.sh` — starts FastAPI backend then React frontend
+
+## Design System
+
+The app uses a custom CSS design system (no Tailwind) with CSS variables for theming:
+- **Colors**: Primary blue (#2563eb), Accent green (#10b981), dark sidebar (#0f172a)
+- **Typography**: Inter font, strong weight hierarchy (400-800)
+- **Components**: KPI cards, chart cards, insight cards, rank tables, pill selectors, collapsible sections
+- **Layout**: Dark sidebar with branding, sectioned nav (Market Data / Tools), light content area
+
+### Reusable CSS Classes
+- `.kpi-grid` / `.kpi-card` — metric display cards with accent/primary variants
+- `.chart-card` — chart containers with header and badge
+- `.insight-card` — blue gradient insight/summary panels
+- `.rank-table` — styled ranking tables with numbered badges
+- `.pill-group` / `.pill` — pill-style toggle buttons
+- `.filter-bar` / `.filter-group` — filter containers
+- `.collapsible-header` / `.collapsible-body` — expandable sections
+- `.section-container` / `.section-title` — page sections
+- `.workflow-steps` / `.workflow-step` — numbered step cards
 
 ## Project Structure
 
 ```
 start.sh                  # Combined startup script (backend + frontend)
 api.py                    # FastAPI backend entry point (v2.0)
-frontend/                 # React + Vite TypeScript app
+frontend/
   src/
     App.tsx               # Root with React Router
+    index.css             # Full design system (CSS variables, all component styles)
     components/
-      Layout.tsx          # Sidebar + navigation shell
+      Layout.tsx          # Dark sidebar with branding, sectioned nav
       LineChart.tsx       # Recharts line chart wrapper (multi-line, wide-format)
-      MetricsRow.tsx      # Summary metrics cards
+      MetricsRow.tsx      # Summary metrics cards (legacy, used by DatasetSection)
       DataTable.tsx       # Paginated data table
       DatasetSection.tsx  # Collapsible dataset card (chart + metrics + table)
-      ResolutionSelector.tsx  # Resolution toggle buttons
+      ResolutionSelector.tsx  # Resolution pill toggle buttons
       EmptyState.tsx      # Empty state with ETL trigger button
     hooks/
       useDataset.ts       # Data fetching hook with resolution support
     pages/
-      Home.tsx            # Dashboard overview + data inventory + reference data
-      Prices.tsx          # DA/RT LBMP (10 datasets), Ancillary Prices, CTS
-      Demand.tsx          # ISO Load Forecast, Actual Load, Weather
-      Generation.tsx      # Fuel Mix, IMER, BTM Solar, Commitments, Maintenance
-      InterfaceFlows.tsx  # External Flows, ATC/TTC, Derates, PAR, Lake Erie
-      Congestion.tsx      # Limiting Constraints, Outages (DA/RT/SC/Actual)
-      OpportunityExplorer.tsx  # Battery DA-RT arbitrage rankings
-      AIExplainer.tsx     # OpenAI-powered Q&A
+      Home.tsx            # Market Overview — KPIs, workflow steps, nav tiles
+      Prices.tsx          # Price Intelligence — DA/RT comparison, spread analysis
+      Demand.tsx          # Demand Intelligence — forecast vs actual, error analysis
+      Generation.tsx      # Generation Mix — fuel breakdown, share analysis
+      InterfaceFlows.tsx  # Interface Flows — utilization, pressure analysis
+      Congestion.tsx      # Congestion Analysis — constraint rankings, outages
+      OpportunityExplorer.tsx  # Hero: battery arbitrage zone rankings
+      AIExplainer.tsx     # AI Market Analyst — context-aware Q&A
 src/
-  api_data_loader.py      # Dataset metadata (40 datasets), aggregation engine, caching
+  api_data_loader.py      # Dataset metadata (40 datasets), aggregation, caching
   config.py               # App constants (dirs, API keys)
-  data_loader.py          # Streamlit-compatible loader (kept for reference)
-  utils.py / metrics.py / filters.py / charts.py / nav.py  # Shared utilities
 ETL/
   fetch_nyiso_data.py     # Fetches CSVs from NYISO MIS (7-day rolling window)
   process_nyiso_data.py   # Cleans, renames, and saves processed CSVs
@@ -49,25 +67,26 @@ data/
   processed/              # Cleaned CSVs consumed by the API
 ```
 
+## Page Architecture
+
+Each page follows the intelligence layout pattern:
+1. **Page Header** — title + subtitle
+2. **Resolution/Filter Bar** — pill toggles or filter controls
+3. **KPI Cards** — 3-4 key metrics
+4. **Primary Charts** — chart cards with headers and badges
+5. **Insight Card** — deterministic text summary of current data
+6. **Rankings/Tables** — styled rank tables (not raw data)
+7. **Collapsible Raw Data** — expandable section with DatasetSection components
+
 ## API Endpoints (v2.0)
 
 - `GET /api/health` — health check
 - `GET /api/inventory` — data availability across all pages/datasets
-- `GET /api/dataset/{key}?resolution=raw|hourly|on_peak|off_peak|daily&limit=10000` — fetch any dataset with aggregation
+- `GET /api/dataset/{key}?resolution=raw|hourly|on_peak|off_peak|daily&limit=10000`
 - `GET /api/page/{page}` — list datasets for a page
-- `GET /api/filters/{key}/{col}` — get filter options for a dataset column
+- `GET /api/filters/{key}/{col}` — filter options for a column
 - `POST /api/explain` — AI market explanation (requires OPENAI_API_KEY)
-- `POST /api/etl/fetch` — trigger NYISO data fetch
-- `POST /api/etl/process` — trigger data processing
-
-## Dataset Organization (40 datasets)
-
-- **Home (7)**: rt_events, oper_messages, generator_names, load_names, active_transmission_nodes, zonal_uplift, resource_uplift
-- **Prices (10)**: da_lbmp_zone, rt_lbmp_zone, integrated_rt_lbmp_zone, da_lbmp_gen, rt_lbmp_gen, integrated_rt_lbmp_gen, reference_bus_lbmp, ext_rto_cts_price, da_asp, rt_asp
-- **Demand (4)**: isolf, pal, lfweather, btm_da_forecast (wide-format)
-- **Generation (7)**: rt_fuel_mix, imer_da_committed, imer_rt_committed, op_in_commit, gen_maint_report, btm_da_forecast, btm_estimated_actual
-- **Interface Flows (6)**: ext_int_flows, int_int_flows, atc_ttc, derates, par_data, lake_erie
-- **Congestion (6)**: da_limiting, rt_limiting, sc_line_outages, rt_line_outages, outages, actual_line_outages
+- `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL
 
 ## Resolution Aggregation
 
@@ -76,36 +95,15 @@ data/
 - **On-Peak Avg**: HE 7-22 average per day
 - **Off-Peak Avg**: HE 0-6, 23 average per day
 - **Daily**: Full day average
-- Daily-native and event/table datasets return raw data regardless of selection
 - DataFrame cache with mtime-based invalidation for performance
 
 ## Running
 
 ```bash
 bash start.sh
-# or separately:
-uvicorn api:app --host 0.0.0.0 --port 8000
-cd frontend && npm run dev
 ```
-
-## First-Time Setup (No Data)
-
-1. Navigate to any page in the dashboard
-2. Click "Fetch & Process Data" to run the ETL pipeline
-3. Wait ~3-5 minutes for data to download from NYISO
-4. Refresh — charts and tables will populate
 
 ## Dependencies
 
 Python: fastapi, uvicorn, pandas, numpy, plotly, python-dotenv, openpyxl, requests
-Node: react, react-router-dom, recharts, axios, vite
-
-## QA / Error Handling
-
-- NaN → null conversion for all JSON responses
-- Empty DataFrame guards at every layer
-- Network error handling with retry-safe structure in ETL
-- All processed files validated for column existence before API exposure
-- Missing processed files return `{status: "empty"}` with helpful message
-- CORS configured with allow_credentials=False for security
-- Large dataset limit (10,000 rows) applied after aggregation
+Node: react, react-router-dom, recharts, vite

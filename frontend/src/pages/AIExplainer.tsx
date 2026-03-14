@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { useDataset, useInventory } from '../hooks/useDataset'
 
-const EXAMPLES = [
-  'Why did Zone J prices separate from Zone G today?',
-  'Explain what happens when the Linden constraint is binding.',
-  'What causes high congestion costs at the UPNY/SENY interface?',
-  'Why do off-peak prices sometimes go negative in NYISO?',
+const SUGGESTED_PROMPTS = [
+  { label: 'Price Separation', prompt: 'Why did Zone J prices separate from Zone G today?' },
+  { label: 'Congestion Impact', prompt: 'Explain what happens when the Linden constraint is binding.' },
+  { label: 'Interface Pressure', prompt: 'What causes high congestion costs at the UPNY/SENY interface?' },
+  { label: 'Negative Prices', prompt: 'Why do off-peak prices sometimes go negative in NYISO?' },
+  { label: 'Battery Strategy', prompt: 'What zones are best for 2-hour battery arbitrage in NYISO and why?' },
+  { label: 'Demand Response', prompt: 'How does summer peak demand affect real-time prices in downstate NY?' },
 ]
 
 export default function AIExplainer() {
@@ -12,6 +15,23 @@ export default function AIExplainer() {
   const [response, setResponse] = useState('')
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<'ok' | 'error' | 'unconfigured' | null>(null)
+
+  const { data: priceData } = useDataset('da_lbmp_zone', 'daily')
+  const { inventory } = useInventory()
+
+  const marketContext = (() => {
+    if (!priceData?.data?.length) return null
+    const records = priceData.data
+    const lmps = records.map((r: any) => Number(r.LMP)).filter(Boolean)
+    const avgLmp = lmps.length ? lmps.reduce((a: number, b: number) => a + b, 0) / lmps.length : 0
+    const maxLmp = lmps.length ? Math.max(...lmps) : 0
+    const zones = [...new Set(records.map((r: any) => String(r.Zone)))]
+    const datasetCount = inventory
+      ? Object.values(inventory).reduce((sum: number, page: any) =>
+          sum + Object.values(page).filter((d: any) => d.status === 'available').length, 0)
+      : 0
+    return { avgLmp, maxLmp, zones, datasetCount }
+  })()
 
   async function handleExplain() {
     if (!prompt.trim()) return
@@ -27,7 +47,7 @@ export default function AIExplainer() {
       const data = await res.json()
       setResponse(data.response || data.detail || 'No response')
       setStatus(data.status || 'ok')
-    } catch (e) {
+    } catch {
       setResponse('Request failed. Is the API server running?')
       setStatus('error')
     } finally {
@@ -38,64 +58,76 @@ export default function AIExplainer() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1>🤖 AI Explainer</h1>
-        <p>Ask questions about NYISO market behavior — powered by GPT</p>
+        <h1>AI Market Analyst</h1>
+        <p className="page-subtitle">
+          Ask questions about NYISO market behavior — your AI-powered energy analyst
+        </p>
       </div>
 
-      <div className="card">
-        <div className="card-title">Ask a Question</div>
-        <textarea
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          placeholder="Why did Zone J prices separate from Zone G today?"
-          rows={4}
-          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleExplain() }}
-        />
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <button className="btn btn-primary" onClick={handleExplain} disabled={loading || !prompt.trim()}>
-            {loading ? '⏳ Explaining...' : '✨ Explain'}
-          </button>
-          <button className="btn btn-secondary" onClick={() => { setPrompt(''); setResponse(''); setStatus(null) }}>
-            Clear
-          </button>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-title">Example Questions</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {EXAMPLES.map(ex => (
-            <button
-              key={ex}
-              className="btn btn-secondary"
-              style={{ textAlign: 'left', justifyContent: 'flex-start', fontSize: 13 }}
-              onClick={() => setPrompt(ex)}
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {status === 'unconfigured' && (
-        <div className="alert alert-warning">
-          AI Explainer is not configured. Set the <code>OPENAI_API_KEY</code> environment variable to enable this feature.
+      {marketContext && (
+        <div className="insight-card" style={{ marginBottom: 24 }}>
+          <div className="insight-title">Current Market Context</div>
+          <div className="insight-body">
+            Avg DA LMP is <strong>${marketContext.avgLmp.toFixed(2)}/MWh</strong> across {marketContext.zones.length} zones
+            (peak: ${marketContext.maxLmp.toFixed(2)}/MWh).
+            {marketContext.datasetCount > 0 && <> {marketContext.datasetCount} datasets are loaded and available for analysis.</>}
+          </div>
         </div>
       )}
 
-      {response && status !== 'unconfigured' && (
-        <div className="card">
-          <div className="card-title">Response</div>
-          <div className="response-box">{response}</div>
-        </div>
-      )}
+      <div className="grid-2" style={{ gap: 24, alignItems: 'start' }}>
+        <div>
+          <div className="card">
+            <div className="card-title">Ask a Question</div>
+            <textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder="What drove high prices in Zone J this week?"
+              rows={4}
+              onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleExplain() }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button className="btn btn-primary" onClick={handleExplain} disabled={loading || !prompt.trim()}>
+                {loading ? 'Analyzing...' : 'Ask Analyst'}
+              </button>
+              <button className="btn btn-secondary" onClick={() => { setPrompt(''); setResponse(''); setStatus(null) }}>
+                Clear
+              </button>
+            </div>
+          </div>
 
-      {status === 'unconfigured' && response && (
-        <div className="card">
-          <div className="card-title">Response</div>
-          <div className="response-box">{response}</div>
+          {status === 'unconfigured' && (
+            <div className="alert alert-warning">
+              AI Analyst requires an API key. Set the <code>OPENAI_API_KEY</code> environment variable to enable this feature.
+            </div>
+          )}
+
+          {response && (
+            <div className="card">
+              <div className="card-title">Analysis</div>
+              <div className="response-box">{response}</div>
+            </div>
+          )}
         </div>
-      )}
+
+        <div>
+          <div className="card">
+            <div className="card-title">Suggested Questions</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {SUGGESTED_PROMPTS.map(sp => (
+                <button
+                  key={sp.prompt}
+                  className="suggested-prompt"
+                  onClick={() => setPrompt(sp.prompt)}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--primary)', marginBottom: 2 }}>{sp.label}</div>
+                  {sp.prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
