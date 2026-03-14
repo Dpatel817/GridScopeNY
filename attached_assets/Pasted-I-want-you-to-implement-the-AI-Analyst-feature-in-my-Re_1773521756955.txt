@@ -1,0 +1,137 @@
+I want you to implement the AI Analyst feature in my React app GridScopeNY using OpenAI.
+
+Important security rule:
+- Do NOT ask me to paste my API key into frontend code, source files, prompts, or the repo.
+- The API key must be read from an environment variable / secret only, such as OPENAI_API_KEY.
+- The frontend must never call OpenAI directly.
+- All OpenAI calls must go through a backend/server route.
+
+Goal:
+Turn the existing "AI Market Analyst" page into a working NYISO market explainer that uses current dashboard context plus the user's question to generate a grounded answer.
+
+Architecture I want:
+- React frontend page for the AI Analyst
+- Backend API route such as /api/ai-explainer
+- Backend uses the official OpenAI SDK
+- Backend calls the OpenAI Responses API
+- Frontend sends:
+  - user question
+  - current market context object
+- Backend returns:
+  - concise analyst explanation
+  - optional bullets for top drivers / caveats
+
+Please inspect my current app structure first and then implement this in the cleanest way possible without breaking existing routes.
+
+Requirements:
+
+1. Backend API route
+Create a backend/server endpoint for the AI analyst, e.g.:
+- POST /api/ai-explainer
+
+This route should:
+- read OPENAI_API_KEY from environment variables
+- validate input
+- accept:
+  - question
+  - context
+- build a clean system prompt and user prompt
+- call OpenAI using the Responses API
+- return a JSON response with:
+  - answer
+  - optional structured fields like drivers or caveats if helpful
+
+2. Use the official OpenAI SDK
+Use the modern OpenAI Node SDK and Responses API pattern.
+Do not use browser-side API calls.
+
+3. Prompting behavior
+The AI should behave like a NYISO market analyst inside GridScopeNY.
+
+Prompt behavior:
+- answer using only the provided dashboard context plus the user question
+- be concise, analytical, and professional
+- if the context is insufficient, explicitly say what is missing
+- do not invent constraints, zones, outages, prices, or explanations that are not supported
+- prioritize market reasoning based on:
+  - prices
+  - demand
+  - generation
+  - interface flows
+  - congestion
+  - opportunity explorer outputs
+
+4. Context object
+Build a compact context payload from the current app state.
+If possible, include fields like:
+- current page
+- selected date range
+- selected zone
+- selected resolution
+- top spread zone
+- key KPIs currently shown
+- top constraints
+- key flows
+- demand surprise
+- battery opportunity metrics
+
+Do not send giant raw datasets if avoidable.
+Prefer a compact structured summary object.
+
+5. AI Analyst page behavior
+Update the current AI Analyst page so it:
+- keeps the current clean layout
+- uses the question box that already exists
+- uses the suggested questions panel
+- actually sends the selected question to the backend
+- displays the AI response in a polished answer card below the input
+- includes loading state
+- includes error state
+- supports clicking a suggested prompt to populate or send the question
+- uses the current market context banner as real input context if possible
+
+6. UX behavior
+The page should feel integrated with the product, not like a generic chatbot.
+Please:
+- preserve the current visual style
+- make the result feel like an "analyst note"
+- keep the response readable and structured
+- optionally format the answer as:
+  - summary
+  - likely drivers
+  - caveat / confidence note
+
+7. Environment variable handling
+Use OPENAI_API_KEY from server environment only.
+Do not hardcode the key anywhere.
+Do not log the key.
+Do not expose it to the frontend bundle.
+
+8. File changes
+Please tell me:
+- what files you created
+- what files you modified
+- where the backend route lives
+- how the frontend calls it
+- where the context object is built
+
+9. Keep scope practical
+Do not overengineer:
+- no full memory system
+- no vector DB
+- no web search
+- no tool calling unless clearly needed
+- no giant framework rewrite
+
+Just build a solid grounded AI explainer that works for this app.
+
+10. Nice-to-have
+If it is easy, add one reusable helper so other pages can later send page-specific context to the AI Analyst.
+
+Deliverables:
+1. review the current AI Analyst page and app structure
+2. implement the backend endpoint
+3. wire the frontend to it
+4. keep the API key secure through env vars only
+5. explain what changed
+6. explain how to test it locally in Replit
