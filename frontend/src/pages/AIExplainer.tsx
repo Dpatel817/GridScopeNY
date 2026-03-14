@@ -23,7 +23,11 @@ export default function AIExplainer() {
   const [loading, setLoading] = useState(false)
 
   const { data: priceData } = useDataset('da_lbmp_zone', 'daily')
+  const { data: rtPriceData } = useDataset('rt_lbmp_zone', 'daily')
   const { data: demandData } = useDataset('isolf', 'daily')
+  const { data: genData } = useDataset('rtfuelmix', 'daily')
+  const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily')
+  const { data: interfaceData } = useDataset('dam_imer', 'daily')
   const { inventory } = useInventory()
 
   const marketContext = (() => {
@@ -35,6 +39,7 @@ export default function AIExplainer() {
       const zones = [...new Set(records.map((r: any) => String(r.Zone)))]
       ctx['avg_da_lmp'] = lmps.length ? `$${(lmps.reduce((a: number, b: number) => a + b, 0) / lmps.length).toFixed(2)}/MWh` : null
       ctx['max_da_lmp'] = lmps.length ? `$${Math.max(...lmps).toFixed(2)}/MWh` : null
+      ctx['min_da_lmp'] = lmps.length ? `$${Math.min(...lmps).toFixed(2)}/MWh` : null
       ctx['zones_count'] = zones.length
 
       const byZone: Record<string, number[]> = {}
@@ -47,8 +52,25 @@ export default function AIExplainer() {
         zone: z,
         avg: vals.reduce((a, b) => a + b, 0) / vals.length,
       })).sort((a, b) => b.avg - a.avg)
-      ctx['highest_price_zone'] = zoneAvgs[0]?.zone
-      ctx['lowest_price_zone'] = zoneAvgs[zoneAvgs.length - 1]?.zone
+      ctx['highest_price_zone'] = `${zoneAvgs[0]?.zone} ($${zoneAvgs[0]?.avg.toFixed(2)}/MWh)`
+      ctx['lowest_price_zone'] = `${zoneAvgs[zoneAvgs.length - 1]?.zone} ($${zoneAvgs[zoneAvgs.length - 1]?.avg.toFixed(2)}/MWh)`
+
+      const top3 = zoneAvgs.slice(0, 3).map(z => `${z.zone}: $${z.avg.toFixed(2)}`).join(', ')
+      const bot3 = zoneAvgs.slice(-3).map(z => `${z.zone}: $${z.avg.toFixed(2)}`).join(', ')
+      ctx['zone_price_ranking'] = `Top: ${top3}. Bottom: ${bot3}`
+    }
+
+    if (rtPriceData?.data?.length) {
+      const rtRecords = rtPriceData.data
+      const rtLmps = rtRecords.map((r: any) => Number(r.LMP)).filter(Boolean)
+      ctx['avg_rt_lmp'] = rtLmps.length ? `$${(rtLmps.reduce((a: number, b: number) => a + b, 0) / rtLmps.length).toFixed(2)}/MWh` : null
+
+      if (priceData?.data?.length) {
+        const daAvg = Number(ctx['avg_da_lmp']?.replace(/[^0-9.-]/g, '')) || 0
+        const rtAvg = rtLmps.reduce((a: number, b: number) => a + b, 0) / rtLmps.length
+        const spread = daAvg - rtAvg
+        ctx['da_rt_spread'] = `$${spread.toFixed(2)}/MWh (DA ${spread > 0 ? 'premium' : 'discount'})`
+      }
     }
 
     if (demandData?.data?.length) {
@@ -58,14 +80,64 @@ export default function AIExplainer() {
       ctx['avg_forecast_load'] = nyiso.length ? `${Math.round(nyiso.reduce((a: number, b: number) => a + b, 0) / nyiso.length).toLocaleString()} MW` : null
     }
 
+    if (genData?.data?.length) {
+      const records = genData.data
+      const fuels: Record<string, number> = {}
+      for (const r of records) {
+        const fuel = String(r['Fuel Type'] || r['Fuel Category'] || '')
+        const gen = Number(r['Generation MW'] || r['Gen MWh'] || 0)
+        if (fuel && gen) {
+          fuels[fuel] = (fuels[fuel] || 0) + gen
+        }
+      }
+      const total = Object.values(fuels).reduce((a, b) => a + b, 0)
+      if (total > 0) {
+        const sorted = Object.entries(fuels).sort((a, b) => b[1] - a[1])
+        ctx['generation_mix'] = sorted.slice(0, 5).map(([f, v]) => `${f}: ${((v/total)*100).toFixed(1)}%`).join(', ')
+      }
+    }
+
+    if (congestionData?.data?.length) {
+      const records = congestionData.data
+      const constraints: Record<string, number> = {}
+      for (const r of records) {
+        const name = String(r['Limiting Facility'] || r['Constraint Name'] || '')
+        const cost = Math.abs(Number(r['Constraint Cost'] || r['Shadow Price'] || 0))
+        if (name && cost) {
+          constraints[name] = (constraints[name] || 0) + cost
+        }
+      }
+      const sorted = Object.entries(constraints).sort((a, b) => b[1] - a[1])
+      if (sorted.length > 0) {
+        ctx['top_congested_constraints'] = sorted.slice(0, 3).map(([n, v]) => `${n} ($${v.toFixed(0)})`).join(', ')
+      }
+    }
+
+    if (interfaceData?.data?.length) {
+      const records = interfaceData.data
+      const zoneImers: Record<string, number[]> = {}
+      for (const r of records) {
+        const zone = String(r['Zone'] || '')
+        const lmp = Number(r['LMP'] || 0)
+        if (zone && lmp) {
+          if (!zoneImers[zone]) zoneImers[zone] = []
+          zoneImers[zone].push(lmp)
+        }
+      }
+      const avgImers = Object.entries(zoneImers).map(([z, vals]) => ({
+        zone: z,
+        avg: vals.reduce((a, b) => a + b, 0) / vals.length,
+      })).sort((a, b) => b.avg - a.avg)
+      if (avgImers.length > 0) {
+        ctx['imer_price_summary'] = avgImers.slice(0, 3).map(f => `${f.zone}: $${f.avg.toFixed(2)}/MWh`).join(', ')
+      }
+    }
+
     if (inventory) {
       const available = Object.values(inventory).reduce((sum: number, page: any) =>
         sum + Object.values(page).filter((d: any) => d.status === 'available').length, 0)
       ctx['datasets_available'] = available
     }
-
-    ctx['resolution'] = 'daily'
-    ctx['current_page'] = 'AI Analyst'
 
     return ctx
   })()
@@ -113,12 +185,17 @@ export default function AIExplainer() {
         <div className="insight-card" style={{ marginBottom: 24 }}>
           <div className="insight-title">Current Market Context</div>
           <div className="insight-body">
-            {marketContext.avg_da_lmp && <>Avg DA LMP is <strong>{marketContext.avg_da_lmp}</strong></>}
+            {marketContext.avg_da_lmp && <>DA LMP: <strong>{marketContext.avg_da_lmp}</strong> avg</>}
             {marketContext.max_da_lmp && <> (peak: <strong>{marketContext.max_da_lmp}</strong>)</>}
-            {marketContext.zones_count && <> across <strong>{marketContext.zones_count} zones</strong></>}
-            {marketContext.highest_price_zone && <>, highest in <strong>{marketContext.highest_price_zone}</strong></>}
-            {marketContext.lowest_price_zone && <>, lowest in <strong>{marketContext.lowest_price_zone}</strong></>}.
-            {marketContext.peak_forecast_load && <> Peak forecast load: <strong>{marketContext.peak_forecast_load}</strong>.</>}
+            {marketContext.avg_rt_lmp && <> | RT LMP: <strong>{marketContext.avg_rt_lmp}</strong> avg</>}
+            {marketContext.da_rt_spread && <> | Spread: <strong>{marketContext.da_rt_spread}</strong></>}
+            {marketContext.zones_count && <> across <strong>{marketContext.zones_count} zones</strong></>}.
+            {marketContext.highest_price_zone && <> Highest: <strong>{marketContext.highest_price_zone}</strong></>}
+            {marketContext.lowest_price_zone && <>, lowest: <strong>{marketContext.lowest_price_zone}</strong>.</>}
+            {marketContext.peak_forecast_load && <> Peak load: <strong>{marketContext.peak_forecast_load}</strong>.</>}
+            {marketContext.generation_mix && <> Gen mix: <strong>{marketContext.generation_mix}</strong>.</>}
+            {marketContext.top_congested_constraints && <> Top constraints: <strong>{marketContext.top_congested_constraints}</strong>.</>}
+            {marketContext.imer_price_summary && <> IMER: <strong>{marketContext.imer_price_summary}</strong>.</>}
             {marketContext.datasets_available && <> {marketContext.datasets_available} datasets loaded.</>}
           </div>
         </div>

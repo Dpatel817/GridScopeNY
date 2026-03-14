@@ -123,14 +123,20 @@ def generator_map(
     available_dates = sorted(lmp["Date"].dropna().unique().tolist()) if "Date" in lmp.columns else []
     available_hes = sorted(lmp["HE"].dropna().unique().astype(int).tolist()) if "HE" in lmp.columns else []
 
+    debug_lmp_rows_loaded = len(lmp)
+
     if date:
         lmp = lmp[lmp["Date"] == date]
     else:
         if available_dates:
             lmp = lmp[lmp["Date"] == available_dates[-1]]
 
+    debug_lmp_rows_after_date = len(lmp)
+
     if he is not None and "HE" in lmp.columns:
         lmp = lmp[lmp["HE"] == he]
+
+    debug_lmp_rows_after_he = len(lmp)
 
     agg_cols = [c for c in ["LMP", "MLC", "MCC"] if c in lmp.columns]
     if agg_cols:
@@ -166,9 +172,11 @@ def generator_map(
 
     zones = sorted(gn_coords["Zone"].dropna().unique().tolist())
 
+    selected_date = date or (available_dates[-1] if available_dates else None)
+
     return {
         "market": market,
-        "date": date or (available_dates[-1] if available_dates else None),
+        "date": selected_date,
         "he": he,
         "he_averaged": he is None,
         "points": points,
@@ -182,6 +190,16 @@ def generator_map(
         "available_dates": available_dates,
         "available_hes": available_hes,
         "zones": zones,
+        "debug": {
+            "lmp_file": lmp_file,
+            "lmp_rows_loaded": debug_lmp_rows_loaded,
+            "lmp_rows_after_date_filter": debug_lmp_rows_after_date,
+            "lmp_rows_after_he_filter": debug_lmp_rows_after_he,
+            "lmp_ptids_after_agg": total_lmp_ptids,
+            "merged_rows": len(merged),
+            "selected_date": selected_date,
+            "date_range": f"{available_dates[0]} to {available_dates[-1]}" if available_dates else "none",
+        },
     }
 
 
@@ -191,6 +209,31 @@ def generator_map(
 class AIExplainRequest(BaseModel):
     question: str
     context: Optional[dict[str, Any]] = None
+
+
+def _strip_markdown(text: str) -> str:
+    """Remove markdown formatting artifacts from LLM output."""
+    import re
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    text = re.sub(r'__([^_]+)__', r'\1', text)
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)
+    text = re.sub(r'_([^_]+)_', r'\1', text)
+    text = re.sub(r'^#{1,4}\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'`{1,3}[^`]*`{1,3}', '', text)
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    text = re.sub(r'\*{2,}', '', text)
+    text = re.sub(r'_{2,}', '', text)
+    return text.strip()
+
+
+def _parse_bullet_lines(text: str) -> list[str]:
+    """Extract clean bullet items from a text block."""
+    items = []
+    for line in text.strip().split("\n"):
+        cleaned = line.strip().lstrip("•-–*1234567890.) ").strip()
+        if cleaned and len(cleaned) > 3:
+            items.append(_strip_markdown(cleaned))
+    return items
 
 
 @app.post("/api/ai-explainer")
@@ -209,28 +252,48 @@ def ai_explainer(body: AIExplainRequest):
         }
 
     ctx = body.context or {}
+    context_lines = []
+    label_map = {
+        "avg_da_lmp": "Avg DA LMP",
+        "max_da_lmp": "Peak DA LMP",
+        "zones_count": "Active zones",
+        "highest_price_zone": "Highest-priced zone",
+        "lowest_price_zone": "Lowest-priced zone",
+        "peak_forecast_load": "Peak forecast load",
+        "avg_forecast_load": "Avg forecast load",
+        "datasets_available": "Datasets loaded",
+        "top_congested_constraints": "Top congested constraints",
+        "da_rt_spread_range": "DA-RT spread range",
+        "interface_flow_summary": "Key interface flows",
+        "generation_mix": "Generation mix",
+    }
+    for k, v in ctx.items():
+        if v is not None and v != "" and v != [] and k not in ("resolution", "current_page"):
+            label = label_map.get(k, k.replace("_", " ").title())
+            context_lines.append(f"  {label}: {v}")
     context_block = ""
-    if ctx:
-        lines = []
-        for k, v in ctx.items():
-            if v is not None and v != "" and v != []:
-                lines.append(f"- {k}: {v}")
-        if lines:
-            context_block = "Current dashboard context:\n" + "\n".join(lines)
+    if context_lines:
+        context_block = "DASHBOARD STATE (use these numbers directly):\n" + "\n".join(context_lines)
 
     system_prompt = (
-        "You are an expert NYISO electricity market analyst embedded in GridScopeNY, "
-        "a premium market intelligence dashboard. Your role:\n"
-        "1. Answer using ONLY the provided dashboard context plus the user question.\n"
-        "2. Be concise, analytical, and professional.\n"
-        "3. If context is insufficient, explicitly say what data is missing.\n"
-        "4. Do NOT invent prices, constraints, zones, outages, or explanations not supported by the context.\n"
-        "5. Prioritize market reasoning based on: prices, demand, generation, interface flows, congestion, and opportunity explorer outputs.\n"
-        "6. Structure your response as:\n"
-        "   - A brief summary paragraph\n"
-        "   - 'DRIVERS:' section with 2-4 bullet points of likely drivers\n"
-        "   - 'CAVEATS:' section with 1-2 bullet points on confidence/limitations\n"
-        "7. Keep total response under 300 words."
+        "You are a senior NYISO electricity market analyst. You write concise analyst notes "
+        "for energy traders and portfolio managers using GridScopeNY.\n\n"
+        "STRICT RULES:\n"
+        "- Use the dashboard data provided. Reference actual numbers, zones, and values.\n"
+        "- Do NOT use markdown formatting. No **, no #, no `, no bullet symbols.\n"
+        "- Write in plain professional prose. No filler, no hedging, no generic disclaimers.\n"
+        "- If data is insufficient, state exactly what is missing in one sentence.\n"
+        "- Do NOT invent prices, outages, or events not in the context.\n"
+        "- Do NOT say 'typically' or 'generally' when specific data is available.\n\n"
+        "RESPONSE FORMAT (follow exactly):\n"
+        "Write a 2-4 sentence direct answer using specific data points.\n\n"
+        "DRIVERS:\n"
+        "- First likely driver (one sentence)\n"
+        "- Second likely driver (one sentence)\n"
+        "- Third likely driver if relevant (one sentence)\n\n"
+        "CAVEATS:\n"
+        "- One short caveat only if genuinely needed\n\n"
+        "Keep the total response under 200 words. Be direct. Sound like an analyst, not a chatbot."
     )
 
     user_content = question
@@ -246,31 +309,34 @@ def ai_explainer(body: AIExplainRequest):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
-            max_tokens=800,
-            temperature=0.3,
+            max_tokens=600,
+            temperature=0.2,
         )
         raw = completion.choices[0].message.content or ""
 
-        answer = raw
+        answer = _strip_markdown(raw)
         drivers: list[str] = []
         caveats: list[str] = []
 
-        if "DRIVERS:" in raw:
-            parts = raw.split("DRIVERS:", 1)
-            answer = parts[0].strip()
-            rest = parts[1]
-            if "CAVEATS:" in rest:
-                driver_section, caveat_section = rest.split("CAVEATS:", 1)
+        import re
+        drivers_match = re.split(r'(?i)DRIVERS?\s*:', answer, maxsplit=1)
+        if len(drivers_match) > 1:
+            answer = drivers_match[0].strip()
+            rest = drivers_match[1]
+            caveats_match = re.split(r'(?i)CAVEATS?\s*:', rest, maxsplit=1)
+            if len(caveats_match) > 1:
+                drivers = _parse_bullet_lines(caveats_match[0])
+                caveats = _parse_bullet_lines(caveats_match[1])
             else:
-                driver_section = rest
-                caveat_section = ""
-            drivers = [l.strip().lstrip("•-– ").strip() for l in driver_section.strip().split("\n") if l.strip() and l.strip() not in ("", "-")]
-            if caveat_section:
-                caveats = [l.strip().lstrip("•-– ").strip() for l in caveat_section.strip().split("\n") if l.strip() and l.strip() not in ("", "-")]
-        elif "CAVEATS:" in raw:
-            parts = raw.split("CAVEATS:", 1)
+                drivers = _parse_bullet_lines(rest)
+        elif re.search(r'(?i)CAVEATS?\s*:', answer):
+            parts = re.split(r'(?i)CAVEATS?\s*:', answer, maxsplit=1)
             answer = parts[0].strip()
-            caveats = [l.strip().lstrip("•-– ").strip() for l in parts[1].strip().split("\n") if l.strip()]
+            caveats = _parse_bullet_lines(parts[1])
+
+        answer = answer.strip()
+        if answer.startswith("Summary") or answer.startswith("SUMMARY"):
+            answer = re.sub(r'^(?:SUMMARY|Summary)\s*:?\s*', '', answer).strip()
 
         return {
             "answer": answer,

@@ -1,0 +1,156 @@
+I need you to fix two specific issues in GridScopeNY:
+
+1. The AI Analyst summaries are too generic and poorly formatted
+2. The Real-Time generator price map is not finding any RT generator LMP data
+
+Please treat these as high-priority fixes.
+
+-----------------------------------
+ISSUE 1: AI ANALYST OUTPUT QUALITY
+-----------------------------------
+
+Current problems:
+- The AI summaries are too generic
+- They lean too heavily on disclaimers
+- They do not feel grounded in the actual dashboard data
+- They include broken formatting artifacts like stray "**"
+- They read like a generic chatbot instead of a market analyst note
+
+What I want instead:
+The AI Analyst should feel like a concise NYISO analyst working off the actual app context.
+
+Target behavior:
+- Answer directly
+- Use real dashboard context when available
+- Avoid generic filler
+- Avoid over-disclaiming
+- Avoid markdown artifacts like stray "**"
+- Write in a professional analyst-note style
+- If context is insufficient, say exactly what is missing, but only briefly
+
+Fix requirements:
+1. Audit the AI response formatting pipeline
+- find why stray "**" is appearing
+- clean up any markdown parsing / rendering issue
+- make the final answer render cleanly
+
+2. Improve the prompt and output structure
+I want the AI response to follow this structure:
+
+Summary
+- 2–4 sentence direct answer
+
+Likely Drivers
+- 2 to 4 concise bullets using actual context if available
+
+Caveat
+- 1 short caveat only if genuinely needed
+
+3. Make the AI more context-aware
+- inspect what context object is actually being sent to the AI endpoint
+- verify whether page context, selected zone, dates, KPIs, top constraints, spreads, flows, demand signals, etc. are actually reaching the backend
+- if the current context object is too weak, improve it
+
+4. Reduce generic fallback behavior
+- if there is actual context, use it
+- do not default immediately to generic statements like "price separation could typically be influenced by..."
+- only use generic market reasoning if specific supporting data is unavailable
+
+5. Suggested prompts should feel smarter
+- make sure clicking a suggested prompt uses the best available dashboard context
+- the AI should answer as if it knows what page/state the user is in
+
+-----------------------------------
+ISSUE 2: RT GENERATOR MAP NOT WORKING
+-----------------------------------
+
+Current problem:
+The Generator Price Map says:
+
+- 829 generators in metadata
+- 0 in RT LMP data
+- 0 successfully mapped with coordinates
+- 268 generators in metadata have no coordinates
+
+This strongly suggests the issue is not just visualization.
+It is likely a data loading, parsing, filtering, or join issue.
+
+What I need you to do:
+
+1. Audit the RT generator map data pipeline end-to-end
+Check:
+- is rt_gen_lmp actually being loaded?
+- is the processed RT generator LMP dataset being created correctly?
+- is the frontend using the correct RT dataset when the Real Time toggle is selected?
+- is the market toggle wired correctly?
+- is the selected date/hour filter accidentally removing all RT rows?
+- are the expected columns present in rt_gen_lmp?
+- is the join key between generator_names and rt_gen_lmp correct?
+
+2. Validate the generator join
+Inspect how generator_names is joined to:
+- da_gen_lmp
+- rt_gen_lmp
+
+Check for:
+- PTID mismatch
+- string/int type mismatch
+- wrong key name
+- trimming/casing issues
+- duplicate join keys
+- dropped rows
+
+3. Report actual coverage clearly
+After fixing the pipeline, report:
+- total generators in metadata
+- total generators with coordinates
+- DA generator LMP rows available
+- RT generator LMP rows available
+- DA mapped generators
+- RT mapped generators
+- unmatched generators
+- generators missing coordinates
+
+4. Fix the RT market toggle
+I suspect the RT toggle may not actually be querying RT data correctly.
+Please verify:
+- DA toggle uses da_gen_lmp
+- RT toggle uses rt_gen_lmp
+- both use the same join logic to generator_names
+- both respect date/hour filters correctly
+
+5. Fix the map page behavior
+The Generator Price Map should:
+- work for both Day Ahead and Real Time
+- support LMP / MLC / MCC
+- show real mapped generator points when data exists
+- not falsely report zero RT data if the dataset actually exists
+- clearly explain if a selected date/hour has no RT rows
+
+6. Add debugging/validation for this feature
+Please add temporary or optional debug output showing:
+- row counts before and after filtering
+- join match counts
+- date/hour coverage
+- number of generators plotted
+This can be in a dev/debug section or console log, but it should help confirm correctness.
+
+-----------------------------------
+OUTPUT / DELIVERABLES
+-----------------------------------
+
+Please:
+1. identify the root causes of both issues
+2. fix them in code
+3. list what files changed
+4. explain how the AI prompt/context changed
+5. explain how the RT generator map pipeline was fixed
+6. confirm how you verified the RT data is now being read and mapped correctly
+
+Acceptance criteria:
+- AI summaries are clean, concise, and grounded
+- no stray "**" formatting artifacts
+- AI output feels like an analyst note, not a generic chatbot
+- RT generator map correctly reads RT generator LMP data when available
+- DA and RT toggles both work
+- mapping coverage numbers are trustworthy and explicitly explained

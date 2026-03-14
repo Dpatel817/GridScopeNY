@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -30,6 +30,13 @@ interface MapData {
   available_dates: string[];
   available_hes: number[];
   zones: string[];
+  debug?: {
+    lmp_rows_loaded: number;
+    lmp_rows_after_date_filter: number;
+    lmp_rows_after_he_filter: number;
+    lmp_ptids_after_agg: number;
+    merged_rows: number;
+  };
 }
 
 const METRICS = ['LMP', 'MLC', 'MCC'] as const;
@@ -85,19 +92,23 @@ export default function GeneratorMap() {
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const prevMarketRef = useRef(market);
 
-  const fetchMapData = useCallback(async () => {
+  const fetchMapData = useCallback(async (fetchDate?: string) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ market });
-      if (date) params.set('date', date);
+      const dateToUse = fetchDate ?? date;
+      if (dateToUse) params.set('date', dateToUse);
       if (he !== '') params.set('he', String(he));
       const res = await fetch(`/api/generator-map?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data: MapData = await res.json();
       setMapData(data);
-      if (!date && data.date) setDate(data.date);
+      if (data.date) setDate(data.date);
+
+      console.log(`[GeneratorMap] ${market} | date=${data.date} | he=${he === '' ? 'avg' : he} | points=${data.points.length} | audit=`, data.audit, data.debug ? `| debug=${JSON.stringify(data.debug)}` : '');
     } catch (e: any) {
       setError(e.message || 'Failed to fetch generator map data');
       setMapData(null);
@@ -106,7 +117,22 @@ export default function GeneratorMap() {
     }
   }, [market, date, he]);
 
-  useEffect(() => { fetchMapData(); }, [fetchMapData]);
+  useEffect(() => {
+    if (prevMarketRef.current !== market) {
+      prevMarketRef.current = market;
+      setDate('');
+      setHe('');
+      fetchMapData('');
+    } else {
+      fetchMapData();
+    }
+  }, [market]);
+
+  useEffect(() => {
+    if (date || he !== '') {
+      fetchMapData();
+    }
+  }, [date, he]);
 
   const filteredPoints = useMemo(() => {
     if (!mapData) return [];
@@ -127,6 +153,10 @@ export default function GeneratorMap() {
 
   const metricLabel = metric === 'LMP' ? 'LMP ($/MWh)' : metric === 'MLC' ? 'Marginal Loss ($/MWh)' : 'Marginal Congestion ($/MWh)';
 
+  function handleMarketChange(m: 'DA' | 'RT') {
+    if (m !== market) setMarket(m);
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -140,7 +170,7 @@ export default function GeneratorMap() {
         <div className="pill-group">
           <span className="pill-label">MARKET:</span>
           {(['DA', 'RT'] as const).map(m => (
-            <button key={m} className={`pill${market === m ? ' active' : ''}`} onClick={() => setMarket(m)}>
+            <button key={m} className={`pill${market === m ? ' active' : ''}`} onClick={() => handleMarketChange(m)}>
               {m === 'DA' ? 'Day Ahead' : 'Real Time'}
             </button>
           ))}
@@ -231,6 +261,19 @@ export default function GeneratorMap() {
         </div>
       )}
 
+      {!loading && mapData && filteredPoints.length === 0 && !error && (
+        <div className="insight-card" style={{ marginBottom: 16 }}>
+          <div className="insight-title">No Generators Found</div>
+          <div className="insight-body">
+            No {market} generator data for {date || 'the selected date'}
+            {he !== '' ? ` HE ${he}` : ''}.
+            {mapData.available_dates.length > 0 && (
+              <> Available dates: {mapData.available_dates[0]} to {mapData.available_dates[mapData.available_dates.length - 1]}.</>
+            )}
+          </div>
+        </div>
+      )}
+
       {!loading && filteredPoints.length > 0 && (
         <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="chart-card-header" style={{ padding: '12px 20px' }}>
@@ -300,7 +343,7 @@ export default function GeneratorMap() {
           <div className="insight-title">Data Coverage Report</div>
           <div className="insight-body">
             <strong>{mapData.audit.total_generators_in_metadata}</strong> generators in metadata,{' '}
-            <strong>{mapData.audit.total_generators_in_lmp}</strong> in {market} LMP data.{' '}
+            <strong>{mapData.audit.total_generators_in_lmp}</strong> in {market} LMP data ({date || 'latest'}).{' '}
             <strong>{mapData.audit.mapped_with_coords}</strong> successfully mapped with coordinates
             ({mapData.audit.total_generators_in_lmp > 0
               ? ((mapData.audit.mapped_with_coords / mapData.audit.total_generators_in_lmp) * 100).toFixed(1)
@@ -308,6 +351,9 @@ export default function GeneratorMap() {
             <strong>{mapData.audit.generators_missing_coords}</strong> generators in metadata have no coordinates.{' '}
             {mapData.audit.unmapped_no_coords > 0 && (
               <><strong>{mapData.audit.unmapped_no_coords}</strong> LMP generators could not be placed on the map.</>
+            )}
+            {mapData.available_dates.length > 0 && (
+              <> {market} date range: {mapData.available_dates[0]} to {mapData.available_dates[mapData.available_dates.length - 1]}.</>
             )}
           </div>
         </div>
