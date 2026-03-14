@@ -1,63 +1,91 @@
 # GridScope NY
 
-A Streamlit-based NYISO (New York Independent System Operator) market intelligence dashboard for visualizing and analyzing electricity market data including prices, demand, generation, interface flows, congestion, and AI-assisted analysis.
+A NYISO market intelligence dashboard with a React + Vite frontend and Python FastAPI backend.
 
 ## Architecture
 
-- **Framework**: Streamlit (Python)
-- **Language**: Python 3.12
-- **Entry point**: `app.py`
-- **Pages**: `pages/` directory (Streamlit multi-page app)
-- **Source modules**: `src/` directory
-- **Data**: `data/raw/` and `data/processed/` directories
-- **ETL scripts**: `ETL/` directory
+- **Frontend**: React + Vite (TypeScript), port 5000 — sidebar navigation, Recharts charts, all 8 pages
+- **Backend**: FastAPI (Python), port 8000 — serves processed NYISO data as JSON REST API
+- **Data Layer**: Pandas-based ETL that fetches and processes CSV data from NYISO MIS
+- **Entry point**: `start.sh` — starts FastAPI backend then React frontend
 
 ## Project Structure
 
 ```
-app.py                  # Main entry point / Home page
-pages/
-  1_Prices.py           # Price data page
-  2_Demand.py           # Demand data page
-  3_Generation.py       # Generation data page
-  4_Interface_Flows.py  # Interface flows page
-  5_Congestion.py       # Congestion data page
-  6_Opportunity_Explorer.py  # Opportunity analysis
-  7_AI_Explainer.py     # AI-powered explanations
+start.sh                  # Combined startup script (backend + frontend)
+api.py                    # FastAPI backend entry point
+frontend/                 # React + Vite TypeScript app
+  src/
+    App.tsx               # Root with React Router
+    components/
+      Layout.tsx          # Sidebar + navigation shell
+      LineChart.tsx       # Recharts line chart wrapper
+      MetricsRow.tsx      # Summary metrics cards
+      DataTable.tsx       # Paginated data table
+      EmptyState.tsx      # Empty state with ETL trigger button
+    hooks/
+      useDataset.ts       # useFetch hooks for API calls
+    pages/
+      Home.tsx            # Dashboard overview + data inventory
+      Prices.tsx          # DA/RT LBMP, Ancillary Prices
+      Demand.tsx          # ISO Load, Weather, Solar
+      Generation.tsx      # Fuel Mix, IMER, Commitments
+      InterfaceFlows.tsx  # External Flows, ATC/TTC, PAR, Erie
+      Congestion.tsx      # Limiting Constraints, Outages
+      OpportunityExplorer.tsx  # Ranked market opportunities
+      AIExplainer.tsx     # OpenAI-powered Q&A
 src/
-  config.py             # App configuration and constants
-  data_loader.py        # Data loading utilities
-  charts.py             # Chart helpers
-  filters.py            # UI filter components
-  metrics.py            # Metric calculations
-  nav.py                # Sidebar navigation
-  utils.py              # Utility functions
-  ai_explainer.py       # AI explanation logic
+  api_data_loader.py      # QA-enhanced data loader (NaN-safe, JSON serializable)
+  config.py               # App constants (dirs, API keys)
+  data_loader.py          # Streamlit-compatible loader (kept for reference)
+  utils.py / metrics.py / filters.py / charts.py / nav.py  # Shared utilities
 ETL/
-  fetch_nyiso_data.py   # NYISO data fetching
-  process_nyiso_data.py # Data processing
+  fetch_nyiso_data.py     # Fetches CSVs from NYISO MIS (7-day rolling window)
+  process_nyiso_data.py   # Cleans, renames, and saves processed CSVs
 data/
-  raw/                  # Raw NYISO data files
-  processed/            # Processed CSV files for the app
+  raw/                    # Raw NYISO CSV files
+  processed/              # Cleaned CSVs consumed by the API
+pages/                    # Legacy Streamlit pages (kept for reference)
+app.py                    # Legacy Streamlit app (kept for reference)
 ```
 
-## Configuration
+## API Endpoints
 
-- Streamlit config: `.streamlit/config.toml`
-- Theme: Bootstrap-inspired color palette with Inter font
-- Environment variables: `.env` file (OPENAI_API_KEY, NYISO_API_KEY)
+- `GET /api/health` — health check
+- `GET /api/inventory` — data availability across all datasets
+- `GET /api/{category}` — list datasets in a category
+- `GET /api/{category}/{dataset}?limit=5000` — fetch dataset as JSON
+- `POST /api/explain` — AI market explanation (requires OPENAI_API_KEY)
+- `POST /api/etl/fetch` — trigger NYISO data fetch
+- `POST /api/etl/process` — trigger data processing
+
+Categories: `prices`, `demand`, `generation`, `interfaces`, `congestion`
 
 ## Running
 
 ```bash
-streamlit run app.py --server.port 5000 --server.address 0.0.0.0 --server.headless true
+bash start.sh
+# or separately:
+uvicorn api:app --host 0.0.0.0 --port 8000
+cd frontend && npm run dev
 ```
+
+## First-Time Setup (No Data)
+
+1. Navigate to any page in the dashboard
+2. Click "Fetch & Process Data" to run the ETL pipeline
+3. Wait ~3-5 minutes for data to download from NYISO
+4. Refresh — charts and tables will populate
 
 ## Dependencies
 
-- streamlit
-- pandas
-- numpy
-- plotly
-- python-dotenv
-- openpyxl
+Python: fastapi, uvicorn, pandas, numpy, plotly, python-dotenv, openpyxl, requests
+Node: react, react-router-dom, recharts, axios, vite
+
+## QA / Error Handling
+
+- NaN → null conversion for all JSON responses
+- Empty DataFrame guards at every layer
+- Network error handling with retry-safe structure in ETL
+- All processed files validated for column existence before API exposure
+- Missing processed files return `{status: "empty"}` with helpful message

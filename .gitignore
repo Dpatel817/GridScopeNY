@@ -32,3 +32,5 @@ ETL/GridScopeNY\\data/raw/
 ETL/GridScopeNY\\data\\raw\\
 ETL/GridScopeNY\\data/loaded_files.csv
 ETL/GridScopeNY\\data/loaded_zip_members.csv
+node_modules/
+frontend/dist/

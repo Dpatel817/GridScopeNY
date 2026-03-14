@@ -1,4 +1,4 @@
-modules = ["python-3.12"]
+modules = ["python-3.12", "nodejs-20"]
 [agent]
 expertMode = true
 
@@ -26,13 +26,17 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "streamlit run app.py --server.port 5000 --server.address 0.0.0.0 --server.headless true"
+args = "bash start.sh"
 waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
 [deployment]
 deploymentTarget = "autoscale"
-run = ["streamlit", "run", "app.py", "--server.port", "5000", "--server.address", "0.0.0.0", "--server.headless", "true"]
+run = ["bash", "start.sh"]
