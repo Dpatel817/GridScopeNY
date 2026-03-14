@@ -40,18 +40,32 @@ def _clean_df_for_json(df: pd.DataFrame) -> list[dict]:
 
 
 def _load_csv_safe(filename: str) -> pd.DataFrame:
-    path: Path = PROCESSED_DIR / filename
-    if not path.exists():
-        logger.warning("File not found: %s", path)
+    csv_path: Path = PROCESSED_DIR / filename
+    parquet_path = csv_path.with_suffix(".parquet")
+
+    if parquet_path.exists():
+        path = parquet_path
+        use_parquet = True
+    elif csv_path.exists():
+        path = csv_path
+        use_parquet = False
+    else:
+        logger.warning("File not found: %s (tried .parquet and .csv)", csv_path)
         return pd.DataFrame()
 
     mtime = os.path.getmtime(path)
-    cached = _df_cache.get(filename)
+    cache_key = str(path)
+    cached = _df_cache.get(cache_key)
     if cached and cached[0] == mtime:
         return cached[1].copy()
 
     try:
-        df = pd.read_csv(path, low_memory=False)
+        if use_parquet:
+            df = pd.read_parquet(path)
+            logger.info("Loaded parquet %s: %d rows", path.name, len(df))
+        else:
+            df = pd.read_csv(path, low_memory=False)
+            logger.info("Loaded CSV %s: %d rows", path.name, len(df))
     except Exception as exc:
         logger.error("Failed to read %s: %s", path, exc)
         return pd.DataFrame()
@@ -60,18 +74,18 @@ def _load_csv_safe(filename: str) -> pd.DataFrame:
 
     df.columns = df.columns.str.strip()
 
-    DATETIME_HINTS = [
-        "Time Stamp", "Timestamp", "RTC Execution Time", "RTC End Time Stamp",
-        "Event Start Time", "Event End Time", "Forecast Date", "Vintage Date",
-        "Date", "source_date", "Out Start", "Out End", "Insert Time",
-        "Scheduled Out", "Scheduled In", "Status Time", "Date Out", "Date In",
-    ]
-    for col in DATETIME_HINTS:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
+    if not use_parquet:
+        DATETIME_HINTS = [
+            "Time Stamp", "Timestamp", "RTC Execution Time", "RTC End Time Stamp",
+            "Event Start Time", "Event End Time", "Forecast Date", "Vintage Date",
+            "Date", "source_date", "Out Start", "Out End", "Insert Time",
+            "Scheduled Out", "Scheduled In", "Status Time", "Date Out", "Date In",
+        ]
+        for col in DATETIME_HINTS:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce")
 
-    _df_cache[filename] = (mtime, df)
-    logger.info("Loaded %s: %d rows", filename, len(df))
+    _df_cache[cache_key] = (mtime, df)
     return df.copy()
 
 
@@ -646,7 +660,9 @@ def get_data_inventory() -> dict:
             meta = DATASET_META.get(key)
             if not meta:
                 continue
-            path = PROCESSED_DIR / meta["file"]
+            csv_path = PROCESSED_DIR / meta["file"]
+            parquet_path = csv_path.with_suffix(".parquet")
+            path = parquet_path if parquet_path.exists() else csv_path
             if not path.exists():
                 inventory[page][key] = {
                     "label": meta.get("label", key),
@@ -655,9 +671,17 @@ def get_data_inventory() -> dict:
                 }
             else:
                 try:
-                    cached = _df_cache.get(meta["file"])
+                    cache_key = str(path)
+                    cached = _df_cache.get(cache_key)
                     if cached:
                         row_count = len(cached[1])
+                    elif path.suffix == ".parquet":
+                        try:
+                            import pyarrow.parquet as pq
+                            pf = pq.ParquetFile(path)
+                            row_count = pf.metadata.num_rows
+                        except Exception:
+                            row_count = 0
                     else:
                         size = os.path.getsize(path)
                         with open(path, "r") as f:

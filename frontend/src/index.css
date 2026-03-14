@@ -789,6 +789,95 @@ tr:hover td { background: var(--bg); }
 .workflow-step .step-text { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
 .workflow-step .step-text strong { color: var(--text); }
 
+.series-selector {
+  position: relative;
+  display: inline-block;
+}
+.series-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  transition: border-color var(--transition);
+}
+.series-selector-trigger:hover { border-color: var(--primary); }
+.series-selector-label { font-weight: 600; }
+.series-selector-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.series-selector-arrow { font-size: 10px; color: var(--text-muted); }
+.series-selector-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  min-width: 240px;
+  max-height: 340px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.series-selector-actions {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.series-selector-actions button {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all var(--transition);
+}
+.series-selector-actions button:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.series-selector-list {
+  overflow-y: auto;
+  padding: 6px 10px;
+  max-height: 260px;
+}
+.series-selector-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.series-selector-item:hover { background: var(--bg); }
+.series-selector-item input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 15px;
+  height: 15px;
+}
+
 .opp-hero-header {
   margin-bottom: 32px;
   display: flex;

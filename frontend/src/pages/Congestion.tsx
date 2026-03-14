@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import ResolutionSelector from '../components/ResolutionSelector';
 import LineChart from '../components/LineChart';
 import DatasetSection from '../components/DatasetSection';
+import SeriesSelector from '../components/SeriesSelector';
 
 const DATASETS = [
   'dam_limiting_constraints', 'rt_limiting_constraints',
@@ -12,19 +13,20 @@ const DATASETS = [
 export default function Congestion() {
   const [resolution, setResolution] = useState('hourly');
   const [showRaw, setShowRaw] = useState(false);
+  const [selectedConstraints, setSelectedConstraints] = useState<string[]>([]);
 
-  const { data: daConstraints, loading } = useDataset('dam_limiting_constraints', resolution);
+  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', resolution);
 
-  const { kpis, topConstraints, chartData } = useMemo(() => {
+  const { allConstraintNames, kpis, topConstraints, chartData } = useMemo(() => {
     const records = daConstraints?.data || [];
-    if (!records.length) return { kpis: {}, topConstraints: [], chartData: [] };
+    if (!records.length) return { allConstraintNames: [], kpis: {} as any, topConstraints: [], chartData: [] };
 
     const costCol = records[0]?.['Constraint Cost'] !== undefined ? 'Constraint Cost' : 'ShadowPrice';
     const nameCol = records[0]?.['Limiting Facility'] !== undefined ? 'Limiting Facility' : 'Constraint';
 
-    const costs = records.map((r: any) => Number(r[costCol] || 0)).filter(Boolean);
-    const totalCost = costs.reduce((a: number, b: number) => a + b, 0);
-    const maxCost = costs.length ? Math.max(...costs) : 0;
+    const costs = records.map((r: any) => Number(r[costCol] || 0)).filter((v: number) => v !== 0);
+    const totalCost = costs.reduce((a: number, b: number) => a + Math.abs(b), 0);
+    const maxCost = costs.length ? Math.max(...costs.map(Math.abs)) : 0;
     const avgCost = costs.length ? totalCost / costs.length : 0;
 
     const byConstraint: Record<string, { total: number; count: number; max: number; name: string }> = {};
@@ -37,16 +39,19 @@ export default function Congestion() {
       byConstraint[name].max = Math.max(byConstraint[name].max, cost);
     }
 
-    const topConstraints = Object.values(byConstraint)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10)
+    const allSorted = Object.values(byConstraint)
+      .sort((a, b) => b.total - a.total);
+
+    const topConstraints = allSorted
       .map((c, i) => ({ rank: i + 1, ...c, avg: c.total / c.count }));
 
-    const groups = topConstraints.slice(0, 5).map(c => c.name);
+    const allConstraintNames = allSorted.map(c => c.name);
+    const active = selectedConstraints.length > 0 ? selectedConstraints : allConstraintNames.slice(0, 8);
+
     const pivoted: Record<string, any> = {};
     for (const r of records) {
       const name = String(r[nameCol] || '');
-      if (!groups.includes(name)) continue;
+      if (!active.includes(name)) continue;
       const dateKey = r.Date || r['Time Stamp'] || '';
       const key = `${dateKey}_${r.HE || ''}`;
       if (!pivoted[key]) pivoted[key] = { Date: dateKey, HE: r.HE };
@@ -54,12 +59,25 @@ export default function Congestion() {
     }
     const chartData = Object.values(pivoted).sort((a: any, b: any) => a.Date < b.Date ? -1 : 1);
 
+    if (typeof console !== 'undefined') {
+      console.log(`[Congestion] Constraints available: ${allConstraintNames.length}, displayed: ${active.length}, records: ${records.length}`);
+    }
+
     return {
-      kpis: { totalCost, maxCost, avgCost, bindingCount: Object.keys(byConstraint).length },
+      allConstraintNames,
+      kpis: { totalCost, maxCost, avgCost, bindingCount: allConstraintNames.length },
       topConstraints,
       chartData: chartData.length > 1 ? chartData : [],
     };
-  }, [daConstraints]);
+  }, [daConstraints, selectedConstraints]);
+
+  useEffect(() => {
+    if (allConstraintNames.length > 0 && selectedConstraints.length === 0) {
+      setSelectedConstraints(allConstraintNames.slice(0, 8));
+    }
+  }, [allConstraintNames]);
+
+  const activeForChart = selectedConstraints.length > 0 ? selectedConstraints.filter(c => allConstraintNames.includes(c)) : allConstraintNames.slice(0, 8);
 
   return (
     <div className="page">
@@ -70,7 +88,24 @@ export default function Congestion() {
         </p>
       </div>
 
-      <ResolutionSelector value={resolution} onChange={setResolution} />
+      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <ResolutionSelector value={resolution} onChange={setResolution} />
+        {allConstraintNames.length > 0 && (
+          <SeriesSelector
+            label="Constraints"
+            allSeries={allConstraintNames}
+            selected={selectedConstraints}
+            onChange={setSelectedConstraints}
+          />
+        )}
+      </div>
+
+      {error && (
+        <div className="insight-card" style={{ background: 'var(--danger-light)', borderColor: 'var(--danger)' }}>
+          <div className="insight-title" style={{ color: 'var(--danger)' }}>Data Error</div>
+          <div className="insight-body">Failed to load congestion data: {error}</div>
+        </div>
+      )}
 
       {loading && <div className="loading"><div className="spinner" /> Loading congestion data...</div>}
 
@@ -104,14 +139,14 @@ export default function Congestion() {
           {chartData.length > 0 && (
             <div className="chart-card">
               <div className="chart-card-header">
-                <div className="chart-card-title">Top Constraint Costs Over Time</div>
-                <span className="badge badge-primary">{resolution}</span>
+                <div className="chart-card-title">Constraint Costs Over Time</div>
+                <span className="badge badge-primary">{resolution} · {activeForChart.length} of {allConstraintNames.length} constraints</span>
               </div>
               <LineChart
                 data={chartData}
                 xKey="Date"
-                yKeys={topConstraints.slice(0, 5).map(c => c.name)}
-                height={300}
+                yKeys={activeForChart}
+                height={320}
               />
             </div>
           )}
@@ -119,7 +154,7 @@ export default function Congestion() {
           {topConstraints.length > 0 && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                <div className="chart-card-title">Top Binding Constraints</div>
+                <div className="chart-card-title">All Binding Constraints ({topConstraints.length})</div>
               </div>
               <table className="rank-table" style={{ borderSpacing: 0 }}>
                 <thead>

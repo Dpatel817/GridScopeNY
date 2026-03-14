@@ -1,0 +1,141 @@
+I need you to fix a core data integrity / display issue in my React app GridScopeNY.
+
+Problem:
+Several pages are not displaying all available NYISO data even though the app says the data is loaded.
+
+What I am seeing:
+1. Prices page:
+- Not all NYISO zones are being displayed in charts
+- Not all price data appears in the visualizations
+- The DA-RT spread chart has broken x-axis labels like "NaN/NaN NaN:00"
+
+2. Demand page:
+- Not all demand series/zones are being displayed
+- The page appears to be showing only part of the available data
+- Some KPI cards appeared blank when I took screenshots, but this may have been a loading-speed issue rather than a calculation issue
+
+3. Similar issue across multiple pages:
+- Interface Flows, Congestion, and other pages appear to show only a subset of the available data
+- It feels like the chart layer and the loaded dataset are not aligned
+
+Main goal:
+Audit the data pipeline and page rendering so that the app displays the full available dataset correctly and consistently.
+
+Important:
+- Do not invent data
+- Do not hardcode fake zones
+- Detect available categories dynamically from the loaded data
+- Keep the new polished UI, but fix the trustworthiness of the data display
+- If showing all series at once is visually cluttered, provide user controls rather than silently dropping data
+
+What I want you to do:
+
+1. Audit each page’s data flow
+For each major page:
+- Prices
+- Demand
+- Generation
+- Interface Flows
+- Congestion
+- Opportunity Explorer
+
+Check:
+- what raw/processed dataset is loaded
+- what filtering happens before rendering
+- what aggregation happens before rendering
+- whether the chart/table/KPI components are all using the same filtered dataset
+- whether any "top N", slicing, truncation, or first-N-column logic is being applied
+
+2. Fix category/series truncation
+If the chart is only displaying a subset of zones/interfaces/fuel types/etc:
+- remove silent truncation
+- make all available categories accessible
+- add a multiselect filter where needed
+- add convenient controls like:
+  - Show All
+  - Clear
+  - Default View / Core View
+- use a sensible default set if showing all by default is too cluttered, but do NOT hide categories from the user
+
+3. Fix the Prices page
+Specifically:
+- ensure all available NYISO zones in the current dataset can be displayed
+- audit the DA zonal LBMP chart
+- audit the DA-RT spread chart
+- fix the broken x-axis labels showing NaN/NaN NaN:00
+- make sure the chart uses a proper timestamp / formatted datetime axis
+- make sure aggregation by hourly/daily/on-peak/off-peak is not dropping zones accidentally
+
+4. Fix the Demand page
+Specifically:
+- ensure all relevant demand series/zones are available
+- verify the forecast and actual demand datasets are merged correctly
+- make sure KPI cards load reliably once the data is ready
+- if actual data is missing, show a clear message explaining why
+- do not leave cards blank because of avoidable loading or transformation issues
+
+5. Improve data loading performance
+The current issue may partly be a loading-speed problem.
+
+Please:
+- review how processed data is being stored and loaded
+- if the app is currently loading processed CSVs, convert the processed outputs to Parquet after all cleaning/transformation steps
+- update the frontend/backend loading logic to use Parquet where appropriate
+- make sure this improves load speed and reduces cases where UI elements appear blank because data has not finished loading
+- keep the pipeline practical and maintainable
+
+6. Fix consistency between KPI / chart / table layers
+For each page:
+- the KPI cards
+- the chart(s)
+- the summary tables
+
+should all use the same filtered dataset and same selected resolution
+No more situation where the app says it loaded all data but only a subset appears in the visualization.
+
+7. Improve chart controls
+Where there are many series:
+- add multiselect for series/category selection
+- show count of visible vs available series
+- include a quick “Show All” option
+- optionally include “Top 5 by volatility” / “Top 5 by value” as a user-selected display mode, but not as a hidden default
+
+8. Add validation/debugging checks
+Please add lightweight validation logic so pages can surface:
+- total available categories
+- total currently displayed categories
+- whether rows were dropped during transformation
+- whether key columns required for KPIs are missing
+
+This can be shown in a dev/debug section or console log if needed, but it should help verify correctness.
+
+9. Clean up transformations
+Please inspect for bugs in:
+- pivots
+- joins
+- resampling / aggregation
+- datetime parsing
+- category extraction
+- missing value handling
+- any memoized selectors that may be caching partial data
+
+10. Preserve the current UI direction
+The recent visual redesign is better.
+Keep the improved product feel, but fix the data completeness and trust issues first.
+
+Deliverables:
+1. Identify the root causes of partial display
+2. Fix them in code
+3. Tell me which files were changed
+4. Explain how you verified that all available zones/categories are now accessible
+5. Tell me if any dataset itself is missing fields, rather than the UI dropping them
+6. Tell me whether moving processed outputs to Parquet improved performance and where that change was implemented
+
+Acceptance criteria:
+- All available zones/categories in the loaded dataset are accessible to the user
+- No silent truncation
+- No broken datetime axis labels
+- Demand cards load reliably once data is available
+- KPI, charts, and tables are consistent with each other
+- Processed datasets are stored/loaded in a faster format where appropriate
+- The app feels trustworthy and demo-ready

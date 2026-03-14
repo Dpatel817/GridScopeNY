@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import ResolutionSelector from '../components/ResolutionSelector';
 import LineChart from '../components/LineChart';
 import DatasetSection from '../components/DatasetSection';
+import SeriesSelector from '../components/SeriesSelector';
 
 const DATASETS = [
   'da_lbmp_zone', 'rt_lbmp_zone', 'integrated_rt_lbmp_zone',
@@ -13,39 +14,61 @@ const DATASETS = [
 export default function Prices() {
   const [resolution, setResolution] = useState('hourly');
   const [showRaw, setShowRaw] = useState(false);
+  const [selectedZones, setSelectedZones] = useState<string[]>([]);
 
-  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', resolution);
-  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', resolution);
+  const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', resolution);
+  const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', resolution);
 
   const loading = daLoading || rtLoading;
+
+  const allZones = useMemo(() => {
+    const daRecords = daData?.data || [];
+    return [...new Set(daRecords.map((r: any) => String(r.Zone)))].sort();
+  }, [daData]);
+
+  useEffect(() => {
+    if (allZones.length > 0 && selectedZones.length === 0) {
+      setSelectedZones([...allZones]);
+    }
+  }, [allZones]);
 
   const { kpis, daChart, spreadChart } = useMemo(() => {
     const daRecords = daData?.data || [];
     const rtRecords = rtData?.data || [];
 
-    const daLmps = daRecords.map((r: any) => Number(r.LMP)).filter(Boolean);
-    const rtLmps = rtRecords.map((r: any) => Number(r.LMP)).filter(Boolean);
+    const daLmps = daRecords.map((r: any) => Number(r.LMP)).filter((v: number) => !isNaN(v) && v !== 0);
+    const rtLmps = rtRecords.map((r: any) => Number(r.LMP)).filter((v: number) => !isNaN(v) && v !== 0);
 
     const avgDa = daLmps.length ? daLmps.reduce((a: number, b: number) => a + b, 0) / daLmps.length : null;
     const avgRt = rtLmps.length ? rtLmps.reduce((a: number, b: number) => a + b, 0) / rtLmps.length : null;
     const maxDa = daLmps.length ? Math.max(...daLmps) : null;
-    const maxRt = rtLmps.length ? Math.max(...rtLmps) : null;
 
-    const zones = [...new Set(daRecords.map((r: any) => String(r.Zone)))].slice(0, 8);
     const pivoted: Record<string, any> = {};
     for (const r of daRecords) {
-      const key = `${r.Date}_${r.HE}`;
-      if (!pivoted[key]) pivoted[key] = { Date: r.Date, HE: r.HE };
-      if (zones.includes(String(r.Zone))) pivoted[key][String(r.Zone)] = Number(r.LMP);
+      const zone = String(r.Zone);
+      if (!selectedZones.includes(zone)) continue;
+      const dateKey = r.Date || r['Time Stamp'] || '';
+      const key = `${dateKey}_${r.HE ?? ''}`;
+      if (!pivoted[key]) pivoted[key] = { Date: dateKey };
+      pivoted[key][zone] = Number(r.LMP);
     }
-    const daChart = { data: Object.values(pivoted), xKey: 'Date', yKeys: zones };
+    const daChart = {
+      data: Object.values(pivoted).sort((a: any, b: any) => a.Date < b.Date ? -1 : a.Date > b.Date ? 1 : 0),
+      xKey: 'Date',
+      yKeys: selectedZones
+    };
+
+    const rtByKey: Record<string, number> = {};
+    for (const r of rtRecords) {
+      rtByKey[`${r.Date}_${r.HE}_${r.Zone}`] = Number(r.LMP);
+    }
 
     const spreadByZone: Record<string, { total: number; count: number; max: number }> = {};
-    for (const r of rtRecords) {
+    for (const r of daRecords) {
       const matchKey = `${r.Date}_${r.HE}_${r.Zone}`;
-      const daMatch = daRecords.find((d: any) => `${d.Date}_${d.HE}_${d.Zone}` === matchKey);
-      if (daMatch) {
-        const spread = Math.abs(Number(r.LMP) - Number(daMatch.LMP));
+      const rtLmp = rtByKey[matchKey];
+      if (rtLmp !== undefined) {
+        const spread = Math.abs(rtLmp - Number(r.LMP));
         const zone = String(r.Zone);
         if (!spreadByZone[zone]) spreadByZone[zone] = { total: 0, count: 0, max: 0 };
         spreadByZone[zone].total += spread;
@@ -55,16 +78,16 @@ export default function Prices() {
     }
     const spreadChart = Object.entries(spreadByZone)
       .map(([zone, s]) => ({ Zone: zone, 'Avg Spread': Number((s.total / s.count).toFixed(2)), 'Max Spread': Number(s.max.toFixed(2)) }))
-      .sort((a, b) => b['Avg Spread'] - a['Avg Spread'])
-      .slice(0, 12);
+      .sort((a, b) => b['Avg Spread'] - a['Avg Spread']);
 
-    return { kpis: { avgDa, avgRt, maxDa, maxRt }, daChart, spreadChart };
-  }, [daData, rtData]);
+    if (typeof console !== 'undefined') {
+      console.log(`[Prices] Zones available: ${allZones.length}, displayed: ${selectedZones.length}, DA rows: ${daRecords.length}, RT rows: ${rtRecords.length}, spread zones: ${spreadChart.length}`);
+    }
 
-  const topVolZone = useMemo(() => {
-    if (!spreadChart.length) return null;
-    return spreadChart[0];
-  }, [spreadChart]);
+    return { kpis: { avgDa, avgRt, maxDa }, daChart, spreadChart };
+  }, [daData, rtData, selectedZones, allZones]);
+
+  const topVolZone = spreadChart.length ? spreadChart[0] : null;
 
   return (
     <div className="page">
@@ -75,25 +98,42 @@ export default function Prices() {
         </p>
       </div>
 
-      <ResolutionSelector value={resolution} onChange={setResolution} />
+      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <ResolutionSelector value={resolution} onChange={setResolution} />
+        {allZones.length > 0 && (
+          <SeriesSelector
+            label="Zones"
+            allSeries={allZones}
+            selected={selectedZones}
+            onChange={setSelectedZones}
+          />
+        )}
+      </div>
+
+      {(daError || rtError) && (
+        <div className="insight-card" style={{ background: 'var(--danger-light)', borderColor: 'var(--danger)' }}>
+          <div className="insight-title" style={{ color: 'var(--danger)' }}>Data Error</div>
+          <div className="insight-body">Failed to load price data: {daError || rtError}</div>
+        </div>
+      )}
 
       <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <div className="kpi-card">
           <div className="kpi-label">Avg DA LMP</div>
           <div className="kpi-value">
-            {kpis.avgDa ? <>${kpis.avgDa.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+            {kpis.avgDa !== null ? <>${kpis.avgDa.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
           </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Avg RT LMP</div>
           <div className="kpi-value">
-            {kpis.avgRt ? <>${kpis.avgRt.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+            {kpis.avgRt !== null ? <>${kpis.avgRt.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
           </div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Max DA LMP</div>
           <div className="kpi-value">
-            {kpis.maxDa ? <>${kpis.maxDa.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+            {kpis.maxDa !== null ? <>${kpis.maxDa.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
           </div>
         </div>
         <div className="kpi-card accent">
@@ -108,9 +148,9 @@ export default function Prices() {
         <div className="chart-card">
           <div className="chart-card-header">
             <div className="chart-card-title">DA Zonal LBMPs</div>
-            <span className="badge badge-primary">{resolution}</span>
+            <span className="badge badge-primary">{resolution} · {selectedZones.length} of {allZones.length} zones</span>
           </div>
-          <LineChart data={daChart.data} xKey={daChart.xKey} yKeys={daChart.yKeys} height={300} />
+          <LineChart data={daChart.data} xKey={daChart.xKey} yKeys={daChart.yKeys} height={320} />
         </div>
       )}
 
@@ -118,8 +158,9 @@ export default function Prices() {
         <div className="chart-card">
           <div className="chart-card-header">
             <div className="chart-card-title">DA-RT Spread by Zone</div>
+            <span className="badge badge-primary">{spreadChart.length} zones</span>
           </div>
-          <LineChart data={spreadChart} xKey="Zone" yKeys={['Avg Spread', 'Max Spread']} height={240} />
+          <LineChart data={spreadChart} xKey="Zone" yKeys={['Avg Spread', 'Max Spread']} height={260} />
         </div>
       )}
 

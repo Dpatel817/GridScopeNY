@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import ResolutionSelector from '../components/ResolutionSelector';
 import LineChart from '../components/LineChart';
 import DatasetSection from '../components/DatasetSection';
+import SeriesSelector from '../components/SeriesSelector';
 
 const DATASETS = [
   'external_limits_flows', 'atc_ttc', 'ttcf',
@@ -12,17 +13,18 @@ const DATASETS = [
 export default function InterfaceFlows() {
   const [resolution, setResolution] = useState('hourly');
   const [showRaw, setShowRaw] = useState(false);
+  const [selectedInterfaces, setSelectedInterfaces] = useState<string[]>([]);
 
-  const { data: flowData, loading } = useDataset('external_limits_flows', resolution);
+  const { data: flowData, loading, error } = useDataset('external_limits_flows', resolution);
 
-  const { kpis, chartData, interfaceStats } = useMemo(() => {
+  const { allInterfaces, kpis, chartData, interfaceStats } = useMemo(() => {
     const records = flowData?.data || [];
-    if (!records.length) return { kpis: {}, chartData: [], interfaceStats: [] };
+    if (!records.length) return { allInterfaces: [], kpis: {} as any, chartData: [], interfaceStats: [] };
 
     const flowCol = records[0]?.Flow !== undefined ? 'Flow' : 'Flow (MW)';
     const nameCol = records[0]?.Interface !== undefined ? 'Interface' : 'Interface Name';
 
-    const flows = records.map((r: any) => Number(r[flowCol] || 0)).filter(v => !isNaN(v));
+    const flows = records.map((r: any) => Number(r[flowCol] || 0)).filter((v: number) => !isNaN(v));
     const avgFlow = flows.length ? flows.reduce((a: number, b: number) => a + b, 0) / flows.length : null;
     const maxFlow = flows.length ? Math.max(...flows) : null;
     const minFlow = flows.length ? Math.min(...flows) : null;
@@ -42,11 +44,13 @@ export default function InterfaceFlows() {
       .map(s => ({ ...s, avg: s.total / s.count, utilization: Math.abs(s.max) }))
       .sort((a, b) => b.utilization - a.utilization);
 
-    const topInterfaces = interfaceStats.slice(0, 6).map(s => s.name);
+    const allInterfaces = interfaceStats.map(s => s.name);
+    const active = selectedInterfaces.length > 0 ? selectedInterfaces : allInterfaces.slice(0, 8);
+
     const pivoted: Record<string, any> = {};
     for (const r of records) {
       const name = String(r[nameCol] || '');
-      if (!topInterfaces.includes(name)) continue;
+      if (!active.includes(name)) continue;
       const dateKey = r.Date || r['Time Stamp'] || '';
       const key = `${dateKey}_${r.HE || ''}`;
       if (!pivoted[key]) pivoted[key] = { Date: dateKey };
@@ -54,14 +58,25 @@ export default function InterfaceFlows() {
     }
     const chartData = Object.values(pivoted).sort((a: any, b: any) => a.Date < b.Date ? -1 : 1);
 
-    const mostStressed = interfaceStats[0];
+    if (typeof console !== 'undefined') {
+      console.log(`[InterfaceFlows] Interfaces available: ${allInterfaces.length}, displayed: ${active.length}, records: ${records.length}`);
+    }
 
     return {
-      kpis: { avgFlow, maxFlow, minFlow, interfaceCount: interfaceStats.length, mostStressed: mostStressed?.name },
+      allInterfaces,
+      kpis: { avgFlow, maxFlow, minFlow, interfaceCount: interfaceStats.length, mostStressed: interfaceStats[0]?.name },
       chartData: chartData.length > 1 ? chartData : [],
       interfaceStats,
     };
-  }, [flowData]);
+  }, [flowData, selectedInterfaces]);
+
+  useEffect(() => {
+    if (allInterfaces.length > 0 && selectedInterfaces.length === 0) {
+      setSelectedInterfaces(allInterfaces.slice(0, 8));
+    }
+  }, [allInterfaces]);
+
+  const activeForChart = selectedInterfaces.length > 0 ? selectedInterfaces.filter(i => allInterfaces.includes(i)) : allInterfaces.slice(0, 8);
 
   return (
     <div className="page">
@@ -72,7 +87,24 @@ export default function InterfaceFlows() {
         </p>
       </div>
 
-      <ResolutionSelector value={resolution} onChange={setResolution} />
+      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <ResolutionSelector value={resolution} onChange={setResolution} />
+        {allInterfaces.length > 0 && (
+          <SeriesSelector
+            label="Interfaces"
+            allSeries={allInterfaces}
+            selected={selectedInterfaces}
+            onChange={setSelectedInterfaces}
+          />
+        )}
+      </div>
+
+      {error && (
+        <div className="insight-card" style={{ background: 'var(--danger-light)', borderColor: 'var(--danger)' }}>
+          <div className="insight-title" style={{ color: 'var(--danger)' }}>Data Error</div>
+          <div className="insight-body">Failed to load flow data: {error}</div>
+        </div>
+      )}
 
       {loading && <div className="loading"><div className="spinner" /> Loading flow data...</div>}
 
@@ -86,13 +118,13 @@ export default function InterfaceFlows() {
             <div className="kpi-card">
               <div className="kpi-label">Max Flow</div>
               <div className="kpi-value">
-                {kpis.maxFlow ? <>{kpis.maxFlow.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
+                {kpis.maxFlow != null ? <>{kpis.maxFlow.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
               </div>
             </div>
             <div className="kpi-card">
               <div className="kpi-label">Min Flow</div>
               <div className="kpi-value">
-                {kpis.minFlow ? <>{kpis.minFlow.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
+                {kpis.minFlow != null ? <>{kpis.minFlow.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
               </div>
             </div>
             <div className="kpi-card">
@@ -105,13 +137,13 @@ export default function InterfaceFlows() {
             <div className="chart-card">
               <div className="chart-card-header">
                 <div className="chart-card-title">Interface Flows Over Time</div>
-                <span className="badge badge-primary">{resolution}</span>
+                <span className="badge badge-primary">{resolution} · {activeForChart.length} of {allInterfaces.length} interfaces</span>
               </div>
               <LineChart
                 data={chartData}
                 xKey="Date"
-                yKeys={interfaceStats.slice(0, 6).map(s => s.name)}
-                height={300}
+                yKeys={activeForChart}
+                height={320}
               />
             </div>
           )}
@@ -120,7 +152,7 @@ export default function InterfaceFlows() {
             <>
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div className="chart-card-title">Interface Summary</div>
+                  <div className="chart-card-title">Interface Summary ({interfaceStats.length} interfaces)</div>
                 </div>
                 <table className="rank-table" style={{ borderSpacing: 0 }}>
                   <thead>
@@ -133,7 +165,7 @@ export default function InterfaceFlows() {
                     </tr>
                   </thead>
                   <tbody>
-                    {interfaceStats.slice(0, 10).map(s => (
+                    {interfaceStats.map(s => (
                       <tr key={s.name}>
                         <td style={{ fontWeight: 600 }}>{s.name}</td>
                         <td>{s.avg.toFixed(1)}</td>
