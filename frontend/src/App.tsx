@@ -6,6 +6,7 @@ import Demand from './pages/Demand'
 import Generation from './pages/Generation'
 import InterfaceFlows from './pages/InterfaceFlows'
 import Congestion from './pages/Congestion'
+import GeneratorMap from './pages/GeneratorMap'
 import OpportunityExplorer from './pages/OpportunityExplorer'
 import AIExplainer from './pages/AIExplainer'
 
@@ -20,6 +21,7 @@ function App() {
           <Route path="generation" element={<Generation />} />
           <Route path="interfaces" element={<InterfaceFlows />} />
           <Route path="congestion" element={<Congestion />} />
+          <Route path="generator-map" element={<GeneratorMap />} />
           <Route path="opportunities" element={<OpportunityExplorer />} />
           <Route path="ai-explainer" element={<AIExplainer />} />
         </Route>

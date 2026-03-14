@@ -1222,6 +1222,167 @@ tr:hover td { background: var(--bg); }
   .opp-rank-row > :nth-child(6) { display: none; }
 }
 
+/* Generator Map */
+.gen-map-select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  min-width: 120px;
+}
+.gen-map-select:focus { border-color: var(--primary); outline: none; }
+
+.gen-map-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+}
+.gen-map-legend-bar {
+  height: 10px;
+  width: 180px;
+  border-radius: 5px;
+  background: linear-gradient(to right, #3b82f6, #10b981, #eab308, #f59e0b, #ef4444);
+}
+.gen-map-legend-label { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+
+.leaflet-container { border-radius: 0 0 8px 8px; }
+
+/* AI Analyst response */
+.ai-response-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ai-response-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+}
+.ai-response-icon { font-size: 18px; }
+.ai-response-label { color: var(--primary); }
+.ai-response-body {
+  padding: 16px 20px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.ai-response-section { padding: 0 20px 16px; }
+.ai-response-section-title {
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+.ai-response-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-response-list li {
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-left: 3px solid var(--primary);
+}
+.ai-response-list.caveat li {
+  background: color-mix(in srgb, var(--warning, #f59e0b) 6%, transparent);
+  border-left-color: var(--warning, #f59e0b);
+}
+
+/* AI Analyst page-scoped styles */
+.ai-page-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.ai-page-card-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+
+.ai-page-textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.ai-page-textarea:focus { border-color: var(--primary); outline: none; }
+
+.ai-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ai-btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.ai-btn-primary:hover { filter: brightness(1.1); }
+.ai-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+.ai-btn-secondary:hover { border-color: var(--text-muted); }
+
+.suggested-prompt {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+  line-height: 1.4;
+}
+.suggested-prompt:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg));
+}
+
+.ai-alert { padding: 12px 16px; border-radius: 8px; font-size: 13px; }
+.ai-alert-warning { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+.ai-alert code { background: rgba(0,0,0,0.08); padding: 2px 5px; border-radius: 3px; font-size: 12px; }
+
 @media (max-width: 900px) {
   .two-col, .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .sidebar { position: relative; width: 100%; height: auto; }

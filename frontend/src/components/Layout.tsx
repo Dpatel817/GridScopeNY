@@ -6,6 +6,7 @@ const MARKET_NAV = [
   { path: '/generation', label: 'Generation', icon: '⚡' },
   { path: '/interfaces', label: 'Interface Flows', icon: '🔌' },
   { path: '/congestion', label: 'Congestion', icon: '🚧' },
+  { path: '/generator-map', label: 'Generator Map', icon: '📍' },
 ]
 
 const TOOL_NAV = [

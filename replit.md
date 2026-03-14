@@ -56,7 +56,8 @@ frontend/
       InterfaceFlows.tsx  # Interface Flows — utilization, pressure analysis
       Congestion.tsx      # Congestion Analysis — constraint rankings, outages
       OpportunityExplorer.tsx  # Hero: Flex Opportunity Explorer with bar charts, zone detail, drivers
-      AIExplainer.tsx     # AI Market Analyst — context-aware Q&A
+      GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization
+      AIExplainer.tsx     # AI Market Analyst — structured Q&A with drivers/caveats, context-aware
 src/
   api_data_loader.py      # Dataset metadata (40 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)
@@ -95,7 +96,9 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/dataset/{key}?resolution=raw|hourly|on_peak|off_peak|daily&limit=10000`
 - `GET /api/page/{page}` — list datasets for a page
 - `GET /api/filters/{key}/{col}` — filter options for a column
-- `POST /api/explain` — AI market explanation (requires OPENAI_API_KEY)
+- `GET /api/generator-map?market=DA|RT&date=YYYY-MM-DD&he=0-23` — generator geographic price data (561 mapped generators)
+- `POST /api/ai-explainer` — structured AI market analysis with drivers/caveats (requires OPENAI_API_KEY)
+- `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL
 
 ## Resolution Aggregation
@@ -117,4 +120,4 @@ bash start.sh
 ## Dependencies
 
 Python: fastapi, uvicorn, pandas, numpy, pyarrow, plotly, python-dotenv, openpyxl, requests
-Node: react, react-router-dom, recharts, vite
+Node: react, react-router-dom, recharts, leaflet, react-leaflet, vite
