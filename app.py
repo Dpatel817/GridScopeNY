@@ -1,11 +1,12 @@
 import streamlit as st
 from src.config import APP_TITLE
+from src.nav import render_sidebar_nav, render_page_header
 
-st.set_page_config(
-    page_title=APP_TITLE,
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title=APP_TITLE, layout="wide", initial_sidebar_state="expanded",)
+
+st.set_page_config(page_title="Prices | GridScopeNY", layout="wide")
+
+render_sidebar_nav()
 
 st.title(APP_TITLE)
 st.caption("NYISO market dashboard for prices, demand, generation, flows, congestion, and AI-assisted analysis.")
@@ -21,5 +22,3 @@ Use the sidebar to navigate across:
 - Opportunity Explorer
 - AI Explainer
 """)
-
-st.info("Project scaffold is ready. Add raw files to `data/raw/` or connect your fetch scripts.")

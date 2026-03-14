@@ -1,6 +1,9 @@
 [server]
 enableStaticServing = true
 
+[client]
+showSidebarNavigation = false
+
 [[theme.fontFaces]]
 family = "Inter"
 url = "app/static/Inter_18pt-Regular.ttf"
