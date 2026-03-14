@@ -1,0 +1,186 @@
+You are helping me redesign a React page in my app GridScopeNY.
+
+Page to improve:
+Opportunity Explorer
+
+Current page:
+The current Battery Opportunity Explorer works, but it is too plain, too table-heavy, and not visually strong enough to be the hero feature of the product.
+
+Goal:
+Turn Opportunity Explorer into the standout page of GridScopeNY — a clean, modern, insight-driven market intelligence page that immediately shows:
+1. where the opportunity is
+2. what battery duration is best
+3. why that zone/day matters
+
+Product framing:
+GridScopeNY is a NYISO market intelligence product.
+This page should feel like a premium “Flex Opportunity Explorer” for battery-style opportunity in NYISO.
+It should not feel like a raw spreadsheet view.
+
+Important constraints:
+- Keep this a React implementation
+- Reuse current data logic where possible
+- Do not invent fake data columns
+- Do not rewrite the whole app from scratch
+- Keep it practical, demo-ready, and visually polished
+- Keep battery opportunity as the main lens
+- It is okay to structure it so a future “data center / large load” lens could be added later
+
+What I want the page to become:
+
+1. Strong page header
+Replace the current simple header with a better product header.
+
+Include:
+- Title: Flex Opportunity Explorer
+- Subtitle: Identify where battery-style opportunity appears in NYISO and understand the market conditions behind it.
+- Optional small badge/tag: Battery Lens
+
+2. Better filter/control section
+At the top, create a polished filter bar with:
+- Battery duration selector (1h / 2h / 4h)
+- Date or date range selector if available
+- Zone selector if useful
+- Ranking metric selector if useful:
+  - Avg opportunity
+  - Max opportunity
+  - Estimated revenue
+- Optional toggle for table / chart emphasis
+
+This filter bar should look like part of a real product, not like default controls dumped on the page.
+
+3. Top KPI row
+Add a clean KPI row with the most important summary metrics:
+- Best Zone
+- Average Opportunity
+- Max Opportunity
+- Opportunity Events
+Optional:
+- Best Duration
+- Most volatile zone
+- Strongest DA-RT divergence zone
+
+These cards should make the page feel important immediately.
+
+4. Main page layout
+Redesign the page into 3 clear sections:
+
+Section A: Opportunity ranking visual
+This should be the first major visual.
+
+Use either:
+- a horizontal bar chart ranking zones
+or
+- a polished ranked table with better hierarchy and visual emphasis
+
+Preferred:
+A horizontal bar chart or combined chart + compact ranking list that clearly shows the top zones by selected battery metric.
+
+This section should answer:
+“Where is the opportunity?”
+
+5. Selected zone detail panel
+When a zone is selected, show a richer detail section for that zone.
+
+Include:
+- selected zone name
+- selected battery duration
+- average DA-RT spread
+- max spread
+- estimated opportunity / revenue
+- opportunity event count
+
+If possible, add:
+- a mini chart of opportunity over time
+- or DA vs RT behavior for that zone
+
+This section should answer:
+“What is happening in this zone specifically?”
+
+6. Why-this-matters explanation panel
+Add a strong explanation card or insight panel beside or below the selected zone detail.
+
+This panel should summarize:
+- why the zone appears attractive
+- whether the signal looks recurring or event-driven
+- whether congestion, outages, flows, or load likely mattered
+
+This can be deterministic for now.
+Do not depend fully on AI here.
+
+Example style:
+- “Zone H Q shows the strongest 2-hour opportunity in the selected window.”
+- “Opportunity appears tied to stronger average DA-RT spreads and a higher frequency of spread events.”
+- “This signal may reflect recurring congestion or localized market stress.”
+
+The tone should feel like a real product insight, not a generic sentence.
+
+7. Supporting driver context
+If the data is already available or can be joined cleanly, add a supporting context section that surfaces:
+- top related constraints
+- relevant outages
+- load surprise context
+- interface flow pressure
+
+This should be lightweight and readable, not a giant dump of tables.
+The goal is to make the opportunity feel explained, not isolated.
+
+8. Table redesign
+The current raw ranking table should not dominate the page.
+
+Keep the table, but:
+- place it lower
+- wrap it in a card section
+- label it as detailed ranking data
+- optionally make it collapsible
+- improve formatting and spacing
+
+The first screen should be insight-first, not table-first.
+
+9. Visual design direction
+I want this page to feel:
+- modern
+- premium
+- clear
+- polished
+- product-like
+
+Please use/reuse a consistent design system:
+- rounded cards
+- clean section spacing
+- strong typography hierarchy
+- better empty states
+- polished chart containers
+- consistent labels and helper text
+
+10. Reusable component thinking
+If useful, create reusable components for:
+- page header
+- KPI row
+- filter bar
+- chart card
+- insight panel
+- detail panel
+- collapsible raw data table section
+
+Do not overengineer, but improve the consistency of the app.
+
+11. Demo priority
+This page is the hero page for the take-home demo.
+It should be the strongest, most memorable page in the app.
+Optimize for:
+- first impression
+- clarity
+- product feel
+- story
+
+12. Output format
+Please:
+1. review the current Opportunity Explorer implementation
+2. propose the redesign plan
+3. implement the redesign
+4. tell me what files/components changed
+5. explain how the new page better supports the demo
+
+Most important instruction:
+Make this page feel like the flagship feature of a real NYISO market intelligence product, not a data table with a dropdown.

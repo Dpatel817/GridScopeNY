@@ -54,7 +54,7 @@ frontend/
       Generation.tsx      # Generation Mix — fuel breakdown, share analysis
       InterfaceFlows.tsx  # Interface Flows — utilization, pressure analysis
       Congestion.tsx      # Congestion Analysis — constraint rankings, outages
-      OpportunityExplorer.tsx  # Hero: battery arbitrage zone rankings
+      OpportunityExplorer.tsx  # Hero: Flex Opportunity Explorer with bar charts, zone detail, drivers
       AIExplainer.tsx     # AI Market Analyst — context-aware Q&A
 src/
   api_data_loader.py      # Dataset metadata (40 datasets), aggregation, caching
