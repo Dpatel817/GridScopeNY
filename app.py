@@ -2,9 +2,7 @@ import streamlit as st
 from src.config import APP_TITLE
 from src.nav import render_sidebar_nav
 
-st.set_page_config(page_title=APP_TITLE, layout="wide", initial_sidebar_state="expanded",)
-
-st.set_page_config(page_title="Prices | GridScopeNY", layout="wide")
+st.set_page_config(page_title=APP_TITLE, layout="wide", initial_sidebar_state="expanded")
 
 render_sidebar_nav()
 
