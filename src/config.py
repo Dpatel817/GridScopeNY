@@ -11,4 +11,3 @@ PROCESSED_DIR = DATA_DIR / "processed"
 
 APP_TITLE = "GridScope NY"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-NYISO_API_KEY = os.getenv("NYISO_API_KEY", "")
