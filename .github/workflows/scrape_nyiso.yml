@@ -25,7 +25,7 @@ jobs:
           pip install requests pandas
 
       - name: Run Scraper Script
-        run: python scripts/fetch_nyiso_data.py
+        run: python ETL/fetch_nyiso_data.py
 
       - name: Commit and Push Data
         run: |

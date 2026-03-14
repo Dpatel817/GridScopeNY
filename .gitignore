@@ -11,24 +11,24 @@ data/processed/*
 data/raw/
 
 # raw data
-scripts/GridScopeNY\data/raw/
-scripts/GridScopeNY\data/loaded_files.csv
-scripts/GridScopeNY/data/raw/
-scripts/GridScopeNY/data/loaded_files.csv
+ETL/GridScopeNY\data/raw/
+ETL/GridScopeNY\data/loaded_files.csv
+ETL/GridScopeNY/data/raw/
+ETL/GridScopeNY/data/loaded_files.csv
 data/raw/
 
 # generated raw data
 data/raw/
-scripts/GridScopeNY\\data/
-scripts/GridScopeNY\\data/raw/
-scripts/GridScopeNY\\data\\raw\\
-scripts/GridScopeNY\\data/loaded_files.csv
-scripts/GridScopeNY\\data/loaded_zip_members.csv
+ETL/GridScopeNY\\data/
+ETL/GridScopeNY\\data/raw/
+ETL/GridScopeNY\\data\\raw\\
+ETL/GridScopeNY\\data/loaded_files.csv
+ETL/GridScopeNY\\data/loaded_zip_members.csv
 
 # generated raw data
 data/raw/
-scripts/GridScopeNY\\data/
-scripts/GridScopeNY\\data/raw/
-scripts/GridScopeNY\\data\\raw\\
-scripts/GridScopeNY\\data/loaded_files.csv
-scripts/GridScopeNY\\data/loaded_zip_members.csv
+ETL/GridScopeNY\\data/
+ETL/GridScopeNY\\data/raw/
+ETL/GridScopeNY\\data\\raw\\
+ETL/GridScopeNY\\data/loaded_files.csv
+ETL/GridScopeNY\\data/loaded_zip_members.csv
