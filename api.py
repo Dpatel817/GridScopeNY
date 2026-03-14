@@ -1,7 +1,6 @@
 """
 GridScope NY — FastAPI backend
-Serves processed NYISO data as JSON REST endpoints.
-Runs on port 8000 (localhost).
+Serves processed NYISO data as JSON REST endpoints on port 8000.
 """
 from __future__ import annotations
 
@@ -15,9 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from src.api_data_loader import (
-    ALL_FILE_MAPS,
+    DATASET_META,
+    PAGE_DATASETS,
     get_data_inventory,
     get_dataset_json,
+    get_filter_options,
+    get_page_config,
 )
 from src.config import OPENAI_API_KEY
 
@@ -27,13 +29,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="GridScope NY API",
     description="NYISO market intelligence data API",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -46,51 +48,47 @@ def health():
 
 @app.get("/api/inventory")
 def inventory():
-    """Return data inventory — which datasets have data and how many rows."""
     return get_data_inventory()
 
 
-@app.get("/api/{category}/{dataset}")
+@app.get("/api/page/{page}")
+def page_config(page: str):
+    if page not in PAGE_DATASETS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown page '{page}'. Valid: {list(PAGE_DATASETS.keys())}",
+        )
+    return get_page_config(page)
+
+
+@app.get("/api/dataset/{dataset_key}")
 def get_data(
-    category: str,
-    dataset: str,
-    limit: int = Query(default=5000, ge=1, le=50000),
+    dataset_key: str,
+    resolution: str = Query(default="raw", pattern="^(raw|hourly|on_peak|off_peak|daily)$"),
+    limit: int = Query(default=10000, ge=1, le=100000),
+    filter_col: Optional[str] = Query(default=None),
+    filter_val: Optional[str] = Query(default=None),
 ):
-    """
-    Fetch data for a specific category + dataset.
-
-    Categories: prices, demand, generation, interfaces, congestion
-    Dataset names are the keys within each category's file map.
-    """
-    if category not in ALL_FILE_MAPS:
+    if dataset_key not in DATASET_META:
         raise HTTPException(
             status_code=404,
-            detail=f"Unknown category '{category}'. Valid: {list(ALL_FILE_MAPS.keys())}",
+            detail=f"Unknown dataset '{dataset_key}'.",
         )
-
-    file_map = ALL_FILE_MAPS[category]
-    if dataset not in file_map:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unknown dataset '{dataset}' in category '{category}'. "
-                   f"Valid: {list(file_map.keys())}",
-        )
-
-    return get_dataset_json(category, dataset, limit=limit)
+    return get_dataset_json(
+        dataset_key,
+        resolution=resolution,
+        limit=limit,
+        filter_col=filter_col,
+        filter_val=filter_val,
+    )
 
 
-@app.get("/api/{category}")
-def list_datasets(category: str):
-    """List all available datasets for a category."""
-    if category not in ALL_FILE_MAPS:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unknown category '{category}'. Valid: {list(ALL_FILE_MAPS.keys())}",
-        )
-    return {
-        "category": category,
-        "datasets": list(ALL_FILE_MAPS[category].keys()),
-    }
+@app.get("/api/filters/{dataset_key}/{column}")
+def filters(dataset_key: str, column: str):
+    if dataset_key not in DATASET_META:
+        raise HTTPException(status_code=404, detail=f"Unknown dataset '{dataset_key}'.")
+    options = get_filter_options(dataset_key, column)
+    return {"dataset": dataset_key, "column": column, "options": options}
 
 
 class ExplainRequest(BaseModel):
@@ -99,7 +97,6 @@ class ExplainRequest(BaseModel):
 
 @app.post("/api/explain")
 def explain(body: ExplainRequest):
-    """AI explanation endpoint. Requires OPENAI_API_KEY env var."""
     prompt = body.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
@@ -147,7 +144,6 @@ def explain(body: ExplainRequest):
 
 @app.post("/api/etl/fetch")
 def run_etl_fetch():
-    """Trigger the NYISO data fetch ETL script."""
     try:
         result = subprocess.run(
             [sys.executable, "ETL/fetch_nyiso_data.py"],
@@ -169,7 +165,6 @@ def run_etl_fetch():
 
 @app.post("/api/etl/process")
 def run_etl_process():
-    """Trigger the NYISO data processing ETL script."""
     try:
         result = subprocess.run(
             [sys.executable, "ETL/process_nyiso_data.py"],

@@ -161,9 +161,32 @@ tr:hover td { background: var(--bg-secondary); }
 .inv-item .inv-name { font-weight: 600; color: var(--text); margin-bottom: 2px; }
 .inv-item .inv-rows { color: var(--text-muted); }
 
+.resolution-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding: 10px 14px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; }
+.resolution-bar label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.resolution-btn { padding: 5px 14px; border-radius: 4px; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; transition: all 0.12s; }
+.resolution-btn:hover { border-color: var(--primary); color: var(--primary); }
+.resolution-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+.dataset-section { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+.dataset-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--bg-secondary); cursor: pointer; user-select: none; transition: background 0.12s; }
+.dataset-header:hover { background: var(--bg-tertiary); }
+.dataset-header.expanded { border-bottom: 1px solid var(--border); }
+.expand-icon { font-size: 12px; color: var(--text-muted); width: 14px; }
+.dataset-label { font-weight: 600; font-size: 13px; flex: 1; }
+.dataset-badge { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: var(--bg-tertiary); color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+.dataset-rows { font-size: 11px; color: var(--text-muted); }
+.dataset-body { padding: 16px; }
+
+.links-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.link-card { display: block; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--primary); text-decoration: none; transition: border-color 0.12s; }
+.link-card:hover { border-color: var(--primary); background: #f0f6ff; }
+.link-card .link-label { font-weight: 600; }
+.link-card .link-url { font-size: 11px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 @media (max-width: 900px) {
   .two-col { grid-template-columns: 1fr; }
   .sidebar { position: relative; width: 100%; height: auto; }
   .main-content { margin-left: 0; }
   .layout { flex-direction: column; }
+  .resolution-bar { flex-wrap: wrap; }
 }

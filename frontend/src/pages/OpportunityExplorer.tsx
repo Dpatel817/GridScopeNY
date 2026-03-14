@@ -1,80 +1,91 @@
-import { useState, useMemo } from 'react'
-import { useDataset } from '../hooks/useDataset'
-import DataTable from '../components/DataTable'
-import EmptyState from '../components/EmptyState'
-import MetricsRow, { buildMetrics } from '../components/MetricsRow'
-
-const DATASETS = [
-  { key: 'da_lbmp_zone', cat: 'prices', label: 'DA LBMP — Zonal', scoreCol: 'LMP' },
-  { key: 'rt_lbmp_zone', cat: 'prices', label: 'RT LBMP — Zonal', scoreCol: 'LMP' },
-  { key: 'da_lbmp_gen',  cat: 'prices', label: 'DA LBMP — Generator', scoreCol: 'LMP' },
-  { key: 'damasp',       cat: 'prices', label: 'DA Ancillary Prices', scoreCol: '10 Min Spin' },
-  { key: 'dam_limiting_constraints', cat: 'congestion', label: 'DA Limiting Constraints', scoreCol: 'Constraint Cost' },
-]
+import { useState, useMemo } from 'react';
+import { useDataset } from '../hooks/useDataset';
+import DataTable from '../components/DataTable';
+import MetricsRow, { buildMetrics } from '../components/MetricsRow';
+import EmptyState from '../components/EmptyState';
 
 export default function OpportunityExplorer() {
-  const [dsIdx, setDsIdx] = useState(0)
-  const [sort, setSort] = useState<'desc' | 'asc'>('desc')
-  const [topN, setTopN] = useState(50)
-  const ds = DATASETS[dsIdx]
-  const { data: result, loading } = useDataset(ds.cat, ds.key, 10000)
-  const rows = result?.data ?? []
+  const [duration, setDuration] = useState<'1h' | '2h' | '4h'>('2h');
+  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'hourly');
+  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'hourly');
 
-  const ranked = useMemo(() => {
-    if (!rows.length) return []
-    const scoreCol = ds.scoreCol
-    const scored = rows
-      .map(r => ({ ...r, _score: Number(r[scoreCol] ?? 0) }))
-      .filter(r => !isNaN(r._score))
-      .sort((a, b) => sort === 'desc' ? b._score - a._score : a._score - b._score)
-    return scored.slice(0, topN)
-  }, [rows, ds, sort, topN])
+  const loading = daLoading || rtLoading;
 
-  const metrics = useMemo(() => buildMetrics(rows, ds.scoreCol), [rows, ds])
+  const opportunities = useMemo(() => {
+    if (!daData?.data?.length || !rtData?.data?.length) return [];
+
+    const daByKey: Record<string, number> = {};
+    for (const r of daData.data) {
+      const key = `${r.Date}_${r.HE}_${r.Zone}`;
+      daByKey[key] = Number(r.LMP) || 0;
+    }
+
+    const durationHours = duration === '1h' ? 1 : duration === '2h' ? 2 : 4;
+
+    const zoneData: Record<string, { spreads: number[]; zone: string }> = {};
+    for (const r of rtData.data) {
+      const key = `${r.Date}_${r.HE}_${r.Zone}`;
+      const rtLmp = Number(r.LMP) || 0;
+      const daLmp = daByKey[key] || 0;
+      const spread = Math.abs(rtLmp - daLmp);
+      const zone = String(r.Zone);
+      if (!zoneData[zone]) zoneData[zone] = { spreads: [], zone };
+      zoneData[zone].spreads.push(spread);
+    }
+
+    const results = Object.values(zoneData).map(({ zone, spreads }) => {
+      spreads.sort((a, b) => b - a);
+      const topN = spreads.slice(0, durationHours * 24);
+      const avgSpread = topN.reduce((s, v) => s + v, 0) / (topN.length || 1);
+      const maxSpread = spreads[0] || 0;
+      const revenue = avgSpread * durationHours;
+      return {
+        Zone: zone,
+        'Avg DA-RT Spread ($/MWh)': avgSpread.toFixed(2),
+        'Max Spread ($/MWh)': maxSpread.toFixed(2),
+        [`Est. ${duration} Revenue ($/MW)`]: revenue.toFixed(2),
+        'Spread Events': topN.length,
+      };
+    });
+
+    results.sort((a, b) => Number(b[`Est. ${duration} Revenue ($/MW)`]) - Number(a[`Est. ${duration} Revenue ($/MW)`]));
+    return results;
+  }, [daData, rtData, duration]);
 
   return (
     <div className="page">
       <div className="page-header">
-        <h1>🔎 Opportunity Explorer</h1>
-        <p>Rank and surface market opportunities by price, spread, or constraint cost</p>
+        <h1>Battery Opportunity Explorer</h1>
+        <p>Rank zones by battery-style DA-RT arbitrage opportunity</p>
       </div>
 
       <div className="controls">
         <div className="control-group">
-          <label>Dataset</label>
-          <select value={dsIdx} onChange={e => setDsIdx(Number(e.target.value))}>
-            {DATASETS.map((d, i) => <option key={i} value={i}>{d.label}</option>)}
-          </select>
-        </div>
-        <div className="control-group">
-          <label>Sort</label>
-          <select value={sort} onChange={e => setSort(e.target.value as 'desc' | 'asc')}>
-            <option value="desc">Highest first</option>
-            <option value="asc">Lowest first</option>
-          </select>
-        </div>
-        <div className="control-group">
-          <label>Top N</label>
-          <select value={topN} onChange={e => setTopN(Number(e.target.value))}>
-            {[20, 50, 100, 250].map(n => <option key={n} value={n}>{n}</option>)}
+          <label>Battery Duration</label>
+          <select value={duration} onChange={e => setDuration(e.target.value as any)}>
+            <option value="1h">1-Hour</option>
+            <option value="2h">2-Hour</option>
+            <option value="4h">4-Hour</option>
           </select>
         </div>
       </div>
 
-      {loading && <div className="loading"><div className="spinner" /> Loading...</div>}
-      {!loading && !rows.length && <EmptyState />}
+      {loading && <div className="loading"><div className="spinner" /> Loading price data...</div>}
 
-      {!loading && rows.length > 0 && (
+      {!loading && !opportunities.length && <EmptyState message="No price data available to compute opportunities." />}
+
+      {!loading && opportunities.length > 0 && (
         <>
-          <MetricsRow metrics={metrics} />
+          <MetricsRow metrics={buildMetrics(
+            opportunities.map(o => ({ val: Number(o[`Est. ${duration} Revenue ($/MW)`]) })),
+            'val'
+          ).map(m => ({ ...m, label: m.label.replace('val', `${duration} Rev`) }))} />
           <div className="card">
-            <div className="card-title">
-              Top {topN} rows — ranked by <strong>{ds.scoreCol}</strong> ({sort === 'desc' ? 'highest' : 'lowest'} first)
-            </div>
-            <DataTable data={ranked} maxRows={topN} />
+            <div className="card-title">Zone Rankings by {duration} Battery Opportunity</div>
+            <DataTable data={opportunities} maxRows={50} />
           </div>
         </>
       )}
     </div>
-  )
+  );
 }

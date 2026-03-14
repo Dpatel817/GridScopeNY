@@ -1,222 +1,588 @@
 """
-QA-enhanced data loader for the FastAPI backend.
-No Streamlit dependency — safe for use in API context.
-Handles NaN → None conversion, empty DataFrames, and type coercion.
+GridScope NY — API data loader with aggregation support.
+Handles NaN → None conversion, resolution-based aggregation,
+and complete dataset metadata for all NYISO processed files.
 """
 from __future__ import annotations
 
 import logging
-import math
-from functools import lru_cache
+import os
+import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from src.config import PROCESSED_DIR
 
 logger = logging.getLogger(__name__)
 
+ON_PEAK_HOURS = list(range(7, 23))
+OFF_PEAK_HOURS = [h for h in range(24) if h not in ON_PEAK_HOURS]
 
-def _nan_safe_value(val):
-    """Convert NaN/Inf float values to None for JSON serialization."""
-    if val is None:
-        return None
-    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
-        return None
-    return val
+_df_cache: dict[str, tuple[float, pd.DataFrame]] = {}
+_CACHE_TTL = 300
 
 
 def _clean_df_for_json(df: pd.DataFrame) -> list[dict]:
-    """
-    Convert a DataFrame to a list of dicts safe for JSON:
-    - NaN → None
-    - Timestamps → ISO strings
-    - Inf → None
-    """
     if df is None or df.empty:
         return []
-
-    result = []
-    for _, row in df.iterrows():
-        record = {}
-        for col, val in row.items():
-            if pd.isna(val) if not isinstance(val, (list, dict)) else False:
-                record[col] = None
-            elif hasattr(val, "isoformat"):
-                record[col] = val.isoformat()
-            elif isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
-                record[col] = None
-            else:
-                record[col] = val
-        result.append(record)
-    return result
+    df = df.copy()
+    for col in df.select_dtypes(include=["datetime64[ns]", "datetime64[ns, UTC]"]).columns:
+        df[col] = df[col].dt.strftime("%Y-%m-%dT%H:%M:%S")
+    for col in df.columns:
+        if df[col].dtype == "object":
+            df[col] = df[col].where(df[col].notna(), None)
+            df.loc[df[col].isin(["nan", "NaN", "NaT", "None", ""]), col] = None
+    df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    records = df.to_dict(orient="records")
+    return records
 
 
 def _load_csv_safe(filename: str) -> pd.DataFrame:
-    """
-    Load a processed CSV with full QA:
-    - File missing → empty DataFrame (not an exception)
-    - Parse errors → log and return empty DataFrame
-    - Datetime columns auto-detected and parsed
-    - Whitespace stripped from string columns
-    """
     path: Path = PROCESSED_DIR / filename
     if not path.exists():
-        logger.warning("Processed file not found: %s", path)
+        logger.warning("File not found: %s", path)
         return pd.DataFrame()
+
+    mtime = os.path.getmtime(path)
+    cached = _df_cache.get(filename)
+    if cached and cached[0] == mtime:
+        return cached[1].copy()
 
     try:
         df = pd.read_csv(path, low_memory=False)
     except Exception as exc:
         logger.error("Failed to read %s: %s", path, exc)
         return pd.DataFrame()
-
     if df.empty:
         return df
 
     df.columns = df.columns.str.strip()
 
-    for col in df.select_dtypes(include="object").columns:
-        df[col] = df[col].astype(str).str.strip()
-        df.loc[df[col].isin(["nan", "None", "NaN", ""]), col] = None
-
     DATETIME_HINTS = [
         "Time Stamp", "Timestamp", "RTC Execution Time", "RTC End Time Stamp",
         "Event Start Time", "Event End Time", "Forecast Date", "Vintage Date",
         "Date", "source_date", "Out Start", "Out End", "Insert Time",
-        "Scheduled Out", "Scheduled In", "Status Time",
+        "Scheduled Out", "Scheduled In", "Status Time", "Date Out", "Date In",
     ]
     for col in DATETIME_HINTS:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
 
-    NUMERIC_HINTS = [
-        "LMP", "MLC", "MCC", "Load", "Integrated Load", "Flow",
-        "Positive Limit", "Negative Limit", "Constraint Cost",
-        "Outage Duration Hours", "HE", "PTID", "Month", "Year",
-        "Generation MW", "BTM Solar Forecast MW", "BTM Solar Actual MW",
-        "10 Min Spin", "10 Min Non-Sync", "30 Min OR", "Reg Cap",
-        "DAM TTC", "DAM ATC", "Revised Import TTC", "Revised Export TTC",
-        "Import TTC Impact", "Export TTC Impact",
-        "Max Temp", "Min Temp", "Avg Temp", "Max Wet Bulb", "Min Wet Bulb",
-        "Avg Wet Bulb", "Lake Erie Circulation", "PAR Flow",
-        "Gen LMP", "External CTS Price", "CTS Spread",
-    ]
-    for col in NUMERIC_HINTS:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    logger.info("Loaded %s: %d rows, %d cols", filename, len(df), len(df.columns))
-    return df
+    _df_cache[filename] = (mtime, df)
+    logger.info("Loaded %s: %d rows", filename, len(df))
+    return df.copy()
 
 
-PRICES_FILES = {
-    "da_lbmp_zone": "da_lbmp_zone_processed.csv",
-    "da_lbmp_gen": "da_lbmp_gen_processed.csv",
-    "rt_lbmp_zone": "rt_lbmp_zone_processed.csv",
-    "rt_lbmp_gen": "rt_lbmp_gen_processed.csv",
-    "integrated_rt_lbmp_zone": "integrated_rt_lbmp_zone_processed.csv",
-    "integrated_rt_lbmp_gen": "integrated_rt_lbmp_gen_processed.csv",
-    "damasp": "damasp_processed.csv",
-    "rtasp": "rtasp_processed.csv",
-    "ext_rto_cts_price": "ext_rto_cts_price_processed.csv",
-    "reference_bus_lbmp": "reference_bus_lbmp_processed.csv",
+DATASET_META = {
+    "da_lbmp_zone": {
+        "file": "da_lbmp_zone_processed.csv",
+        "label": "DA Zonal LBMP (P-2A)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["LMP", "MLC", "MCC"],
+        "chart_y": "LMP",
+        "chart_group": "Zone",
+    },
+    "rt_lbmp_zone": {
+        "file": "rt_lbmp_zone_processed.csv",
+        "label": "RT Zonal LBMP (P-24A)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["LMP", "MLC", "MCC"],
+        "chart_y": "LMP",
+        "chart_group": "Zone",
+    },
+    "integrated_rt_lbmp_zone": {
+        "file": "integrated_rt_lbmp_zone_processed.csv",
+        "label": "Integrated RT Zonal LBMP (P-4A)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["LMP", "MLC", "MCC"],
+        "chart_y": "LMP",
+        "chart_group": "Zone",
+    },
+    "da_lbmp_gen": {
+        "file": "da_lbmp_gen_processed.csv",
+        "label": "DA Generator LBMP (P-2B)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Generator"],
+        "value_cols": ["LMP", "MLC", "MCC"],
+        "chart_y": "LMP",
+        "chart_group": "Generator",
+        "filterable": True,
+    },
+    "rt_lbmp_gen": {
+        "file": "rt_lbmp_gen_processed.csv",
+        "label": "RT Generator LBMP (P-24B)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Generator"],
+        "value_cols": ["LMP", "MLC", "MCC"],
+        "chart_y": "LMP",
+        "chart_group": "Generator",
+        "filterable": True,
+    },
+    "integrated_rt_lbmp_gen": {
+        "file": "integrated_rt_lbmp_gen_processed.csv",
+        "label": "Integrated RT Generator LBMP (P-4B)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Generator"],
+        "value_cols": ["LMP", "MLC", "MCC"],
+        "chart_y": "LMP",
+        "chart_group": "Generator",
+        "filterable": True,
+    },
+    "reference_bus_lbmp": {
+        "file": "reference_bus_lbmp_processed.csv",
+        "label": "Reference Bus LBMP (P-28)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Generator"],
+        "value_cols": ["LMP", "MLC", "MCC"],
+        "chart_y": "LMP",
+        "chart_group": "Generator",
+        "filterable": True,
+    },
+    "ext_rto_cts_price": {
+        "file": "ext_rto_cts_price_processed.csv",
+        "label": "RTC vs External RTO CTS Prices (P-42)",
+        "native": "5min",
+        "time_col": "RTC Execution Time",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Generator"],
+        "value_cols": ["Gen LMP", "External CTS Price", "CTS Spread"],
+        "chart_y": "CTS Spread",
+        "chart_group": "Generator",
+        "filterable": True,
+    },
+    "damasp": {
+        "file": "damasp_processed.csv",
+        "label": "DA Ancillary Service Prices (P-5)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["10 Min Spin", "10 Min Non-Sync", "30 Min OR", "Reg Cap"],
+        "chart_y": "10 Min Spin",
+        "chart_group": "Zone",
+    },
+    "rtasp": {
+        "file": "rtasp_processed.csv",
+        "label": "RT Ancillary Service Prices (P-6B)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["10 Min Spin", "10 Min Non-Sync", "30 Min OR", "Reg Cap"],
+        "chart_y": "10 Min Spin",
+        "chart_group": "Zone",
+    },
+    "isolf": {
+        "file": "isolf_processed.csv",
+        "label": "ISO Load Forecast (P-7)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": [],
+        "value_cols": ["CAPITL", "CENTRL", "DUNWOD", "GENESE", "HUD VL",
+                       "LONGIL", "MHK VL", "MILLWD", "N.Y.C.", "NORTH", "WEST", "NYISO"],
+        "chart_y": "NYISO",
+        "wide_format": True,
+    },
+    "pal": {
+        "file": "pal_processed.csv",
+        "label": "RT Actual Load (P-58B)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["Load"],
+        "chart_y": "Load",
+        "chart_group": "Zone",
+    },
+    "pal_integrated": {
+        "file": "pal_integrated_processed.csv",
+        "label": "Integrated RT Actual Load (P-58C)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["Integrated Load"],
+        "chart_y": "Integrated Load",
+        "chart_group": "Zone",
+    },
+    "lfweather": {
+        "file": "lfweather_processed.csv",
+        "label": "Weather Forecast (P-7A)",
+        "native": "daily",
+        "time_col": "Forecast Date",
+        "date_col": "Forecast Date",
+        "group_cols": ["Station"],
+        "value_cols": ["Max Temp", "Min Temp", "Avg Temp",
+                       "Max Wet Bulb", "Min Wet Bulb", "Avg Wet Bulb"],
+        "chart_y": "Avg Temp",
+        "chart_group": "Station",
+    },
+    "rtfuelmix": {
+        "file": "rtfuelmix_processed.csv",
+        "label": "RT Fuel Mix (P-63)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Fuel Type"],
+        "value_cols": ["Generation MW"],
+        "chart_y": "Generation MW",
+        "chart_group": "Fuel Type",
+    },
+    "gen_maint_report": {
+        "file": "gen_maint_report_processed.csv",
+        "label": "Generation Maintenance Report (P-15)",
+        "native": "daily",
+        "time_col": "Date",
+        "date_col": "Date",
+        "group_cols": [],
+        "value_cols": ["Forecasted Gen Outage MW"],
+        "chart_y": "Forecasted Gen Outage MW",
+    },
+    "op_in_commit": {
+        "file": "op_in_commit_processed.csv",
+        "label": "Operator-Initiated Commitments (P-26)",
+        "native": "event",
+    },
+    "dam_imer": {
+        "file": "dam_imer_processed.csv",
+        "label": "DA IMER Report (P-71)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["LMP", "VOM", "IHR", "IMER CO2", "IMER NOx"],
+        "chart_y": "IMER CO2",
+        "chart_group": "Zone",
+    },
+    "rt_imer": {
+        "file": "rt_imer_processed.csv",
+        "label": "RT IMER Report (P-72)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["LMP", "VOM", "IHR", "IMER CO2", "IMER NOx"],
+        "chart_y": "IMER CO2",
+        "chart_group": "Zone",
+    },
+    "btm_da_forecast": {
+        "file": "btm_da_forecast_processed.csv",
+        "label": "BTM Solar DA Forecast (P-70B)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["BTM Solar Forecast MW"],
+        "chart_y": "BTM Solar Forecast MW",
+        "chart_group": "Zone",
+    },
+    "btm_estimated_actual": {
+        "file": "btm_estimated_actual_processed.csv",
+        "label": "BTM Solar Estimated Actuals (P-70A)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Zone"],
+        "value_cols": ["BTM Solar Actual MW"],
+        "chart_y": "BTM Solar Actual MW",
+        "chart_group": "Zone",
+    },
+    "external_limits_flows": {
+        "file": "external_limits_flows_processed.csv",
+        "label": "Interface Limits & Flows (P-32)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Interface"],
+        "value_cols": ["Flow", "Positive Limit", "Negative Limit"],
+        "chart_y": "Flow",
+        "chart_group": "Interface",
+    },
+    "atc_ttc": {
+        "file": "atc_ttc_processed.csv",
+        "label": "ATC / TTC (P-8)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Interface"],
+        "value_cols": ["DAM TTC", "DAM ATC", "HAM TTC 00", "HAM ATC 00"],
+        "chart_y": "DAM TTC",
+        "chart_group": "Interface",
+    },
+    "ttcf": {
+        "file": "ttcf_processed.csv",
+        "label": "Transfer Limitation Derates",
+        "native": "event",
+    },
+    "par_flows": {
+        "file": "par_flows_processed.csv",
+        "label": "PAR Flows (P-34)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["PTID"],
+        "value_cols": ["PAR Flow"],
+        "chart_y": "PAR Flow",
+        "chart_group": "PTID",
+    },
+    "erie_circulation_da": {
+        "file": "erie_circulation_da_processed.csv",
+        "label": "Lake Erie Circulation DA (P-53B)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": [],
+        "value_cols": ["Lake Erie Circulation"],
+        "chart_y": "Lake Erie Circulation",
+    },
+    "erie_circulation_rt": {
+        "file": "erie_circulation_rt_processed.csv",
+        "label": "Lake Erie Circulation RT (P-34A)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": [],
+        "value_cols": ["Lake Erie Circulation"],
+        "chart_y": "Lake Erie Circulation",
+    },
+    "dam_limiting_constraints": {
+        "file": "dam_limiting_constraints_processed.csv",
+        "label": "DA Limiting Constraints (P-511A)",
+        "native": "hourly",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Limiting Facility"],
+        "value_cols": ["Constraint Cost"],
+        "chart_y": "Constraint Cost",
+        "chart_group": "Limiting Facility",
+    },
+    "rt_limiting_constraints": {
+        "file": "rt_limiting_constraints_processed.csv",
+        "label": "RT Limiting Constraints (P-33)",
+        "native": "5min",
+        "time_col": "Time Stamp",
+        "date_col": "Date",
+        "he_col": "HE",
+        "group_cols": ["Limiting Facility"],
+        "value_cols": ["Constraint Cost"],
+        "chart_y": "Constraint Cost",
+        "chart_group": "Limiting Facility",
+    },
+    "sc_line_outages": {
+        "file": "sc_line_outages_processed.csv",
+        "label": "RT Scheduled Outages (P-54A)",
+        "native": "event",
+    },
+    "rt_line_outages": {
+        "file": "rt_line_outages_processed.csv",
+        "label": "RT Actual Outages (P-54B)",
+        "native": "event",
+    },
+    "out_sched": {
+        "file": "out_sched_processed.csv",
+        "label": "DA Scheduled Outages (P-54C)",
+        "native": "event",
+    },
+    "outage_schedule": {
+        "file": "outage_schedule_processed.csv",
+        "label": "Outage Schedules (P-14B)",
+        "native": "event",
+    },
+    "rt_events": {
+        "file": "rt_events_processed.csv",
+        "label": "Real-Time Events (P-35)",
+        "native": "event",
+    },
+    "oper_messages": {
+        "file": "oper_messages_processed.csv",
+        "label": "Operational Announcements",
+        "native": "event",
+    },
+    "generator_names": {
+        "file": "generator_names_processed.csv",
+        "label": "Generator Names (P-19)",
+        "native": "table",
+    },
+    "load_names": {
+        "file": "load_names_processed.csv",
+        "label": "Load Names (P-20)",
+        "native": "table",
+    },
+    "active_transmission_nodes": {
+        "file": "active_transmission_nodes_processed.csv",
+        "label": "Active Transmission Nodes (P-66)",
+        "native": "table",
+    },
+    "zonal_uplift": {
+        "file": "zonal_uplift_processed.csv",
+        "label": "Zonal Uplift Report (P-45)",
+        "native": "table",
+    },
+    "resource_uplift": {
+        "file": "resource_uplift_processed.csv",
+        "label": "Resource Uplift Report (P-46)",
+        "native": "table",
+    },
 }
 
-DEMAND_FILES = {
-    "isolf": "isolf_processed.csv",
-    "lfweather": "lfweather_processed.csv",
-    "pal": "pal_processed.csv",
-    "pal_integrated": "pal_integrated_processed.csv",
-    "btm_da_forecast": "btm_da_forecast_processed.csv",
-    "btm_estimated_actual": "btm_estimated_actual_processed.csv",
-}
 
-GENERATION_FILES = {
-    "rtfuelmix": "rtfuelmix_processed.csv",
-    "gen_maint_report": "gen_maint_report_processed.csv",
-    "op_in_commit": "op_in_commit_processed.csv",
-    "dam_imer": "dam_imer_processed.csv",
-    "rt_imer": "rt_imer_processed.csv",
-    "generator_names": "generator_names_processed.csv",
-    "rt_events": "rt_events_processed.csv",
-    "oper_messages": "oper_messages_processed.csv",
-    "resource_uplift": "resource_uplift_processed.csv",
-}
-
-INTERFACE_FILES = {
-    "external_limits_flows": "external_limits_flows_processed.csv",
-    "atc_ttc": "atc_ttc_processed.csv",
-    "ttcf": "ttcf_processed.csv",
-    "par_flows": "par_flows_processed.csv",
-    "erie_circulation_da": "erie_circulation_da_processed.csv",
-    "erie_circulation_rt": "erie_circulation_rt_processed.csv",
-}
-
-CONGESTION_FILES = {
-    "dam_limiting_constraints": "dam_limiting_constraints_processed.csv",
-    "rt_limiting_constraints": "rt_limiting_constraints_processed.csv",
-    "out_sched": "out_sched_processed.csv",
-    "outage_schedule": "outage_schedule_processed.csv",
-    "sc_line_outages": "sc_line_outages_processed.csv",
-    "rt_line_outages": "rt_line_outages_processed.csv",
-    "zonal_uplift": "zonal_uplift_processed.csv",
-    "active_transmission_nodes": "active_transmission_nodes_processed.csv",
-    "load_names": "load_names_processed.csv",
-}
-
-ALL_FILE_MAPS = {
-    "prices": PRICES_FILES,
-    "demand": DEMAND_FILES,
-    "generation": GENERATION_FILES,
-    "interfaces": INTERFACE_FILES,
-    "congestion": CONGESTION_FILES,
+PAGE_DATASETS = {
+    "home": [
+        "rt_events", "oper_messages", "generator_names",
+        "load_names", "active_transmission_nodes",
+        "zonal_uplift", "resource_uplift",
+    ],
+    "prices": [
+        "da_lbmp_zone", "rt_lbmp_zone", "integrated_rt_lbmp_zone",
+        "da_lbmp_gen", "rt_lbmp_gen", "integrated_rt_lbmp_gen",
+        "reference_bus_lbmp", "ext_rto_cts_price",
+        "damasp", "rtasp",
+    ],
+    "demand": [
+        "isolf", "pal", "pal_integrated", "lfweather",
+    ],
+    "generation": [
+        "rtfuelmix", "gen_maint_report", "op_in_commit",
+        "dam_imer", "rt_imer", "btm_da_forecast", "btm_estimated_actual",
+    ],
+    "interfaces": [
+        "external_limits_flows", "atc_ttc", "ttcf",
+        "par_flows", "erie_circulation_da", "erie_circulation_rt",
+    ],
+    "congestion": [
+        "dam_limiting_constraints", "rt_limiting_constraints",
+        "sc_line_outages", "rt_line_outages", "out_sched", "outage_schedule",
+    ],
 }
 
 
-def load_category(category: str) -> dict[str, pd.DataFrame]:
-    """Load all datasets for a category."""
-    file_map = ALL_FILE_MAPS.get(category, {})
-    result = {}
-    for key, filename in file_map.items():
-        result[key] = _load_csv_safe(filename)
+def _aggregate_df(df: pd.DataFrame, meta: dict, resolution: str) -> pd.DataFrame:
+    if resolution == "raw":
+        return df
+    native = meta.get("native", "event")
+    if native in ("event", "table", "daily"):
+        return df
+
+    date_col = meta.get("date_col", "Date")
+    he_col = meta.get("he_col")
+    group_cols = [c for c in meta.get("group_cols", []) if c in df.columns]
+    value_cols = [c for c in meta.get("value_cols", []) if c in df.columns]
+
+    if not value_cols or date_col not in df.columns:
+        return df
+
+    if he_col and he_col in df.columns:
+        df[he_col] = pd.to_numeric(df[he_col], errors="coerce")
+
+    if resolution == "hourly":
+        if native == "hourly":
+            return df
+        if he_col and he_col in df.columns:
+            agg_keys = [date_col, he_col] + group_cols
+        else:
+            return df
+    elif resolution == "on_peak":
+        if he_col and he_col in df.columns:
+            df = df[df[he_col].isin(ON_PEAK_HOURS)].copy()
+        agg_keys = [date_col] + group_cols
+    elif resolution == "off_peak":
+        if he_col and he_col in df.columns:
+            df = df[df[he_col].isin(OFF_PEAK_HOURS)].copy()
+        agg_keys = [date_col] + group_cols
+    elif resolution == "daily":
+        agg_keys = [date_col] + group_cols
+    else:
+        return df
+
+    if df.empty:
+        return df
+
+    for vc in value_cols:
+        df[vc] = pd.to_numeric(df[vc], errors="coerce")
+
+    existing_keys = [k for k in agg_keys if k in df.columns]
+    result = df.groupby(existing_keys, dropna=False)[value_cols].mean().reset_index()
+
+    for vc in value_cols:
+        result[vc] = result[vc].round(2)
+
     return result
 
 
-def get_dataset(category: str, dataset: str) -> pd.DataFrame:
-    """Load a single dataset, returning empty DataFrame if not found."""
-    file_map = ALL_FILE_MAPS.get(category, {})
-    filename = file_map.get(dataset)
-    if not filename:
-        return pd.DataFrame()
-    return _load_csv_safe(filename)
-
-
 def get_dataset_json(
-    category: str,
-    dataset: str,
-    limit: int = 5000,
+    dataset_key: str,
+    resolution: str = "raw",
+    limit: int = 10000,
+    filter_col: str | None = None,
+    filter_val: str | None = None,
 ) -> dict:
-    """
-    Load a dataset and return JSON-safe dict with metadata.
-    Handles NaN, Inf, datetime serialization.
-    """
-    df = get_dataset(category, dataset)
+    meta = DATASET_META.get(dataset_key)
+    if not meta:
+        return {"dataset": dataset_key, "status": "unknown", "rows": 0, "data": []}
 
+    df = _load_csv_safe(meta["file"])
     if df.empty:
         return {
-            "dataset": dataset,
-            "category": category,
+            "dataset": dataset_key,
+            "label": meta.get("label", dataset_key),
+            "status": "empty",
             "rows": 0,
             "columns": [],
             "data": [],
-            "status": "empty",
-            "message": "No processed data found. Run the ETL to fetch NYISO data.",
+            "meta": _safe_meta(meta),
         }
 
-    total_rows = len(df)
-    nan_counts = df.isna().sum()
-    nan_summary = {col: int(cnt) for col, cnt in nan_counts.items() if cnt > 0}
+    total_raw = len(df)
+
+    if filter_col and filter_val and filter_col in df.columns:
+        df = df[df[filter_col].astype(str) == filter_val].copy()
+
+    df = _aggregate_df(df, meta, resolution)
+    total_after_agg = len(df)
 
     if limit and len(df) > limit:
         df = df.tail(limit)
@@ -224,35 +590,91 @@ def get_dataset_json(
     records = _clean_df_for_json(df)
 
     return {
-        "dataset": dataset,
-        "category": category,
-        "rows": total_rows,
+        "dataset": dataset_key,
+        "label": meta.get("label", dataset_key),
+        "status": "ok",
+        "rows": total_raw,
+        "aggregated_rows": total_after_agg,
         "returned_rows": len(records),
+        "resolution": resolution,
         "columns": list(df.columns),
         "data": records,
-        "status": "ok",
-        "nan_summary": nan_summary,
+        "meta": _safe_meta(meta),
     }
 
 
+def _safe_meta(meta: dict) -> dict:
+    return {
+        "label": meta.get("label", ""),
+        "native": meta.get("native", ""),
+        "chart_y": meta.get("chart_y", ""),
+        "chart_group": meta.get("chart_group", ""),
+        "wide_format": meta.get("wide_format", False),
+        "value_cols": meta.get("value_cols", []),
+        "group_cols": meta.get("group_cols", []),
+        "filterable": meta.get("filterable", False),
+    }
+
+
+def get_page_config(page: str) -> dict:
+    dataset_keys = PAGE_DATASETS.get(page, [])
+    datasets = {}
+    for key in dataset_keys:
+        meta = DATASET_META.get(key)
+        if meta:
+            datasets[key] = _safe_meta(meta)
+    return {"page": page, "datasets": datasets}
+
+
+def get_filter_options(dataset_key: str, column: str, max_options: int = 200) -> list:
+    meta = DATASET_META.get(dataset_key)
+    if not meta:
+        return []
+    df = _load_csv_safe(meta["file"])
+    if df.empty or column not in df.columns:
+        return []
+    options = df[column].dropna().astype(str).unique().tolist()
+    options.sort()
+    return options[:max_options]
+
+
 def get_data_inventory() -> dict:
-    """Return inventory of all datasets showing which have data and how many rows."""
     inventory = {}
-    for category, file_map in ALL_FILE_MAPS.items():
-        inventory[category] = {}
-        for key, filename in file_map.items():
-            path = PROCESSED_DIR / filename
+    for page, keys in PAGE_DATASETS.items():
+        inventory[page] = {}
+        for key in keys:
+            meta = DATASET_META.get(key)
+            if not meta:
+                continue
+            path = PROCESSED_DIR / meta["file"]
             if not path.exists():
-                inventory[category][key] = {"status": "missing", "rows": 0}
+                inventory[page][key] = {
+                    "label": meta.get("label", key),
+                    "status": "missing",
+                    "rows": 0,
+                }
             else:
                 try:
-                    df = pd.read_csv(path, nrows=1)
-                    full_df = pd.read_csv(path)
-                    inventory[category][key] = {
+                    cached = _df_cache.get(meta["file"])
+                    if cached:
+                        row_count = len(cached[1])
+                    else:
+                        size = os.path.getsize(path)
+                        with open(path, "r") as f:
+                            first_line = f.readline()
+                            sample = f.read(4096)
+                        avg_line = len(first_line) + (len(sample) / max(sample.count("\n"), 1) if sample else len(first_line))
+                        row_count = max(int(size / avg_line) - 1, 0) if avg_line > 0 else 0
+                    inventory[page][key] = {
+                        "label": meta.get("label", key),
                         "status": "available",
-                        "rows": len(full_df),
-                        "columns": list(full_df.columns),
+                        "rows": row_count,
+                        "native": meta.get("native", ""),
                     }
-                except Exception as exc:
-                    inventory[category][key] = {"status": "error", "rows": 0, "error": str(exc)}
+                except Exception:
+                    inventory[page][key] = {
+                        "label": meta.get("label", key),
+                        "status": "error",
+                        "rows": 0,
+                    }
     return inventory
