@@ -488,18 +488,42 @@ def ai_explainer(body: AIExplainRequest):
     ctx = body.context or {}
     context_lines = []
     label_map = {
-        "avg_da_lmp": "Avg DA LMP",
+        "avg_da_lmp": "Avg DA LMP (Zones A-K)",
         "max_da_lmp": "Peak DA LMP",
+        "min_da_lmp": "Min DA LMP",
+        "avg_rt_lmp": "Avg RT LMP (Zones A-K)",
         "zones_count": "Active zones",
         "highest_price_zone": "Highest-priced zone",
         "lowest_price_zone": "Lowest-priced zone",
+        "zone_price_ranking": "Zone price ranking",
+        "da_rt_spread": "DA-RT spread",
+        "spread_rankings": "DA-RT spread rankings",
         "peak_forecast_load": "Peak forecast load",
         "avg_forecast_load": "Avg forecast load",
-        "datasets_available": "Datasets loaded",
         "top_congested_constraints": "Top congested constraints",
-        "da_rt_spread_range": "DA-RT spread range",
-        "interface_flow_summary": "Key interface flows",
         "generation_mix": "Generation mix",
+        "rt_events": "Recent RT events",
+        "oper_messages": "Operational announcements",
+        "top_battery_zone": "Top battery opportunity zone",
+        "battery_revenue": "Estimated battery revenue",
+        "selected_zone": "Selected zone",
+        "zone_rank": "Zone rank",
+        "avg_spread": "Zone avg DA-RT spread",
+        "max_spread": "Zone max spread",
+        "estimated_revenue": "Zone estimated revenue",
+        "volatility": "Zone volatility (sigma)",
+        "signal_type": "Signal type",
+        "spread_events": "Spread events",
+        "rt_premium_pct": "RT premium %",
+        "battery_duration": "Battery duration",
+        "zones_analyzed": "Zones analyzed",
+        "top_constraints": "Top constraints",
+        "peak_load": "Peak load",
+        "avg_load": "Avg load",
+        "trader_insight_summary": "Trader insight",
+        "battery_insight_summary": "Battery insight",
+        "datasets_available": "Datasets loaded",
+        "interface_flow_summary": "Key interface flows",
     }
     for k, v in ctx.items():
         if v is not None and v != "" and v != [] and k not in ("resolution", "current_page"):
@@ -510,8 +534,11 @@ def ai_explainer(body: AIExplainRequest):
         context_block = "DASHBOARD STATE (use these numbers directly):\n" + "\n".join(context_lines)
 
     system_prompt = (
-        "You are a senior NYISO electricity market analyst. You write concise analyst notes "
-        "for energy traders and portfolio managers using GridScopeNY.\n\n"
+        "You are a senior NYISO electricity market analyst writing for energy traders, battery strategists, "
+        "and portfolio managers using the GridScopeNY dashboard.\n\n"
+        "SCOPE: NYISO Zones A through K only. Zone A=WEST, B=GENESE, C=CENTRL, D=NORTH, E=MHK VL, "
+        "F=CAPITL, G=HUD VL, H=MILLWD, I=DUNWOD, J=N.Y.C., K=LONGIL. "
+        "Do NOT analyze H Q, NPX, O H, or PJM - these are external settlement nodes, not NYISO zones.\n\n"
         "STRICT RULES:\n"
         "- Use the dashboard data provided. Reference actual numbers, zones, and values.\n"
         "- Do NOT use markdown formatting. No **, no #, no `, no bullet symbols.\n"
@@ -519,15 +546,20 @@ def ai_explainer(body: AIExplainRequest):
         "- If data is insufficient, state exactly what is missing in one sentence.\n"
         "- Do NOT invent prices, outages, or events not in the context.\n"
         "- Do NOT say 'typically' or 'generally' when specific data is available.\n\n"
-        "RESPONSE FORMAT (follow exactly):\n"
-        "Write a 2-4 sentence direct answer using specific data points.\n\n"
-        "DRIVERS:\n"
-        "- First likely driver (one sentence)\n"
-        "- Second likely driver (one sentence)\n"
-        "- Third likely driver if relevant (one sentence)\n\n"
-        "CAVEATS:\n"
-        "- One short caveat only if genuinely needed\n\n"
-        "Keep the total response under 200 words. Be direct. Sound like an analyst, not a chatbot."
+        "RESPONSE FORMAT (follow exactly):\n\n"
+        "SUMMARY:\n"
+        "2-4 sentence direct answer using specific data points from the dashboard.\n\n"
+        "TRADER TAKEAWAYS:\n"
+        "- 2-4 concise bullets focused on spread behavior, dislocations, congestion sensitivity, "
+        "verification risk, arbitrage conditions\n\n"
+        "BATTERY STRATEGIST TAKEAWAYS:\n"
+        "- 2-4 concise bullets focused on duration fit, persistence, structural vs event-driven value, "
+        "storage-relevant conditions\n\n"
+        "KEY SIGNALS:\n"
+        "- 2-4 short bullets citing actual dashboard metrics (spreads, constraints, load, flows, events)\n\n"
+        "CAVEAT:\n"
+        "- One short caveat only if genuinely needed. Omit this section if no caveat is needed.\n\n"
+        "Keep the total response under 300 words. Be direct. Sound like an analyst, not a chatbot."
     )
 
     user_content = question
@@ -543,39 +575,67 @@ def ai_explainer(body: AIExplainRequest):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
-            max_tokens=600,
+            max_tokens=900,
             temperature=0.2,
         )
         raw = completion.choices[0].message.content or ""
-
         answer = _strip_markdown(raw)
-        drivers: list[str] = []
-        caveats: list[str] = []
 
         import re
-        drivers_match = re.split(r'(?i)DRIVERS?\s*:', answer, maxsplit=1)
-        if len(drivers_match) > 1:
-            answer = drivers_match[0].strip()
-            rest = drivers_match[1]
-            caveats_match = re.split(r'(?i)CAVEATS?\s*:', rest, maxsplit=1)
-            if len(caveats_match) > 1:
-                drivers = _parse_bullet_lines(caveats_match[0])
-                caveats = _parse_bullet_lines(caveats_match[1])
-            else:
-                drivers = _parse_bullet_lines(rest)
-        elif re.search(r'(?i)CAVEATS?\s*:', answer):
-            parts = re.split(r'(?i)CAVEATS?\s*:', answer, maxsplit=1)
-            answer = parts[0].strip()
-            caveats = _parse_bullet_lines(parts[1])
 
-        answer = answer.strip()
-        if answer.startswith("Summary") or answer.startswith("SUMMARY"):
-            answer = re.sub(r'^(?:SUMMARY|Summary)\s*:?\s*', '', answer).strip()
+        section_headers = [
+            r'SUMMARY\s*:', r'TRADER\s+TAKEAWAYS?\s*:', r'BATTERY\s+STRATEGIST\s+TAKEAWAYS?\s*:',
+            r'KEY\s+(?:SUPPORTING\s+)?SIGNALS?\s*:', r'CAVEATS?\s*:', r'DRIVERS?\s*:'
+        ]
+
+        def _extract_section(text: str, start_pattern: str, end_patterns: list[str]) -> list[str]:
+            m = re.search(start_pattern, text, re.IGNORECASE)
+            if not m:
+                return []
+            rest = text[m.end():]
+            end_pos = len(rest)
+            for ep in end_patterns:
+                em = re.search(ep, rest, re.IGNORECASE)
+                if em and em.start() < end_pos:
+                    end_pos = em.start()
+            return _parse_bullet_lines(rest[:end_pos])
+
+        def _extract_summary(text: str) -> str:
+            m = re.search(r'(?i)SUMMARY\s*:', text)
+            if m:
+                rest = text[m.end():]
+                end_pos = len(rest)
+                for ep in section_headers:
+                    if 'SUMMARY' in ep:
+                        continue
+                    em = re.search(ep, rest, re.IGNORECASE)
+                    if em and em.start() < end_pos:
+                        end_pos = em.start()
+                return rest[:end_pos].strip()
+            return re.split(r'(?i)(?:TRADER|BATTERY|KEY|DRIVER|CAVEAT)', text, maxsplit=1)[0].strip()
+
+        summary_text = _extract_summary(answer)
+        summary_text = re.sub(r'^(?:SUMMARY|Summary)\s*:?\s*', '', summary_text).strip()
+
+        trader_items = _extract_section(answer, r'TRADER\s+TAKEAWAYS?\s*:',
+            [p for p in section_headers if 'TRADER' not in p])
+        battery_items = _extract_section(answer, r'BATTERY\s+STRATEGIST\s+TAKEAWAYS?\s*:',
+            [p for p in section_headers if 'BATTERY' not in p])
+        signal_items = _extract_section(answer, r'KEY\s+(?:SUPPORTING\s+)?SIGNALS?\s*:',
+            [p for p in section_headers if 'KEY' not in p and 'SIGNAL' not in p])
+        if not signal_items:
+            signal_items = _extract_section(answer, r'DRIVERS?\s*:',
+                [p for p in section_headers if 'DRIVER' not in p])
+        caveat_items = _extract_section(answer, r'CAVEATS?\s*:',
+            [p for p in section_headers if 'CAVEAT' not in p])
 
         return {
-            "answer": answer,
-            "drivers": drivers,
-            "caveats": caveats,
+            "answer": summary_text,
+            "trader_takeaways": trader_items,
+            "battery_takeaways": battery_items,
+            "key_signals": signal_items,
+            "drivers": signal_items if signal_items else trader_items[:2],
+            "caveats": caveat_items,
             "status": "ok",
         }
     except ImportError:

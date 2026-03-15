@@ -1,17 +1,26 @@
 import { useState } from 'react'
 import { useDataset, useInventory } from '../hooks/useDataset'
+import { isNyisoZone } from '../data/zones'
 
-const SUGGESTED_PROMPTS = [
-  { label: 'Price Separation', prompt: 'Why did Zone J prices separate from Zone G today?' },
-  { label: 'Congestion Impact', prompt: 'Explain what happens when the Linden constraint is binding.' },
-  { label: 'Interface Pressure', prompt: 'What causes high congestion costs at the UPNY/SENY interface?' },
-  { label: 'Negative Prices', prompt: 'Why do off-peak prices sometimes go negative in NYISO?' },
-  { label: 'Battery Strategy', prompt: 'What zones are best for 2-hour battery arbitrage in NYISO and why?' },
-  { label: 'Demand Response', prompt: 'How does summer peak demand affect real-time prices in downstate NY?' },
+const TRADER_PROMPTS = [
+  { label: 'Spread Behavior', prompt: 'What is the trader takeaway from today\'s DA-RT spread behavior across NYISO zones?' },
+  { label: 'Congestion Sensitivity', prompt: 'Which zones look most congestion-sensitive today?' },
+  { label: 'RT Arbitrage', prompt: 'Is this more of a real-time arbitrage story or a structural value story?' },
+  { label: 'Price Dislocation', prompt: 'Are there any unusual price dislocations between upstate and downstate zones?' },
+]
+
+const BATTERY_PROMPTS = [
+  { label: 'Best Battery Zone', prompt: 'What is the best 2-hour battery zone right now and why?' },
+  { label: 'Structural vs Event', prompt: 'Does this opportunity look structural or event-driven?' },
+  { label: 'Dashboard Evidence', prompt: 'What dashboard evidence supports the top battery opportunity?' },
+  { label: 'Duration Strategy', prompt: 'Should I position for 1-hour or 4-hour battery duration in the current market?' },
 ]
 
 interface AIResponse {
   answer: string;
+  trader_takeaways?: string[];
+  battery_takeaways?: string[];
+  key_signals?: string[];
   drivers?: string[];
   caveats?: string[];
   status: string;
@@ -27,19 +36,19 @@ export default function AIExplainer() {
   const { data: demandData } = useDataset('isolf', 'daily')
   const { data: genData } = useDataset('rtfuelmix', 'daily')
   const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily')
-  const { data: interfaceData } = useDataset('dam_imer', 'daily')
+  const { data: rtEventsData } = useDataset('rt_events', 'raw')
+  const { data: operData } = useDataset('oper_messages', 'raw')
   const { inventory } = useInventory()
 
   const marketContext = (() => {
     const ctx: Record<string, any> = {}
 
     if (priceData?.data?.length) {
-      const records = priceData.data
+      const records = priceData.data.filter((r: any) => isNyisoZone(String(r.Zone)))
       const lmps = records.map((r: any) => Number(r.LMP)).filter(Boolean)
       const zones = [...new Set(records.map((r: any) => String(r.Zone)))]
       ctx['avg_da_lmp'] = lmps.length ? `$${(lmps.reduce((a: number, b: number) => a + b, 0) / lmps.length).toFixed(2)}/MWh` : null
       ctx['max_da_lmp'] = lmps.length ? `$${Math.max(...lmps).toFixed(2)}/MWh` : null
-      ctx['min_da_lmp'] = lmps.length ? `$${Math.min(...lmps).toFixed(2)}/MWh` : null
       ctx['zones_count'] = zones.length
 
       const byZone: Record<string, number[]> = {}
@@ -58,18 +67,26 @@ export default function AIExplainer() {
       const top3 = zoneAvgs.slice(0, 3).map(z => `${z.zone}: $${z.avg.toFixed(2)}`).join(', ')
       const bot3 = zoneAvgs.slice(-3).map(z => `${z.zone}: $${z.avg.toFixed(2)}`).join(', ')
       ctx['zone_price_ranking'] = `Top: ${top3}. Bottom: ${bot3}`
-    }
 
-    if (rtPriceData?.data?.length) {
-      const rtRecords = rtPriceData.data
-      const rtLmps = rtRecords.map((r: any) => Number(r.LMP)).filter(Boolean)
-      ctx['avg_rt_lmp'] = rtLmps.length ? `$${(rtLmps.reduce((a: number, b: number) => a + b, 0) / rtLmps.length).toFixed(2)}/MWh` : null
+      if (rtPriceData?.data?.length) {
+        const rtRecords = rtPriceData.data.filter((r: any) => isNyisoZone(String(r.Zone)))
+        const rtLmps = rtRecords.map((r: any) => Number(r.LMP)).filter(Boolean)
+        ctx['avg_rt_lmp'] = rtLmps.length ? `$${(rtLmps.reduce((a: number, b: number) => a + b, 0) / rtLmps.length).toFixed(2)}/MWh` : null
 
-      if (priceData?.data?.length) {
-        const daAvg = Number(ctx['avg_da_lmp']?.replace(/[^0-9.-]/g, '')) || 0
-        const rtAvg = rtLmps.reduce((a: number, b: number) => a + b, 0) / rtLmps.length
-        const spread = daAvg - rtAvg
-        ctx['da_rt_spread'] = `$${spread.toFixed(2)}/MWh (DA ${spread > 0 ? 'premium' : 'discount'})`
+        const rtByZone: Record<string, number[]> = {}
+        for (const r of rtRecords) {
+          const z = String(r.Zone)
+          if (!rtByZone[z]) rtByZone[z] = []
+          rtByZone[z].push(Number(r.LMP) || 0)
+        }
+        const spreadRanks = zoneAvgs.map(da => {
+          const rtAvg = rtByZone[da.zone]
+            ? rtByZone[da.zone].reduce((a, b) => a + b, 0) / rtByZone[da.zone].length : da.avg
+          return { zone: da.zone, spread: Math.abs(da.avg - rtAvg) }
+        }).sort((a, b) => b.spread - a.spread)
+        ctx['spread_rankings'] = spreadRanks.slice(0, 5).map(s => `${s.zone}: $${s.spread.toFixed(2)}`).join(', ')
+        ctx['top_battery_zone'] = spreadRanks[0]?.zone
+        ctx['battery_revenue'] = `$${(spreadRanks[0]?.spread * 2).toFixed(2)}/MW (2h est.)`
       }
     }
 
@@ -86,9 +103,7 @@ export default function AIExplainer() {
       for (const r of records) {
         const fuel = String(r['Fuel Type'] || r['Fuel Category'] || '')
         const gen = Number(r['Generation MW'] || r['Gen MWh'] || 0)
-        if (fuel && gen) {
-          fuels[fuel] = (fuels[fuel] || 0) + gen
-        }
+        if (fuel && gen) fuels[fuel] = (fuels[fuel] || 0) + gen
       }
       const total = Object.values(fuels).reduce((a, b) => a + b, 0)
       if (total > 0) {
@@ -98,14 +113,11 @@ export default function AIExplainer() {
     }
 
     if (congestionData?.data?.length) {
-      const records = congestionData.data
       const constraints: Record<string, number> = {}
-      for (const r of records) {
+      for (const r of congestionData.data) {
         const name = String(r['Limiting Facility'] || r['Constraint Name'] || '')
         const cost = Math.abs(Number(r['Constraint Cost'] || r['Shadow Price'] || 0))
-        if (name && cost) {
-          constraints[name] = (constraints[name] || 0) + cost
-        }
+        if (name && cost) constraints[name] = (constraints[name] || 0) + cost
       }
       const sorted = Object.entries(constraints).sort((a, b) => b[1] - a[1])
       if (sorted.length > 0) {
@@ -113,24 +125,17 @@ export default function AIExplainer() {
       }
     }
 
-    if (interfaceData?.data?.length) {
-      const records = interfaceData.data
-      const zoneImers: Record<string, number[]> = {}
-      for (const r of records) {
-        const zone = String(r['Zone'] || '')
-        const lmp = Number(r['LMP'] || 0)
-        if (zone && lmp) {
-          if (!zoneImers[zone]) zoneImers[zone] = []
-          zoneImers[zone].push(lmp)
-        }
-      }
-      const avgImers = Object.entries(zoneImers).map(([z, vals]) => ({
-        zone: z,
-        avg: vals.reduce((a, b) => a + b, 0) / vals.length,
-      })).sort((a, b) => b.avg - a.avg)
-      if (avgImers.length > 0) {
-        ctx['imer_price_summary'] = avgImers.slice(0, 3).map(f => `${f.zone}: $${f.avg.toFixed(2)}/MWh`).join(', ')
-      }
+    if (rtEventsData?.data?.length) {
+      const notable = rtEventsData.data
+        .filter((r: any) => !String(r.Message || '').startsWith('Start of day'))
+        .slice(-5)
+        .map((r: any) => `${r['Time Stamp']?.slice(5, 16) || ''}: ${r.Message}`)
+      if (notable.length > 0) ctx['rt_events'] = notable.join('; ')
+    }
+
+    if (operData?.data?.length) {
+      const msgs = [...new Set(operData.data.map((r: any) => `${r['Message Type']}: ${r.Message}`))].slice(0, 3)
+      if (msgs.length > 0) ctx['oper_messages'] = msgs.join('; ')
     }
 
     if (inventory) {
@@ -142,141 +147,177 @@ export default function AIExplainer() {
     return ctx
   })()
 
-  async function handleExplain() {
-    if (!prompt.trim()) return
+  async function handleExplain(question?: string) {
+    const q = question || prompt.trim()
+    if (!q) return
     setLoading(true)
     setResponse(null)
     try {
       const res = await fetch('/api/ai-explainer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: prompt.trim(),
-          context: marketContext,
-        }),
+        body: JSON.stringify({ question: q, context: marketContext }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setResponse({ answer: data.detail || 'Request failed', status: 'error', drivers: [], caveats: [] })
+        setResponse({ answer: data.detail || 'Request failed', status: 'error' })
       } else {
         setResponse(data)
       }
     } catch {
-      setResponse({ answer: 'Request failed. Is the API server running?', status: 'error', drivers: [], caveats: [] })
+      setResponse({ answer: 'Request failed. Is the API server running?', status: 'error' })
     } finally {
       setLoading(false)
     }
   }
 
-  function handleSuggested(p: string) {
-    setPrompt(p)
-  }
+  const contextItems = [
+    marketContext.avg_da_lmp && `DA LMP avg: ${marketContext.avg_da_lmp}`,
+    marketContext.avg_rt_lmp && `RT LMP avg: ${marketContext.avg_rt_lmp}`,
+    marketContext.spread_rankings && `Top spreads: ${marketContext.spread_rankings}`,
+    marketContext.top_battery_zone && `Top battery zone: ${marketContext.top_battery_zone} (${marketContext.battery_revenue})`,
+    marketContext.top_congested_constraints && `Constraints: ${marketContext.top_congested_constraints}`,
+    marketContext.peak_forecast_load && `Peak load: ${marketContext.peak_forecast_load}`,
+    marketContext.generation_mix && `Gen mix: ${marketContext.generation_mix}`,
+  ].filter(Boolean)
 
   return (
     <div className="page">
       <div className="page-header">
         <h1>AI Market Analyst</h1>
         <p className="page-subtitle">
-          Ask questions about NYISO market behavior — grounded in your current dashboard data
+          Ask zone-based NYISO questions and get trader and battery-strategy insights grounded in current dashboard data.
         </p>
       </div>
 
-      {Object.keys(marketContext).length > 0 && (
+      {contextItems.length > 0 && (
         <div className="insight-card" style={{ marginBottom: 24 }}>
-          <div className="insight-title">Current Market Context</div>
-          <div className="insight-body">
-            {marketContext.avg_da_lmp && <>DA LMP: <strong>{marketContext.avg_da_lmp}</strong> avg</>}
-            {marketContext.max_da_lmp && <> (peak: <strong>{marketContext.max_da_lmp}</strong>)</>}
-            {marketContext.avg_rt_lmp && <> | RT LMP: <strong>{marketContext.avg_rt_lmp}</strong> avg</>}
-            {marketContext.da_rt_spread && <> | Spread: <strong>{marketContext.da_rt_spread}</strong></>}
-            {marketContext.zones_count && <> across <strong>{marketContext.zones_count} zones</strong></>}.
-            {marketContext.highest_price_zone && <> Highest: <strong>{marketContext.highest_price_zone}</strong></>}
-            {marketContext.lowest_price_zone && <>, lowest: <strong>{marketContext.lowest_price_zone}</strong>.</>}
-            {marketContext.peak_forecast_load && <> Peak load: <strong>{marketContext.peak_forecast_load}</strong>.</>}
-            {marketContext.generation_mix && <> Gen mix: <strong>{marketContext.generation_mix}</strong>.</>}
-            {marketContext.top_congested_constraints && <> Top constraints: <strong>{marketContext.top_congested_constraints}</strong>.</>}
-            {marketContext.imer_price_summary && <> IMER: <strong>{marketContext.imer_price_summary}</strong>.</>}
-            {marketContext.datasets_available && <> {marketContext.datasets_available} datasets loaded.</>}
+          <div className="insight-title">Current Market Context (Zones A-K)</div>
+          <div className="insight-body" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+            {contextItems.map((item, i) => (
+              <span key={i} style={{ fontSize: 13 }}>{item}</span>
+            ))}
           </div>
         </div>
       )}
 
-      <div className="grid-2" style={{ gap: 24, alignItems: 'start' }}>
-        <div>
-          <div className="ai-page-card">
-            <div className="ai-page-card-title">Ask a Question</div>
-            <textarea
-              className="ai-page-textarea"
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              placeholder="What drove high prices in Zone J this week?"
-              rows={4}
-              onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleExplain() }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-              <button className="ai-btn ai-btn-primary" onClick={handleExplain} disabled={loading || !prompt.trim()}>
-                {loading ? 'Analyzing...' : 'Ask Analyst'}
-              </button>
-              <button className="ai-btn ai-btn-secondary" onClick={() => { setPrompt(''); setResponse(null) }}>
-                Clear
-              </button>
-              {loading && <div className="spinner" style={{ width: 18, height: 18 }} />}
-            </div>
+      <div style={{ marginBottom: 24 }}>
+        <div className="ai-page-card">
+          <div className="ai-page-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Ask a Question</span>
+            <button
+              className="ai-btn ai-btn-primary"
+              onClick={() => handleExplain('Explain the current top opportunity across NYISO zones. Which zone leads, why, and what are the trader and battery strategy implications?')}
+              disabled={loading}
+              style={{ fontSize: 12 }}
+            >
+              {loading ? 'Analyzing...' : 'Explain Current Opportunity'}
+            </button>
           </div>
+          <textarea
+            className="ai-page-textarea"
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            placeholder="What is the best battery zone right now and why?"
+            rows={3}
+            onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleExplain() }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+            <button className="ai-btn ai-btn-primary" onClick={() => handleExplain()} disabled={loading || !prompt.trim()}>
+              {loading ? 'Analyzing...' : 'Ask Analyst'}
+            </button>
+            <button className="ai-btn ai-btn-secondary" onClick={() => { setPrompt(''); setResponse(null) }}>
+              Clear
+            </button>
+            {loading && <div className="spinner" style={{ width: 18, height: 18 }} />}
+          </div>
+        </div>
+      </div>
 
-          {response?.status === 'unconfigured' && (
-            <div className="ai-alert ai-alert-warning" style={{ marginTop: 16 }}>
-              AI Analyst requires an API key. Set the <code>OPENAI_API_KEY</code> environment variable to enable this feature.
+      {response?.status === 'unconfigured' && (
+        <div className="ai-alert ai-alert-warning" style={{ marginBottom: 20 }}>
+          AI Analyst requires an API key. Set the <code>OPENAI_API_KEY</code> environment variable to enable this feature.
+        </div>
+      )}
+
+      {response && response.status !== 'unconfigured' && (
+        <div className="ai-response-card" style={{ marginBottom: 24 }}>
+          <div className="ai-response-header">
+            <span className="ai-response-icon">📊</span>
+            <span className="ai-response-label">Analyst Note</span>
+            {response.status === 'error' && <span className="badge" style={{ background: 'var(--danger)', color: '#fff', marginLeft: 8 }}>Error</span>}
+          </div>
+          <div className="ai-response-body">
+            {response.answer.split('\n').map((line, i) => (
+              <p key={i} style={{ margin: '0 0 8px' }}>{line}</p>
+            ))}
+          </div>
+          {response.trader_takeaways && response.trader_takeaways.length > 0 && (
+            <div className="ai-response-section">
+              <div className="ai-response-section-title">Trader Takeaways</div>
+              <ul className="ai-response-list">
+                {response.trader_takeaways.map((d, i) => <li key={i}>{d}</li>)}
+              </ul>
             </div>
           )}
-
-          {response && response.status !== 'unconfigured' && (
-            <div className="ai-response-card" style={{ marginTop: 16 }}>
-              <div className="ai-response-header">
-                <span className="ai-response-icon">📊</span>
-                <span className="ai-response-label">Analyst Note</span>
-                {response.status === 'error' && <span className="badge" style={{ background: 'var(--danger)', color: '#fff', marginLeft: 8 }}>Error</span>}
-              </div>
-              <div className="ai-response-body">
-                {response.answer.split('\n').map((line, i) => (
-                  <p key={i} style={{ margin: '0 0 8px' }}>{line}</p>
-                ))}
-              </div>
-              {response.drivers && response.drivers.length > 0 && (
-                <div className="ai-response-section">
-                  <div className="ai-response-section-title">Likely Drivers</div>
-                  <ul className="ai-response-list">
-                    {response.drivers.map((d, i) => <li key={i}>{d}</li>)}
-                  </ul>
-                </div>
-              )}
-              {response.caveats && response.caveats.length > 0 && (
-                <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                  <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Caveats</div>
-                  <ul className="ai-response-list caveat">
-                    {response.caveats.map((c, i) => <li key={i}>{c}</li>)}
-                  </ul>
-                </div>
-              )}
+          {response.battery_takeaways && response.battery_takeaways.length > 0 && (
+            <div className="ai-response-section">
+              <div className="ai-response-section-title" style={{ color: 'var(--accent)' }}>Battery Strategist Takeaways</div>
+              <ul className="ai-response-list" style={{ '--accent-color': 'var(--accent)' } as any}>
+                {response.battery_takeaways.map((d, i) => <li key={i} style={{ borderLeftColor: 'var(--accent)' }}>{d}</li>)}
+              </ul>
+            </div>
+          )}
+          {response.key_signals && response.key_signals.length > 0 && (
+            <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Key Supporting Signals</div>
+              <ul className="ai-response-list caveat">
+                {response.key_signals.map((s, i) => <li key={i}>{s}</li>)}
+              </ul>
+            </div>
+          )}
+          {response.caveats && response.caveats.length > 0 && (
+            <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Caveat</div>
+              <ul className="ai-response-list caveat">
+                {response.caveats.map((c, i) => <li key={i}>{c}</li>)}
+              </ul>
             </div>
           )}
         </div>
+      )}
 
-        <div>
-          <div className="ai-page-card">
-            <div className="ai-page-card-title">Suggested Questions</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {SUGGESTED_PROMPTS.map(sp => (
-                <button
-                  key={sp.prompt}
-                  className="suggested-prompt"
-                  onClick={() => handleSuggested(sp.prompt)}
-                >
-                  <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--primary)', marginBottom: 2 }}>{sp.label}</div>
-                  {sp.prompt}
-                </button>
-              ))}
-            </div>
+      <div className="grid-2" style={{ gap: 20 }}>
+        <div className="ai-page-card">
+          <div className="ai-page-card-title" style={{ color: 'var(--primary)' }}>📈 Trader Questions</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {TRADER_PROMPTS.map(sp => (
+              <button
+                key={sp.prompt}
+                className="suggested-prompt"
+                onClick={() => { setPrompt(sp.prompt); handleExplain(sp.prompt) }}
+                disabled={loading}
+              >
+                <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--primary)', marginBottom: 2 }}>{sp.label}</div>
+                {sp.prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="ai-page-card">
+          <div className="ai-page-card-title" style={{ color: 'var(--accent)' }}>🔋 Battery Strategist Questions</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {BATTERY_PROMPTS.map(sp => (
+              <button
+                key={sp.prompt}
+                className="suggested-prompt"
+                onClick={() => { setPrompt(sp.prompt); handleExplain(sp.prompt) }}
+                disabled={loading}
+              >
+                <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--accent)', marginBottom: 2 }}>{sp.label}</div>
+                {sp.prompt}
+              </button>
+            ))}
           </div>
         </div>
       </div>

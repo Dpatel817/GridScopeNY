@@ -57,8 +57,9 @@ frontend/
       InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis, TTCF derates
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
       OpportunityExplorer.tsx  # Opportunity & Insight Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
-      AIExplainer.tsx     # AI Market Analyst (legacy route, de-emphasized from nav)
+      AIExplainer.tsx     # AI Market Analyst — Current Market Context, structured response (Summary/Trader/Battery/Signals/Caveat), two prompt groups
     data/
+      zones.ts            # NYISO zone constants (A-K), isNyisoZone/filterNyisoZones helpers
       interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization
 src/
@@ -85,7 +86,7 @@ Each page follows the intelligence layout pattern:
 
 ### SeriesSelector
 Reusable dropdown with checkboxes for filtering chart series. Used on all data pages:
-- Prices: Zone selector (15 zones)
+- Prices: Zone selector (11 NYISO internal zones A-K, excludes H Q/NPX/O H/PJM)
 - Demand: Zone selector (12 zones)
 - Generation: Fuel type selector (7 types)
 - Interface Flows: Interface selector (19 interfaces, default top 8)
@@ -104,7 +105,7 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/congestion-stacked?market=DA|RT&date=YYYY-MM-DD` — stacked bar data: constraint costs by hour, pivoted by constraint name
 - `GET /api/ttcf-derates?date=YYYY-MM-DD` — TTCF derate data from NYISO MIS (with fallback to previous day), path names normalized via path_map
 - `GET /api/oic?date=YYYY-MM-DD` — Operating In Commitment data from NYISO MIS
-- `POST /api/ai-explainer` — structured AI market analysis with drivers/caveats (requires OPENAI_API_KEY)
+- `POST /api/ai-explainer` — structured AI market analysis: Summary, Trader Takeaways, Battery Strategist Takeaways, Key Signals, Caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL
 

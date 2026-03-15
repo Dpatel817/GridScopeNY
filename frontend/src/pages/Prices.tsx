@@ -4,6 +4,7 @@ import ResolutionSelector from '../components/ResolutionSelector';
 import LineChart from '../components/LineChart';
 import DatasetSection from '../components/DatasetSection';
 import SeriesSelector from '../components/SeriesSelector';
+import { isNyisoZone, filterNyisoZones } from '../data/zones';
 
 const DATASETS = [
   'da_lbmp_zone', 'rt_lbmp_zone', 'integrated_rt_lbmp_zone',
@@ -23,7 +24,8 @@ export default function Prices() {
 
   const allZones = useMemo(() => {
     const daRecords = daData?.data || [];
-    return [...new Set(daRecords.map((r: any) => String(r.Zone)))].sort();
+    const raw = [...new Set(daRecords.map((r: any) => String(r.Zone)))].sort();
+    return filterNyisoZones(raw);
   }, [daData]);
 
   useEffect(() => {
@@ -36,8 +38,10 @@ export default function Prices() {
     const daRecords = daData?.data || [];
     const rtRecords = rtData?.data || [];
 
-    const daLmps = daRecords.map((r: any) => Number(r.LMP)).filter((v: number) => !isNaN(v) && v !== 0);
-    const rtLmps = rtRecords.map((r: any) => Number(r.LMP)).filter((v: number) => !isNaN(v) && v !== 0);
+    const daFiltered = daRecords.filter((r: any) => isNyisoZone(String(r.Zone)));
+    const rtFiltered = rtRecords.filter((r: any) => isNyisoZone(String(r.Zone)));
+    const daLmps = daFiltered.map((r: any) => Number(r.LMP)).filter((v: number) => !isNaN(v) && v !== 0);
+    const rtLmps = rtFiltered.map((r: any) => Number(r.LMP)).filter((v: number) => !isNaN(v) && v !== 0);
 
     const avgDa = daLmps.length ? daLmps.reduce((a: number, b: number) => a + b, 0) / daLmps.length : null;
     const avgRt = rtLmps.length ? rtLmps.reduce((a: number, b: number) => a + b, 0) / rtLmps.length : null;
@@ -65,11 +69,12 @@ export default function Prices() {
 
     const spreadByZone: Record<string, { total: number; count: number; max: number }> = {};
     for (const r of daRecords) {
+      const zone = String(r.Zone);
+      if (!isNyisoZone(zone)) continue;
       const matchKey = `${r.Date}_${r.HE}_${r.Zone}`;
       const rtLmp = rtByKey[matchKey];
       if (rtLmp !== undefined) {
         const spread = Math.abs(rtLmp - Number(r.LMP));
-        const zone = String(r.Zone);
         if (!spreadByZone[zone]) spreadByZone[zone] = { total: 0, count: 0, max: 0 };
         spreadByZone[zone].total += spread;
         spreadByZone[zone].count++;

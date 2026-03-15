@@ -3,12 +3,16 @@ import { useDataset } from '../hooks/useDataset';
 import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import EmptyState from '../components/EmptyState';
+import { isNyisoZone } from '../data/zones';
 
 type Duration = '1h' | '2h' | '4h';
 type RankMetric = 'revenue' | 'avgSpread' | 'maxSpread';
 
 interface AIResponse {
   answer: string;
+  trader_takeaways?: string[];
+  battery_takeaways?: string[];
+  key_signals?: string[];
   drivers?: string[];
   caveats?: string[];
   status: string;
@@ -35,7 +39,7 @@ export default function OpportunityExplorer() {
 
   const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'hourly');
   const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'hourly');
-  const { data: congestionData } = useDataset('rt_binding_constraints', 'raw');
+  const { data: congestionData } = useDataset('dam_limiting_constraints', 'hourly');
   const { data: demandData } = useDataset('isolf', 'hourly');
 
   const loading = daLoading || rtLoading;
@@ -53,11 +57,12 @@ export default function OpportunityExplorer() {
 
     const zoneData: Record<string, { spreads: number[]; hourly: { Date: string; HE: number; spread: number; daLmp: number; rtLmp: number }[]; zone: string }> = {};
     for (const r of rtData.data) {
+      const zone = String(r.Zone);
+      if (!isNyisoZone(zone)) continue;
       const key = `${r.Date}_${r.HE}_${r.Zone}`;
       const rtLmp = Number(r.LMP) || 0;
       const daLmp = daByKey[key] || 0;
       const spread = Math.abs(rtLmp - daLmp);
-      const zone = String(r.Zone);
       if (!zoneData[zone]) zoneData[zone] = { spreads: [], hourly: [], zone };
       zoneData[zone].spreads.push(spread);
       zoneData[zone].hourly.push({ Date: String(r.Date), HE: Number(r.HE), spread, daLmp, rtLmp });
@@ -667,17 +672,33 @@ export default function OpportunityExplorer() {
                         <p key={i} style={{ margin: '0 0 8px' }}>{line}</p>
                       ))}
                     </div>
-                    {aiResponse.drivers && aiResponse.drivers.length > 0 && (
+                    {aiResponse.trader_takeaways && aiResponse.trader_takeaways.length > 0 && (
                       <div className="ai-response-section">
-                        <div className="ai-response-section-title">Likely Drivers</div>
+                        <div className="ai-response-section-title">Trader Takeaways</div>
                         <ul className="ai-response-list">
-                          {aiResponse.drivers.map((d, i) => <li key={i}>{d}</li>)}
+                          {aiResponse.trader_takeaways.map((d, i) => <li key={i}>{d}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {aiResponse.battery_takeaways && aiResponse.battery_takeaways.length > 0 && (
+                      <div className="ai-response-section">
+                        <div className="ai-response-section-title" style={{ color: 'var(--accent)' }}>Battery Strategist Takeaways</div>
+                        <ul className="ai-response-list">
+                          {aiResponse.battery_takeaways.map((d, i) => <li key={i} style={{ borderLeftColor: 'var(--accent)' }}>{d}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {aiResponse.key_signals && aiResponse.key_signals.length > 0 && (
+                      <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                        <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Key Supporting Signals</div>
+                        <ul className="ai-response-list caveat">
+                          {aiResponse.key_signals.map((s, i) => <li key={i}>{s}</li>)}
                         </ul>
                       </div>
                     )}
                     {aiResponse.caveats && aiResponse.caveats.length > 0 && (
                       <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                        <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Caveats</div>
+                        <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Caveat</div>
                         <ul className="ai-response-list caveat">
                           {aiResponse.caveats.map((c, i) => <li key={i}>{c}</li>)}
                         </ul>

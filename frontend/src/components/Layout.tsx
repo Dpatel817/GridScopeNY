@@ -11,6 +11,7 @@ const MARKET_NAV = [
 
 const TOOL_NAV = [
   { path: '/opportunities', label: 'Opportunity & Insight Explorer', icon: '🎯', hero: true },
+  { path: '/ai-explainer', label: 'AI Market Analyst', icon: '🤖' },
 ]
 
 export default function Layout() {
