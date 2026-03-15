@@ -909,6 +909,97 @@ def congestion_stacked(
     }
 
 
+import requests as _requests
+import io as _io
+from datetime import datetime as _datetime, timedelta as _timedelta
+
+@app.get("/api/daily-events")
+def get_daily_events(date: Optional[str] = None):
+    if not date:
+        date = _datetime.now().strftime("%Y-%m-%d")
+    try:
+        _datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Date must be YYYY-MM-DD")
+
+    date_compact = date.replace("-", "")
+    rt_url = f"https://mis.nyiso.com/public/csv/RealTimeEvents/{date_compact}RealTimeEvents.csv"
+    oper_url = f"https://mis.nyiso.com/public/csv/OperMessages/{date_compact}OperMessages.csv"
+
+    def fetch_rt(url: str):
+        try:
+            resp = _requests.get(url, timeout=20, verify=False)
+            resp.raise_for_status()
+            text = resp.text.strip()
+            if not text:
+                return [], ""
+            df = pd.read_csv(_io.StringIO(text))
+            df.columns = [c.strip() for c in df.columns]
+            rows = []
+            for _, r in df.iterrows():
+                ts = str(r.get("Timestamp", "")).strip()
+                msg = str(r.get("Message", "")).strip().strip('"')
+                if ts and msg:
+                    rows.append({"timestamp": ts, "message": msg})
+            return rows, text
+        except Exception:
+            return [], ""
+
+    def fetch_oper(url: str):
+        try:
+            resp = _requests.get(url, timeout=20, verify=False)
+            resp.raise_for_status()
+            raw_text = resp.text.strip()
+            if not raw_text:
+                return [], ""
+            lines = raw_text.split("\n")
+            header = lines[0] if lines else ""
+            rows = []
+            current_insert = ""
+            current_msg_parts = []
+            for line in lines[1:]:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith('"') and '","' in line:
+                    if current_insert and current_msg_parts:
+                        rows.append({
+                            "insert_time": current_insert.strip('"'),
+                            "message": " ".join(current_msg_parts).strip().strip('"'),
+                        })
+                    idx = line.index('","')
+                    current_insert = line[:idx].strip('"')
+                    current_msg_parts = [line[idx+3:]]
+                else:
+                    current_msg_parts.append(line)
+            if current_insert and current_msg_parts:
+                rows.append({
+                    "insert_time": current_insert.strip('"'),
+                    "message": " ".join(current_msg_parts).strip().strip('"'),
+                })
+            return rows, raw_text
+        except Exception:
+            return [], ""
+
+    rt_rows, rt_raw = fetch_rt(rt_url)
+    oper_rows, oper_raw = fetch_oper(oper_url)
+
+    available_dates = []
+    today = _datetime.now().date()
+    for i in range(8):
+        d = today - _timedelta(days=i)
+        available_dates.append(d.strftime("%Y-%m-%d"))
+
+    return {
+        "date": date,
+        "available_dates": available_dates,
+        "rt_events": rt_rows,
+        "rt_events_raw": rt_raw,
+        "oper_messages": oper_rows,
+        "oper_messages_raw": oper_raw,
+    }
+
+
 import threading
 _refresh_lock = threading.Lock()
 

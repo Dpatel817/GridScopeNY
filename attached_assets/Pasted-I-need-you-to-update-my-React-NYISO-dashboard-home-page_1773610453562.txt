@@ -1,0 +1,226 @@
+I need you to update my React NYISO dashboard home page and dataset pipeline.
+
+Project context:
+- Frontend is React/TypeScript.
+- Home page currently has a bottom section called “Reference Data & System Tables”.
+- It already uses collapsible dataset sections via:
+  - <DatasetSection datasetKey="..." resolution="raw" />
+- Existing dataset keys on the home page include:
+  - rt_events
+  - oper_messages
+  - generator_names
+  - load_names
+  - active_transmission_nodes
+  - zonal_uplift
+  - resource_uplift
+
+Main goals:
+1. Remove generator_names, load_names, and active_transmission_nodes from being shown as standalone sections at the bottom.
+2. Replace them with a single collapsible info table/card at the bottom of the Home page.
+3. Add a new Interconnection Queue dataset by scraping and processing the NYISO Excel file:
+   https://www.nyiso.com/documents/20142/1407078/NYISO-Interconnection-Queue.xlsx
+4. Add logic to detect whether there are new additions or changes compared with the previously scraped version.
+5. Surface this new Interconnection data inside the same bottom “collapsible info table” area in a clean way.
+
+Important clarification:
+- The existing bottom area is the “Reference Data & System Tables” section.
+- Keep that section collapsible.
+- Inside it, create a more organized “Reference / System Info” presentation instead of stacking all raw dataset sections.
+- The three items that must be grouped into this new collapsible info table are:
+  - generator_names
+  - load_names
+  - active_transmission_nodes
+- Also include the interconnection queue data there.
+
+Implementation requirements
+
+PART 1 — Home page UI cleanup
+Update the Home page so that:
+- generator_names, load_names, and active_transmission_nodes are no longer rendered as separate DatasetSection blocks.
+- Instead, create a new reusable component, something like:
+  - ReferenceInfoTables.tsx
+  - or ReferenceInfoPanel.tsx
+- This component should live inside the “Reference Data & System Tables” section.
+- It should provide collapsible subsections or tabs/cards for:
+  - Generator Names
+  - Load Names
+  - Active Transmission Nodes
+  - Interconnection Queue
+- The UI should be compact and easy to scan.
+- Add search/filter capability within each table if feasible.
+- Reuse the project’s existing card/table styling if available.
+
+Desired UI behavior:
+- “Reference Data & System Tables” remains collapsed by default.
+- When expanded, users should see compact subsections/cards instead of a long stack of raw dataset components.
+- Each subsection can independently expand/collapse.
+- Show row counts.
+- Show “last updated” if available.
+- For Interconnection Queue, show an alert badge if there are new additions since the last scrape.
+
+PART 2 — Interconnection Queue scraper + processing
+Create a backend/data pipeline task to scrape and process:
+https://www.nyiso.com/documents/20142/1407078/NYISO-Interconnection-Queue.xlsx
+
+The workbook contains multiple sheets, including:
+- Interconnection Queue
+- Cluster Projects
+- Affected System Studies
+- Withdrawn
+- Cluster Projects-Withdrawn
+- Affected System- Withdrawn
+- In Service
+
+Build a scraper/processor that:
+- Downloads the Excel file from the NYISO URL.
+- Parses all relevant sheets.
+- Normalizes sheet data into a consistent internal structure.
+- Stores processed output in the same format/style as the rest of my datasets so the frontend can consume it through useDataset/useInventory.
+
+At minimum, create processed datasets for:
+- interconnection_queue_active
+- interconnection_queue_cluster_projects
+- interconnection_queue_affected_system
+- interconnection_queue_withdrawn
+- interconnection_queue_in_service
+- interconnection_queue_summary
+
+If it is simpler, you can also create a single dataset with a “sheet_type” field, but a summary dataset is still required.
+
+Recommended normalized columns:
+- queue_id / queue_pos
+- project_name
+- developer / interconnection_customer
+- date_of_ir
+- sp_mw
+- wp_mw
+- fuel_type
+- storage_capability
+- discharge_duration
+- county
+- state
+- zone
+- point_of_interconnection
+- utility
+- affected_transmission_owner
+- status_code
+- last_updated_date
+- studies_available
+- ia_tender_date
+- fs_complete_date
+- proposed_in_service_date
+- proposed_sync_date
+- proposed_cod
+- source_sheet
+- scrape_timestamp
+
+Be defensive about inconsistent column names across sheets.
+
+PART 3 — Change detection / snapshot tracking
+I also want something that tells us if there was a new addition from the last time it was scraped.
+
+Please implement snapshot comparison logic:
+- Save the newly scraped normalized dataset snapshot.
+- Compare it to the most recent prior snapshot.
+- Detect:
+  1. Newly added queue entries
+  2. Removed entries
+  3. Changed entries (for example updated COD, status, MW, utility, point of interconnection, etc.)
+- Use a stable key where possible:
+  - prefer Queue Pos. / queue_id
+  - if unavailable, fall back to a composite key like project_name + developer + source_sheet
+
+Create a comparison output dataset such as:
+- interconnection_queue_changes
+
+This changes dataset should include fields like:
+- change_type (new / removed / updated)
+- queue_id
+- project_name
+- developer
+- source_sheet
+- changed_fields
+- previous_values
+- current_values
+- detected_at
+
+Also create a summary object/dataset like:
+- total_active_projects
+- total_cluster_projects
+- total_withdrawn
+- total_in_service
+- new_since_last_scrape
+- removed_since_last_scrape
+- updated_since_last_scrape
+- latest_scrape_timestamp
+
+PART 4 — Frontend display for Interconnection Queue
+In the new bottom “Reference Data & System Tables” panel:
+- Add an “Interconnection Queue” subsection/card.
+- Show a summary header with:
+  - total active
+  - total cluster
+  - total withdrawn
+  - total in service
+  - new since last scrape
+  - updated since last scrape
+- Add a small badge or indicator if new additions exist.
+- Show a compact table of:
+  - queue id
+  - project name
+  - developer
+  - zone
+  - fuel type
+  - SP MW / WP MW
+  - proposed COD
+  - source sheet
+  - last updated date
+- Add filters if easy:
+  - source sheet
+  - zone
+  - fuel type
+  - only new/changed
+- Add a secondary table or expandable area for “Recent changes”.
+
+PART 5 — Integration requirements
+Please inspect the project structure and wire this into the existing dataset architecture.
+Specifically:
+- Find where useDataset and useInventory get their data from.
+- Add the new interconnection datasets to inventory/registry so they appear as available.
+- Keep existing patterns consistent.
+- Do not break existing pages.
+
+PART 6 — Code quality requirements
+- Use TypeScript where applicable.
+- Keep code modular.
+- Add helper utilities for:
+  - workbook download
+  - Excel parsing
+  - sheet normalization
+  - snapshot diffing
+- Add comments only where useful.
+- Handle network failure gracefully.
+- If the scrape fails, preserve the prior snapshot and expose an error state instead of breaking the app.
+
+Acceptance criteria
+1. Home page no longer renders generator_names, load_names, and active_transmission_nodes as separate raw sections.
+2. Home page bottom area contains a cleaner collapsible info panel with:
+   - Generator Names
+   - Load Names
+   - Active Transmission Nodes
+   - Interconnection Queue
+3. NYISO Interconnection Queue Excel file is scraped and processed.
+4. Processed interconnection datasets are available through the same data hooks.
+5. The system detects new/removed/updated queue entries from the previous scrape.
+6. The UI visibly indicates when there are new additions.
+7. Existing Home page functionality remains intact.
+
+Please do the following in your response:
+1. First, inspect the current codebase structure and identify the exact files that need changes.
+2. Then implement the changes.
+3. Then show me:
+   - which files were changed
+   - the key code snippets
+   - any new files added
+   - any commands I need to run
+4. If any assumptions are required, make sensible ones and proceed without blocking.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useInventory, useDataset } from '../hooks/useDataset';
 import EmptyState from '../components/EmptyState';
@@ -26,90 +26,138 @@ const USEFUL_LINKS = [
   { label: 'IESO Market Data', url: 'https://www.ieso.ca/' },
 ];
 
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+interface DailyEventsData {
+  date: string;
+  available_dates: string[];
+  rt_events: { timestamp: string; message: string }[];
+  oper_messages: { insert_time: string; message: string }[];
+  rt_events_raw: string;
+  oper_messages_raw: string;
+}
+
 function LiveSystemContext() {
-  const { data: rtData } = useDataset('rt_events', 'raw');
-  const { data: operData } = useDataset('oper_messages', 'raw');
-  const [expanded, setExpanded] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [data, setData] = useState<DailyEventsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showRawRt, setShowRawRt] = useState(false);
+  const [showRawOper, setShowRawOper] = useState(false);
 
-  const rtEvents = (() => {
-    if (!rtData?.data?.length) return [];
-    const sorted = [...rtData.data].sort((a: any, b: any) => {
-      const ta = a['Time Stamp'] || '';
-      const tb = b['Time Stamp'] || '';
-      return tb.localeCompare(ta);
-    });
-    const notable = sorted.filter((r: any) => {
-      const msg = String(r.Message || '');
-      return !msg.startsWith('Start of day system state');
-    });
-    const latestState = sorted.find((r: any) => String(r.Message || '').startsWith('Start of day'));
-    const items = notable.slice(0, 5);
-    if (latestState && !items.find((r: any) => r === latestState)) {
-      items.push(latestState);
+  const fetchEvents = useCallback((date: string) => {
+    setLoading(true);
+    fetch(`/api/daily-events?date=${date}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { fetchEvents(selectedDate); }, [selectedDate, fetchEvents]);
+
+  const availableDates = data?.available_dates || [];
+
+  const navigateDate = (dir: number) => {
+    const idx = availableDates.indexOf(selectedDate);
+    if (dir === -1) {
+      const next = idx >= 0 && idx < availableDates.length - 1 ? availableDates[idx + 1] : null;
+      if (next) setSelectedDate(next);
+    } else {
+      const next = idx > 0 ? availableDates[idx - 1] : null;
+      if (next) setSelectedDate(next);
     }
-    return items.slice(0, 6);
-  })();
+  };
 
-  const operMessages = (() => {
-    if (!operData?.data?.length) return [];
-    const unique = new Map<string, any>();
-    for (const r of operData.data) {
-      const key = `${r['Message Type']}|${r.Message}`;
-      if (!unique.has(key)) unique.set(key, r);
-    }
-    return Array.from(unique.values()).slice(0, 5);
-  })();
+  const isToday = selectedDate === todayStr();
+  const canGoBack = availableDates.indexOf(selectedDate) < availableDates.length - 1;
+  const canGoForward = availableDates.indexOf(selectedDate) > 0;
 
-  if (!rtEvents.length && !operMessages.length) return null;
-
-  const displayRt = expanded ? rtEvents : rtEvents.slice(0, 3);
-  const displayOper = expanded ? operMessages : operMessages.slice(0, 3);
+  const formatDate = (d: string) => {
+    const date = new Date(d + 'T12:00:00');
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   return (
     <div className="section-container">
-      <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span className="live-dot" />
-        Live System Context
-      </div>
-      <div className="live-context-grid">
-        <div className="live-feed-card">
-          <div className="live-feed-title">Real-Time Events</div>
-          {displayRt.length === 0 ? (
-            <div className="live-feed-empty">No recent events</div>
-          ) : (
-            <div className="live-feed-list">
-              {displayRt.map((r: any, i: number) => (
-                <div className="live-feed-item" key={i}>
-                  <div className="live-feed-ts">{r['Time Stamp'] ? String(r['Time Stamp']).slice(5, 16) : r.source_date}</div>
-                  <div className="live-feed-msg">{r.Message}</div>
-                </div>
-              ))}
-            </div>
-          )}
+      <div className="daily-events-header">
+        <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
+          <span className="live-dot" />
+          Live System Context
         </div>
-        <div className="live-feed-card">
-          <div className="live-feed-title">Operational Announcements</div>
-          {displayOper.length === 0 ? (
-            <div className="live-feed-empty">No recent announcements</div>
-          ) : (
-            <div className="live-feed-list">
-              {displayOper.map((r: any, i: number) => (
-                <div className="live-feed-item" key={i}>
-                  <div className="live-feed-type">{r['Message Type']}</div>
-                  <div className="live-feed-msg">{r.Message}</div>
-                </div>
-              ))}
-            </div>
+        <div className="date-nav">
+          <button className="date-nav-btn" onClick={() => navigateDate(-1)} disabled={!canGoBack}>&larr;</button>
+          <select
+            className="date-select"
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+          >
+            {availableDates.map(d => (
+              <option key={d} value={d}>{formatDate(d)}{d === todayStr() ? ' (Today)' : ''}</option>
+            ))}
+          </select>
+          <button className="date-nav-btn" onClick={() => navigateDate(1)} disabled={!canGoForward}>&rarr;</button>
+          {!isToday && (
+            <button className="date-today-btn" onClick={() => setSelectedDate(todayStr())}>Today</button>
           )}
         </div>
       </div>
-      {(rtEvents.length > 3 || operMessages.length > 3) && (
-        <button
-          className="live-expand-btn"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? 'Show Less' : 'View More'}
-        </button>
+
+      {loading ? (
+        <div className="live-feed-empty">Loading events...</div>
+      ) : (
+        <div className="live-context-grid">
+          <div className="live-feed-card">
+            <div className="live-feed-card-header">
+              <div className="live-feed-title">Real-Time Events</div>
+              {data?.rt_events_raw && (
+                <button className="raw-toggle-btn" onClick={() => setShowRawRt(!showRawRt)}>
+                  {showRawRt ? 'Parsed' : 'Raw'}
+                </button>
+              )}
+            </div>
+            {showRawRt && data?.rt_events_raw ? (
+              <pre className="raw-file-text">{data.rt_events_raw}</pre>
+            ) : !data?.rt_events?.length ? (
+              <div className="live-feed-empty">No events for {formatDate(selectedDate)}</div>
+            ) : (
+              <div className="live-feed-list full">
+                {data.rt_events.map((r, i) => (
+                  <div className="live-feed-item" key={i}>
+                    <div className="live-feed-ts">{r.timestamp.replace(/^\d{2}\/\d{2}\/\d{4}\s*/, '').slice(0, 8) || r.timestamp}</div>
+                    <div className="live-feed-msg">{r.message}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="live-feed-card">
+            <div className="live-feed-card-header">
+              <div className="live-feed-title">Operational Announcements</div>
+              {data?.oper_messages_raw && (
+                <button className="raw-toggle-btn" onClick={() => setShowRawOper(!showRawOper)}>
+                  {showRawOper ? 'Parsed' : 'Raw'}
+                </button>
+              )}
+            </div>
+            {showRawOper && data?.oper_messages_raw ? (
+              <pre className="raw-file-text">{data.oper_messages_raw}</pre>
+            ) : !data?.oper_messages?.length ? (
+              <div className="live-feed-empty">No announcements for {formatDate(selectedDate)}</div>
+            ) : (
+              <div className="live-feed-list full">
+                {data.oper_messages.map((r, i) => (
+                  <div className="live-feed-item oper" key={i}>
+                    <div className="live-feed-ts">{r.insert_time}</div>
+                    <div className="live-feed-msg">{r.message}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -177,24 +225,6 @@ export default function Home() {
       <LiveSystemContext />
 
       <div className="section-container">
-        <div className="section-title">Recommended Workflow</div>
-        <div className="workflow-steps">
-          <div className="workflow-step">
-            <div className="step-num">1</div>
-            <div className="step-text"><strong>Check the market</strong> — review prices, demand, and generation for current conditions</div>
-          </div>
-          <div className="workflow-step">
-            <div className="step-num">2</div>
-            <div className="step-text"><strong>Understand drivers</strong> — examine congestion, interface flows, and outages</div>
-          </div>
-          <div className="workflow-step">
-            <div className="step-num">3</div>
-            <div className="step-text"><strong>Find opportunities</strong> — use the Opportunity Explorer for zone rankings, trader takeaways, and AI explanation</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="section-container">
         <div className="section-title">Navigate</div>
         <div className="home-grid">
           {NAV_CARDS.map(c => (
@@ -230,8 +260,6 @@ export default function Home() {
         </div>
         {refOpen && (
           <div style={{ marginTop: 8 }}>
-            <DatasetSection datasetKey="rt_events" resolution="raw" defaultExpanded={true} />
-            <DatasetSection datasetKey="oper_messages" resolution="raw" />
             <DatasetSection datasetKey="generator_names" resolution="raw" />
             <DatasetSection datasetKey="load_names" resolution="raw" />
             <DatasetSection datasetKey="active_transmission_nodes" resolution="raw" />
