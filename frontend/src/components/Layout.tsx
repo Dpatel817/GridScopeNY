@@ -10,8 +10,7 @@ const MARKET_NAV = [
 ]
 
 const TOOL_NAV = [
-  { path: '/opportunities', label: 'Opportunity Explorer', icon: '🎯', hero: true },
-  { path: '/ai-explainer', label: 'AI Analyst', icon: '🤖' },
+  { path: '/opportunities', label: 'Opportunity & Insight Explorer', icon: '🎯', hero: true },
 ]
 
 export default function Layout() {
@@ -47,7 +46,7 @@ export default function Layout() {
             </NavLink>
           ))}
 
-          <div className="sidebar-section">Tools</div>
+          <div className="sidebar-section">Intelligence</div>
           {TOOL_NAV.map(item => (
             <NavLink
               key={item.path}

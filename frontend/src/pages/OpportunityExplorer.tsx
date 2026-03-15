@@ -7,6 +7,21 @@ import EmptyState from '../components/EmptyState';
 type Duration = '1h' | '2h' | '4h';
 type RankMetric = 'revenue' | 'avgSpread' | 'maxSpread';
 
+interface AIResponse {
+  answer: string;
+  drivers?: string[];
+  caveats?: string[];
+  status: string;
+}
+
+const OPP_PROMPTS = [
+  { label: 'Top Opportunity', prompt: 'Why is this zone the top opportunity today?' },
+  { label: 'Structural vs Event', prompt: 'Does this opportunity look more structural or event-driven?' },
+  { label: 'Trader Implications', prompt: 'What are the trader implications of this spread behavior?' },
+  { label: 'Battery Strategy', prompt: 'What are the battery strategy implications here?' },
+  { label: 'Operational Signals', prompt: 'What operational signals support this opportunity?' },
+];
+
 export default function OpportunityExplorer() {
   const [duration, setDuration] = useState<Duration>('2h');
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
@@ -14,9 +29,14 @@ export default function OpportunityExplorer() {
   const [showAllRanks, setShowAllRanks] = useState(false);
   const [showRawTable, setShowRawTable] = useState(false);
 
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
   const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'hourly');
   const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'hourly');
   const { data: congestionData } = useDataset('rt_binding_constraints', 'raw');
+  const { data: demandData } = useDataset('isolf', 'hourly');
 
   const loading = daLoading || rtLoading;
   const dataError = daError || rtError;
@@ -55,7 +75,9 @@ export default function OpportunityExplorer() {
         ? Math.sqrt(spreads.reduce((s, v) => s + (v - avgSpread) ** 2, 0) / spreads.length)
         : 0;
       const positiveSpreads = spreads.filter(s => s > 5).length;
-      return { zone, avgSpread, maxSpread, revenue, events: topN.length, volatility, positiveSpreads };
+      const rtPremiumCount = hourly.filter(h => h.rtLmp > h.daLmp).length;
+      const rtPremiumPct = hourly.length > 0 ? rtPremiumCount / hourly.length : 0;
+      return { zone, avgSpread, maxSpread, revenue, events: topN.length, volatility, positiveSpreads, rtPremiumPct };
     });
 
     results.sort((a, b) => b[rankMetric] - a[rankMetric]);
@@ -142,16 +164,168 @@ export default function OpportunityExplorer() {
     'moderate': 'Moderate Signal'
   };
 
+  const demandContext = useMemo(() => {
+    if (!demandData?.data?.length) return null;
+    const vals = demandData.data.map((r: any) => Number(r.NYISO || 0)).filter(Boolean);
+    if (!vals.length) return null;
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const peak = Math.max(...vals);
+    return { avg: Math.round(avg), peak: Math.round(peak) };
+  }, [demandData]);
+
+  const traderInsights = useMemo(() => {
+    if (!opportunities.length) return [];
+    const insights: string[] = [];
+    const top = opportunities[0];
+    const runner = opportunities[1];
+
+    if (top && runner) {
+      const spreadGap = top.avgSpread - runner.avgSpread;
+      if (spreadGap > 5) {
+        insights.push(`${top.zone} shows clear spread dominance at $${top.avgSpread.toFixed(2)}/MWh, $${spreadGap.toFixed(2)} above ${runner.zone}. Concentrated dislocation suggests localized scarcity or congestion.`);
+      } else {
+        insights.push(`Top zones ${top.zone} and ${runner.zone} show similar spreads ($${top.avgSpread.toFixed(2)} vs $${runner.avgSpread.toFixed(2)}). Opportunity appears distributed rather than concentrated.`);
+      }
+    }
+
+    const highDivergence = opportunities.filter(o => o.rtPremiumPct > 0.6 || o.rtPremiumPct < 0.4);
+    if (highDivergence.length > 0) {
+      const example = highDivergence[0];
+      const direction = example.rtPremiumPct > 0.5 ? 'RT premium' : 'DA premium';
+      insights.push(`${example.zone} shows persistent ${direction} (${(example.rtPremiumPct * 100).toFixed(0)}% of hours RT > DA). This directional bias may be tradeable.`);
+    }
+
+    if (topConstraints.length > 0) {
+      const c = topConstraints[0];
+      insights.push(`Active congestion on ${c.name.length > 35 ? c.name.slice(0, 35) + '...' : c.name} (${c.count} bindings, $${c.totalCost.toFixed(0)} cost) likely contributes to spread opportunity.`);
+    }
+
+    const eventDrivenZones = opportunities.filter(o => getSignalType(o) === 'event-driven');
+    const recurringZones = opportunities.filter(o => getSignalType(o) === 'recurring');
+    if (eventDrivenZones.length > 0 && recurringZones.length > 0) {
+      insights.push(`${recurringZones.length} zones show recurring spreads (lower risk), while ${eventDrivenZones.length} zones appear event-driven (higher reward, less predictable).`);
+    }
+
+    if (mostVolatile && mostVolatile.zone !== top?.zone) {
+      insights.push(`${mostVolatile.zone} is the most volatile zone (sigma ${mostVolatile.volatility.toFixed(1)}). Higher verification risk but potential for outsized real-time gains.`);
+    }
+
+    return insights.slice(0, 5);
+  }, [opportunities, topConstraints, mostVolatile]);
+
+  const batteryInsights = useMemo(() => {
+    if (!opportunities.length) return [];
+    const insights: string[] = [];
+    const top = opportunities[0];
+    const signal = getSignalType(top);
+
+    insights.push(`Best zone for ${durationLabel.toLowerCase()} battery: ${top.zone} at $${top.revenue.toFixed(2)}/MW estimated revenue from ${top.events} spread events.`);
+
+    if (signal === 'recurring') {
+      insights.push(`${top.zone} shows a recurring pattern — value appears persistent rather than one-off. This favors longer-term battery positioning.`);
+    } else if (signal === 'event-driven') {
+      insights.push(`${top.zone} value appears event-driven — opportunity may not persist. Consider shorter commitment or flexible dispatch strategy.`);
+    } else {
+      insights.push(`${top.zone} shows moderate signal consistency. Value appears steady but not strongly trending in either direction.`);
+    }
+
+    if (topConstraints.length > 0) {
+      const congestionDriven = topConstraints[0].totalCost > 100;
+      if (congestionDriven) {
+        insights.push(`Opportunity appears congestion-driven (${topConstraints[0].name.slice(0, 30)}... $${topConstraints[0].totalCost.toFixed(0)} cost). Storage value strongest behind binding constraints.`);
+      }
+    }
+
+    if (demandContext) {
+      const loadFactor = demandContext.peak / demandContext.avg;
+      if (loadFactor > 1.3) {
+        insights.push(`High peak-to-average load ratio (${loadFactor.toFixed(2)}x) indicates load-driven spreads. Battery value likely concentrated in peak hours.`);
+      } else {
+        insights.push(`Moderate load profile (peak/avg ratio ${loadFactor.toFixed(2)}x). Spread opportunity may span more hours, favoring longer-duration assets.`);
+      }
+    }
+
+    const secondBest = opportunities[1];
+    if (secondBest) {
+      const gap = ((top.revenue - secondBest.revenue) / secondBest.revenue * 100);
+      if (gap > 20) {
+        insights.push(`Structurally strongest: ${top.zone} leads ${secondBest.zone} by ${gap.toFixed(0)}% on revenue. Location advantage appears material.`);
+      } else {
+        insights.push(`${top.zone} and ${secondBest.zone} offer similar battery value. Consider transmission and interconnection factors for siting.`);
+      }
+    }
+
+    return insights.slice(0, 5);
+  }, [opportunities, durationLabel, topConstraints, demandContext]);
+
+  const buildAiContext = () => {
+    const ctx: Record<string, any> = {};
+    if (activeOpp) {
+      ctx.selected_zone = active;
+      ctx.zone_rank = `#${activeRank} of ${opportunities.length}`;
+      ctx.avg_spread = `$${activeOpp.avgSpread.toFixed(2)}/MWh`;
+      ctx.max_spread = `$${activeOpp.maxSpread.toFixed(0)}/MWh`;
+      ctx.estimated_revenue = `$${activeOpp.revenue.toFixed(2)}/MW (${durationLabel})`;
+      ctx.volatility = activeOpp.volatility.toFixed(1);
+      ctx.signal_type = signalLabels[signalType];
+      ctx.spread_events = activeOpp.events;
+      ctx.rt_premium_pct = `${(activeOpp.rtPremiumPct * 100).toFixed(0)}%`;
+    }
+    if (bestZone && bestZone.zone !== active) {
+      ctx.top_zone = `${bestZone.zone} ($${bestZone.revenue.toFixed(2)}/MW)`;
+    }
+    ctx.battery_duration = durationLabel;
+    ctx.zones_analyzed = opportunities.length;
+    if (topConstraints.length > 0) {
+      ctx.top_constraints = topConstraints.slice(0, 3).map(c => `${c.name} (${c.count} bindings, $${c.totalCost.toFixed(0)})`).join('; ');
+    }
+    if (demandContext) {
+      ctx.peak_load = `${demandContext.peak.toLocaleString()} MW`;
+      ctx.avg_load = `${demandContext.avg.toLocaleString()} MW`;
+    }
+    if (traderInsights.length > 0) {
+      ctx.trader_insight_summary = traderInsights[0];
+    }
+    if (batteryInsights.length > 0) {
+      ctx.battery_insight_summary = batteryInsights[0];
+    }
+    return ctx;
+  };
+
+  async function handleAiExplain(question?: string) {
+    const q = question || aiPrompt.trim();
+    if (!q) return;
+    setAiLoading(true);
+    setAiResponse(null);
+    try {
+      const res = await fetch('/api/ai-explainer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, context: buildAiContext() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiResponse({ answer: data.detail || 'Request failed', status: 'error', drivers: [], caveats: [] });
+      } else {
+        setAiResponse(data);
+      }
+    } catch {
+      setAiResponse({ answer: 'Request failed. Is the API server running?', status: 'error', drivers: [], caveats: [] });
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   return (
     <div className="page">
       <div className="opp-hero-header">
         <div className="opp-title-block">
           <h1>
-            Flex Opportunity Explorer
-            <span className="opp-lens-badge">&#9889; Battery Lens</span>
+            Opportunity & Insight Explorer
+            <span className="opp-lens-badge">&#9889; Intelligence</span>
           </h1>
-          <p className="page-subtitle" style={{ marginTop: 8, maxWidth: 620 }}>
-            Identify where battery-style arbitrage opportunity appears across NYISO zones and understand the market conditions behind it.
+          <p className="page-subtitle" style={{ marginTop: 8, maxWidth: 680 }}>
+            Identify NYISO opportunity by zone and get trader and battery-strategy takeaways.
           </p>
         </div>
       </div>
@@ -254,6 +428,42 @@ export default function OpportunityExplorer() {
             </div>
           </div>
 
+          {traderInsights.length > 0 && (
+            <div className="takeaway-section">
+              <div className="takeaway-header">
+                <span className="takeaway-icon">📈</span>
+                <span className="takeaway-title">Trader Takeaways</span>
+                <span className="takeaway-badge trader">Short-Term Trading</span>
+              </div>
+              <div className="takeaway-list">
+                {traderInsights.map((insight, i) => (
+                  <div className="takeaway-item trader" key={i}>
+                    <span className="takeaway-num">{i + 1}</span>
+                    <span>{insight}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {batteryInsights.length > 0 && (
+            <div className="takeaway-section">
+              <div className="takeaway-header">
+                <span className="takeaway-icon">🔋</span>
+                <span className="takeaway-title">Battery Strategist Takeaways</span>
+                <span className="takeaway-badge battery">Storage Strategy</span>
+              </div>
+              <div className="takeaway-list">
+                {batteryInsights.map((insight, i) => (
+                  <div className="takeaway-item battery" key={i}>
+                    <span className="takeaway-num">{i + 1}</span>
+                    <span>{insight}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="opp-main-grid">
             <div className="chart-card">
               <div className="chart-card-header">
@@ -345,7 +555,7 @@ export default function OpportunityExplorer() {
             <>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 4 }}>
-                  Market Drivers
+                  Supporting Context
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                   Key factors that may contribute to spread opportunity across zones
@@ -360,6 +570,14 @@ export default function OpportunityExplorer() {
                     <div className="driver-sub">{c.count} bindings · ${c.totalCost.toFixed(0)} total cost</div>
                   </div>
                 ))}
+                {demandContext && (
+                  <div className="opp-driver-card">
+                    <div className="driver-icon">&#128200;</div>
+                    <div className="driver-label">System Load</div>
+                    <div className="driver-value">{demandContext.peak.toLocaleString()} MW peak</div>
+                    <div className="driver-sub">Avg {demandContext.avg.toLocaleString()} MW · ratio {(demandContext.peak / demandContext.avg).toFixed(2)}x</div>
+                  </div>
+                )}
                 <div className="opp-driver-card">
                   <div className="driver-icon">&#9889;</div>
                   <div className="driver-label">Highest Volatility Zone</div>
@@ -367,7 +585,7 @@ export default function OpportunityExplorer() {
                   <div className="driver-sub">σ = {mostVolatile?.volatility.toFixed(1) || '—'} · {mostVolatile?.positiveSpreads || 0} spread events</div>
                 </div>
                 <div className="opp-driver-card">
-                  <div className="driver-icon">&#128200;</div>
+                  <div className="driver-icon">&#128202;</div>
                   <div className="driver-label">Zones Analyzed</div>
                   <div className="driver-value">{opportunities.length}</div>
                   <div className="driver-sub">{opportunities.filter(o => o.avgSpread > 5).length} zones with avg spread &gt; $5</div>
@@ -375,6 +593,101 @@ export default function OpportunityExplorer() {
               </div>
             </>
           )}
+
+          <div className="ai-embed-section">
+            <div className="ai-embed-header">
+              <div>
+                <div className="ai-embed-title">AI Opportunity Analyst</div>
+                <div className="ai-embed-sub">Ask the AI to explain the current opportunity context for {active}</div>
+              </div>
+              <button
+                className="ai-btn ai-btn-primary"
+                onClick={() => handleAiExplain(`Explain the current opportunity state for ${active}. Why does it rank #${activeRank}? What are the key trader and battery strategy implications?`)}
+                disabled={aiLoading}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {aiLoading ? 'Analyzing...' : 'Explain Current Opportunity'}
+              </button>
+            </div>
+
+            <div className="ai-embed-body">
+              <div className="ai-embed-prompts">
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 8 }}>
+                  Quick Questions
+                </div>
+                {OPP_PROMPTS.map(sp => (
+                  <button
+                    key={sp.prompt}
+                    className="suggested-prompt"
+                    onClick={() => { setAiPrompt(sp.prompt); handleAiExplain(sp.prompt); }}
+                    disabled={aiLoading}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--primary)', marginBottom: 2 }}>{sp.label}</div>
+                    {sp.prompt}
+                  </button>
+                ))}
+              </div>
+
+              <div className="ai-embed-main">
+                <div className="ai-embed-input-row">
+                  <textarea
+                    className="ai-page-textarea"
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    placeholder={`Ask about ${active} opportunity, spread behavior, or strategy...`}
+                    rows={3}
+                    onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleAiExplain(); }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="ai-btn ai-btn-primary" onClick={() => handleAiExplain()} disabled={aiLoading || !aiPrompt.trim()}>
+                      {aiLoading ? 'Analyzing...' : 'Ask Analyst'}
+                    </button>
+                    <button className="ai-btn ai-btn-secondary" onClick={() => { setAiPrompt(''); setAiResponse(null); }}>
+                      Clear
+                    </button>
+                    {aiLoading && <div className="spinner" style={{ width: 18, height: 18 }} />}
+                  </div>
+                </div>
+
+                {aiResponse?.status === 'unconfigured' && (
+                  <div className="ai-alert ai-alert-warning" style={{ marginTop: 16 }}>
+                    AI Analyst requires an API key. Set the <code>OPENAI_API_KEY</code> environment variable to enable this feature.
+                  </div>
+                )}
+
+                {aiResponse && aiResponse.status !== 'unconfigured' && (
+                  <div className="ai-response-card" style={{ marginTop: 16 }}>
+                    <div className="ai-response-header">
+                      <span className="ai-response-icon">📊</span>
+                      <span className="ai-response-label">Analyst Note — {active}</span>
+                      {aiResponse.status === 'error' && <span className="badge" style={{ background: 'var(--danger)', color: '#fff', marginLeft: 8 }}>Error</span>}
+                    </div>
+                    <div className="ai-response-body">
+                      {aiResponse.answer.split('\n').map((line, i) => (
+                        <p key={i} style={{ margin: '0 0 8px' }}>{line}</p>
+                      ))}
+                    </div>
+                    {aiResponse.drivers && aiResponse.drivers.length > 0 && (
+                      <div className="ai-response-section">
+                        <div className="ai-response-section-title">Likely Drivers</div>
+                        <ul className="ai-response-list">
+                          {aiResponse.drivers.map((d, i) => <li key={i}>{d}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {aiResponse.caveats && aiResponse.caveats.length > 0 && (
+                      <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                        <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Caveats</div>
+                        <ul className="ai-response-list caveat">
+                          {aiResponse.caveats.map((c, i) => <li key={i}>{c}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           <div className="opp-ranking-section">
             <div className="opp-ranking-header">

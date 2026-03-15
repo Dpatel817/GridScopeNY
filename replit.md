@@ -50,17 +50,17 @@ frontend/
     hooks/
       useDataset.ts       # Data fetching hook with resolution support
     pages/
-      Home.tsx            # Market Overview — KPIs, workflow steps, nav tiles
+      Home.tsx            # Market Overview — KPIs, Live System Context (RT events + oper announcements), workflow steps, nav tiles
       Prices.tsx          # Price Intelligence — DA/RT comparison, spread analysis
       Demand.tsx          # Demand Intelligence — forecast vs actual, error analysis
       Generation.tsx      # Generation Mix — fuel breakdown, share analysis, stacked bar, OIC commitment data
       InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis, TTCF derates
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
+      OpportunityExplorer.tsx  # Opportunity & Insight Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
+      AIExplainer.tsx     # AI Market Analyst (legacy route, de-emphasized from nav)
     data/
       interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
-      OpportunityExplorer.tsx  # Hero: Flex Opportunity Explorer with bar charts, zone detail, drivers
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization
-      AIExplainer.tsx     # AI Market Analyst — structured Q&A with drivers/caveats, context-aware
 src/
   api_data_loader.py      # Dataset metadata (40 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)

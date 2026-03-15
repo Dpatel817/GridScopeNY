@@ -10,8 +10,7 @@ const NAV_CARDS = [
   { path: '/generation', icon: '⚡', title: 'Generation', desc: 'Fuel mix, commitments, BTM solar, maintenance', category: 'market' },
   { path: '/interfaces', icon: '🔌', title: 'Interface Flows', desc: 'Transmission pressure, ATC/TTC, derates', category: 'market' },
   { path: '/congestion', icon: '🚧', title: 'Congestion', desc: 'Binding constraints, outage schedules', category: 'market' },
-  { path: '/opportunities', icon: '🎯', title: 'Opportunity Explorer', desc: 'Battery arbitrage rankings by zone & duration', category: 'hero' },
-  { path: '/ai-explainer', icon: '🤖', title: 'AI Analyst', desc: 'Ask questions about market behavior', category: 'tool' },
+  { path: '/opportunities', icon: '🎯', title: 'Opportunity & Insight Explorer', desc: 'Zone rankings, trader takeaways, AI explanation', category: 'hero' },
 ];
 
 const USEFUL_LINKS = [
@@ -21,6 +20,95 @@ const USEFUL_LINKS = [
   { label: 'ISO-NE Dashboard', url: 'https://www.iso-ne.com/isoexpress/' },
   { label: 'PJM Data Viewer', url: 'https://dataviewer.pjm.com/dataviewer/pages/public/load.jsf' },
 ];
+
+function LiveSystemContext() {
+  const { data: rtData } = useDataset('rt_events', 'raw');
+  const { data: operData } = useDataset('oper_messages', 'raw');
+  const [expanded, setExpanded] = useState(false);
+
+  const rtEvents = (() => {
+    if (!rtData?.data?.length) return [];
+    const sorted = [...rtData.data].sort((a: any, b: any) => {
+      const ta = a['Time Stamp'] || '';
+      const tb = b['Time Stamp'] || '';
+      return tb.localeCompare(ta);
+    });
+    const notable = sorted.filter((r: any) => {
+      const msg = String(r.Message || '');
+      return !msg.startsWith('Start of day system state');
+    });
+    const latestState = sorted.find((r: any) => String(r.Message || '').startsWith('Start of day'));
+    const items = notable.slice(0, 5);
+    if (latestState && !items.find((r: any) => r === latestState)) {
+      items.push(latestState);
+    }
+    return items.slice(0, 6);
+  })();
+
+  const operMessages = (() => {
+    if (!operData?.data?.length) return [];
+    const unique = new Map<string, any>();
+    for (const r of operData.data) {
+      const key = `${r['Message Type']}|${r.Message}`;
+      if (!unique.has(key)) unique.set(key, r);
+    }
+    return Array.from(unique.values()).slice(0, 5);
+  })();
+
+  if (!rtEvents.length && !operMessages.length) return null;
+
+  const displayRt = expanded ? rtEvents : rtEvents.slice(0, 3);
+  const displayOper = expanded ? operMessages : operMessages.slice(0, 3);
+
+  return (
+    <div className="section-container">
+      <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span className="live-dot" />
+        Live System Context
+      </div>
+      <div className="live-context-grid">
+        <div className="live-feed-card">
+          <div className="live-feed-title">Real-Time Events</div>
+          {displayRt.length === 0 ? (
+            <div className="live-feed-empty">No recent events</div>
+          ) : (
+            <div className="live-feed-list">
+              {displayRt.map((r: any, i: number) => (
+                <div className="live-feed-item" key={i}>
+                  <div className="live-feed-ts">{r['Time Stamp'] ? String(r['Time Stamp']).slice(5, 16) : r.source_date}</div>
+                  <div className="live-feed-msg">{r.Message}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="live-feed-card">
+          <div className="live-feed-title">Operational Announcements</div>
+          {displayOper.length === 0 ? (
+            <div className="live-feed-empty">No recent announcements</div>
+          ) : (
+            <div className="live-feed-list">
+              {displayOper.map((r: any, i: number) => (
+                <div className="live-feed-item" key={i}>
+                  <div className="live-feed-type">{r['Message Type']}</div>
+                  <div className="live-feed-msg">{r.Message}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {(rtEvents.length > 3 || operMessages.length > 3) && (
+        <button
+          className="live-expand-btn"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Show Less' : 'View More'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const { inventory, loading } = useInventory();
@@ -81,6 +169,8 @@ export default function Home() {
         </div>
       </div>
 
+      <LiveSystemContext />
+
       <div className="section-container">
         <div className="section-title">Recommended Workflow</div>
         <div className="workflow-steps">
@@ -94,7 +184,7 @@ export default function Home() {
           </div>
           <div className="workflow-step">
             <div className="step-num">3</div>
-            <div className="step-text"><strong>Find opportunities</strong> — use the Opportunity Explorer to rank zones by arbitrage potential</div>
+            <div className="step-text"><strong>Find opportunities</strong> — use the Opportunity Explorer for zone rankings, trader takeaways, and AI explanation</div>
           </div>
         </div>
       </div>

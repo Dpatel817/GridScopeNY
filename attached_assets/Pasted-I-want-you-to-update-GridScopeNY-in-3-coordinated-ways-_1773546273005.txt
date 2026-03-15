@@ -1,0 +1,223 @@
+I want you to update GridScopeNY in 3 coordinated ways.
+
+Main goal:
+Make the Opportunity Explorer more useful for both battery strategists and traders, merge the AI Analyst into that workflow, and surface live operational context on the home page.
+
+Important:
+- Keep the app in React
+- Preserve the current design language and layout quality
+- Reuse current data pipelines and UI components where possible
+- Do not invent data
+- Keep the app product-like and demo-ready
+
+==================================================
+1. REDESIGN OPPORTUNITY EXPLORER
+==================================================
+
+Current issue:
+The Opportunity Explorer is too battery-strategist-only and too static.
+I want it to also generate trader-facing insights.
+
+New goal:
+Turn it into a broader “Opportunity & Insight Explorer” that serves:
+- battery strategists
+- short-term power traders
+- analysts
+
+What I want the page to answer:
+1. Where is the opportunity?
+2. Why is it happening?
+3. What does it mean for a battery strategist?
+4. What does it mean for a trader?
+
+Please update the page as follows:
+
+A. Page framing
+- Keep the current opportunity ranking / zone logic
+- Rename/reframe the page so it feels broader and more intelligent
+- Preferred title:
+  Opportunity & Insight Explorer
+- Subtitle:
+  Identify NYISO opportunity by zone and get trader and battery-strategy takeaways.
+
+B. Keep the existing battery opportunity lens
+Still show:
+- battery duration selector
+- best zones
+- average opportunity
+- max opportunity
+- opportunity events
+- zone-level ranking
+
+C. Add trader insight layer
+Add a new insight section that explicitly gives trader-oriented takeaways.
+
+Examples of trader-facing insight categories:
+- strongest spread / dislocation zones
+- zones showing unusual DA-RT divergence
+- likely congestion-sensitive areas
+- areas where real-time verification risk appears high
+- zones where opportunity looks event-driven vs recurring
+
+Structure:
+- Trader Insight card or section
+- 3 to 5 concise takeaways
+- Prefer deterministic logic first, then AI enhancement
+
+D. Add battery strategist insight layer
+Add or preserve a separate battery strategist insight section.
+
+Examples:
+- best zone for 2h battery
+- whether value looks persistent or one-off
+- whether opportunity appears driven by congestion, load, flows, or operational events
+- where storage value seems structurally strongest
+
+Structure:
+- Battery Strategist Insight card or section
+- 3 to 5 concise takeaways
+
+E. Supporting context
+If possible, pull in supporting context from:
+- congestion
+- interface flows
+- demand surprise
+- RT events
+- operational announcements
+
+This context should help explain the opportunity.
+
+==================================================
+2. COMBINE AI ANALYST + OPPORTUNITY EXPLORER
+==================================================
+
+Current issue:
+The AI Analyst page feels disconnected from the rest of the product.
+I want the AI capability integrated directly into the Opportunity Explorer instead of being a separate standalone page.
+
+New goal:
+Merge the AI Analyst / AI Explainer functionality into the Opportunity Explorer page.
+
+What I want:
+- Remove the need for a separate AI Analyst workflow for this use case
+- Add an AI Insight / AI Explainer panel directly on the Opportunity Explorer page
+- The AI should explain the currently selected opportunity context
+
+Requirements:
+
+A. Add an AI Insights section on the Opportunity Explorer page
+This section should:
+- use the selected page context
+- use current filters such as:
+  - market lens if applicable
+  - battery duration
+  - selected zone
+  - selected date range
+  - selected ranking metric
+- include relevant supporting context such as:
+  - top spread values
+  - top constraints
+  - flows
+  - RT events
+  - operational announcements
+  - demand context
+
+B. AI outputs
+I want the AI response to be structured and useful.
+
+Preferred structure:
+- Summary
+- Trader Takeaways
+- Battery Strategist Takeaways
+- Caveat (only if needed)
+
+C. Suggested prompts
+Replace the generic AI prompt examples with opportunity-specific prompts such as:
+- Why is this zone the top opportunity today?
+- Does this opportunity look more structural or event-driven?
+- What are the trader implications of this spread behavior?
+- What are the battery strategy implications here?
+- What operational signals support this opportunity?
+
+D. UX
+- Keep the current polished card-based design
+- The AI section should feel embedded in the page, not bolted on
+- It should look like the user is asking the app to explain the current opportunity state
+- Include a button like:
+  Explain Current Opportunity
+- Optionally preserve a custom question box on the same page
+
+E. Routing
+Use your judgment, but preferred approach:
+- Keep the old AI Analyst route temporarily if needed for compatibility
+- But make Opportunity Explorer the main place where AI explanation happens
+- If possible, de-emphasize or remove the standalone AI Analyst page from navigation once the merged version works
+
+==================================================
+3. ADD RT EVENTS + OPERATIONAL ANNOUNCEMENTS TO HOME PAGE
+==================================================
+
+Current issue:
+The home page has KPIs but it needs more live operational context.
+
+New goal:
+Add Real-Time Events and Operational Announcements to the home page near the KPI area so the dashboard feels more live and operationally aware.
+
+What I want:
+
+A. Add a “Live System Context” section near the KPI row on the home page
+This should include:
+- Real-Time Events
+- Operational Announcements
+
+B. Layout
+Place this near the top of the home page, ideally below or beside the KPI row.
+
+C. Content
+Show:
+- latest RT event messages
+- latest operational announcement messages
+- timestamps
+- concise status feel
+
+D. UI style
+- use clean cards or compact feed panels
+- limit to recent entries, e.g. latest 5 or latest few by category
+- provide a “view more” or expandable section if needed
+- make this feel like live operational context, not a raw data dump
+
+E. Product framing
+This section should help users quickly understand:
+- whether the system is in a notable operating state
+- whether there are current operator notices that may matter for prices, congestion, or opportunity
+
+==================================================
+4. IMPLEMENTATION NOTES
+==================================================
+
+Please:
+- inspect the current Opportunity Explorer and AI Analyst pages
+- inspect the home page KPI area
+- reuse current data/context objects where possible
+- keep the modern UI style
+- do not overengineer
+- prioritize a strong demo experience
+
+==================================================
+5. DELIVERABLES
+==================================================
+
+Please:
+1. summarize the redesign plan
+2. implement the code changes
+3. list the files changed
+4. explain how AI context is now passed into the Opportunity Explorer
+5. explain how trader insights vs battery strategist insights are generated
+6. explain where RT events and operational announcements were added on the home page
+
+Acceptance criteria:
+- Opportunity Explorer includes trader insights and battery strategist insights
+- AI explanation is integrated into Opportunity Explorer
+- the standalone AI workflow is merged or clearly de-emphasized
+- Home page shows RT Events and Operational Announcements near the KPI area
+- the app remains clean, modern, and demo-ready
