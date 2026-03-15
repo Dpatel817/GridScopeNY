@@ -779,6 +779,66 @@ def ai_generation_summary(body: GenerationSummaryRequest):
         return {"summary": "", "status": "error"}
 
 
+class CongestionSummaryRequest(BaseModel):
+    onPeakTotalCost: str = ""
+    onPeakAvgCost: str = ""
+    peakPositive: str = ""
+    peakNegative: str = ""
+    highestCostConstraint: str = ""
+    avgCostTopConstraint: str = ""
+    bindingCount: str = ""
+    top3Share: str = ""
+    dateRange: str = ""
+
+
+@app.post("/api/ai-congestion-summary")
+def ai_congestion_summary(body: CongestionSummaryRequest):
+    if not OPENAI_API_KEY:
+        return {"summary": "", "status": "unconfigured"}
+
+    stats_block = (
+        f"On-Peak Total Constraint Cost: {body.onPeakTotalCost}\n"
+        f"On-Peak Avg Constraint Cost: {body.onPeakAvgCost}\n"
+        f"Peak Positive Constraint Cost: {body.peakPositive}\n"
+        f"Peak Negative Constraint Cost: {body.peakNegative}\n"
+        f"Highest-Cost Binding Constraint: {body.highestCostConstraint}\n"
+        f"Avg Cost of Top Constraint: {body.avgCostTopConstraint}\n"
+        f"Binding Constraints Count: {body.bindingCount}\n"
+        f"Top 3 Concentration: {body.top3Share}\n"
+        f"Date Range: {body.dateRange}"
+    )
+
+    system_prompt = (
+        "You are a senior NYISO electricity market analyst. Write a concise 3-5 sentence "
+        "market commentary paragraph about current NYISO transmission congestion based on the stats below. "
+        "Cover: total congestion costs, highest-cost binding constraint, concentration of costs, "
+        "whether congestion was broad-based or concentrated, and notable constraint patterns. "
+        "Use specific numbers from the data. "
+        "Do NOT use markdown formatting. No **, no #, no `. Write plain professional prose. "
+        "Do NOT invent data not provided. Keep under 120 words."
+    )
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"NYISO Congestion Statistics:\n{stats_block}"},
+            ],
+            max_tokens=300,
+            temperature=0.2,
+        )
+        raw = completion.choices[0].message.content or ""
+        return {"summary": _strip_markdown(raw), "status": "ok"}
+    except ImportError:
+        return {"summary": "", "status": "error"}
+    except Exception as exc:
+        logger.error("AI congestion summary error: %s", exc)
+        return {"summary": "", "status": "error"}
+
+
 class FlowSummaryRequest(BaseModel):
     onPeakAvgInternal: str = ""
     onPeakAvgExternal: str = ""

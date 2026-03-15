@@ -80,6 +80,9 @@ frontend/
       interfaceTransforms.ts  # Interface flow date/class/interface filtering, resolution aggregation, pivoting
       interfaceMetrics.ts     # Interface flow KPI stats (on-peak totals, peak flows, most active, top internal/external)
       interfaceSummary.ts     # AI flow summary context builder, deterministic fallback, API fetch
+      congestionTransforms.ts # Congestion date/constraint filtering, resolution aggregation, pivoting with dedup
+      congestionMetrics.ts    # Congestion KPI stats (on-peak costs, peak pos/neg, top constraint, concentration)
+      congestionSummary.ts    # AI congestion summary context builder, deterministic fallback, API fetch
 src/
   api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)
@@ -129,6 +132,7 @@ CSS classes: `.series-selector-*` in `index.css`
 - `POST /api/ai-demand-summary` — AI-generated demand/load commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-generation-summary` — AI-generated generation mix commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-flow-summary` — AI-generated interface flow commentary (gpt-4o-mini, max 300 tokens)
+- `POST /api/ai-congestion-summary` — AI-generated congestion analysis commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-explainer` — structured AI market analysis: Summary, Trader Takeaways, Battery Strategist Takeaways, Key Signals, Caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/refresh` — full data refresh: ETL fetch + process + cache clear (concurrency-guarded)

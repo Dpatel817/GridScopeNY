@@ -1,14 +1,41 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useDataset } from '../hooks/useDataset';
-import ResolutionSelector from '../components/ResolutionSelector';
-import LineChart from '../components/LineChart';
-import StackedBarChart from '../components/StackedBarChart';
 import DatasetSection from '../components/DatasetSection';
-import SeriesSelector from '../components/SeriesSelector';
+import PriceChart from '../components/PriceChart';
+import type { CongestionRow, ConstraintStat, ChartType, Resolution, DateRange } from '../data/congestionTransforms';
+import {
+  detectColumns, getAvailableDates,
+  filterByDateRange, pivotCongestion, computeConstraintStats,
+} from '../data/congestionTransforms';
+import { computeCongestionKPIs } from '../data/congestionMetrics';
+import type { CongestionKPIs } from '../data/congestionMetrics';
+import {
+  buildCongestionSummaryContext, deterministicCongestionSummary,
+  fetchAICongestionSummary,
+} from '../data/congestionSummary';
 
 const DATASETS = [
   'dam_limiting_constraints', 'rt_limiting_constraints',
   'sc_line_outages', 'rt_line_outages', 'out_sched', 'outage_schedule',
+];
+
+const RESOLUTIONS: { key: Resolution; label: string }[] = [
+  { key: 'hourly', label: 'Hourly' },
+  { key: 'on_peak', label: 'On-Peak Avg' },
+  { key: 'off_peak', label: 'Off-Peak Avg' },
+  { key: 'daily', label: 'Daily Avg' },
+];
+
+const CHART_TYPES: { key: ChartType; label: string }[] = [
+  { key: 'line-markers', label: 'Line + Markers' },
+  { key: 'line', label: 'Line' },
+  { key: 'area', label: 'Stacked Area' },
+];
+
+const DATE_RANGES: { key: DateRange; label: string }[] = [
+  { key: 'today', label: 'Latest Day' },
+  { key: 'custom', label: 'Custom Range' },
+  { key: 'all', label: 'All Dates' },
 ];
 
 interface CleanPrint { date: string; he: number; }
@@ -65,6 +92,8 @@ function ConstraintImpactAnalysis() {
   const [data, setData] = useState<ConstraintImpactData | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPivot, setShowPivot] = useState(false);
+  const [showZonal, setShowZonal] = useState(false);
+  const [showGens, setShowGens] = useState(false);
 
   const fetchIdRef = useRef(0);
 
@@ -120,8 +149,7 @@ function ConstraintImpactAnalysis() {
 
   const pivotHours = useMemo(() => {
     if (!pivot.length) return [];
-    const keys = Object.keys(pivot[0]).filter(k => k !== 'Date').sort((a, b) => Number(a) - Number(b));
-    return keys;
+    return Object.keys(pivot[0]).filter(k => k !== 'Date').sort((a, b) => Number(a) - Number(b));
   }, [pivot]);
 
   return (
@@ -131,7 +159,7 @@ function ConstraintImpactAnalysis() {
       </div>
       <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
         Isolate a specific constraint print and analyze its zonal and generator-level market impact.
-        Select a monitored element and contingency to identify clean prints — hours where this is the only material binding constraint.
+        Select a monitored element and contingency to identify clean prints.
       </p>
 
       <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -242,7 +270,7 @@ function ConstraintImpactAnalysis() {
               <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="chart-card-header" style={{ padding: '14px 20px' }}>
                   <div className="chart-card-title">Clean Print Hours</div>
-                  <span className="badge badge-primary">{cleanPrints.length} isolated prints — only this constraint binding</span>
+                  <span className="badge badge-primary">{cleanPrints.length} isolated prints</span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '12px 20px 16px' }}>
                   {cleanPrints.map(p => (
@@ -318,76 +346,81 @@ function ConstraintImpactAnalysis() {
           {zonal.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div className="chart-card-header" style={{ padding: '14px 20px' }}>
-                  <div className="chart-card-title">Zonal Congestion Impact</div>
+                <div
+                  className="chart-card-header"
+                  style={{ padding: '14px 20px', cursor: 'pointer' }}
+                  onClick={() => setShowZonal(!showZonal)}
+                >
+                  <div className="chart-card-title">
+                    <span className="chevron">{showZonal ? '▾' : '▸'}</span>{' '}
+                    Zonal Impact Analysis
+                  </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {summary?.is_clean_print && <span className="cia-tag cia-clean">Isolated print — high attribution</span>}
+                    {summary?.is_clean_print && <span className="cia-tag cia-clean">Isolated print</span>}
                     <span className="badge badge-primary">{zonal.length} zones · ranked by |MCC|</span>
                   </div>
                 </div>
-                <table className="rank-table" style={{ borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }}>#</th>
-                      <th>Zone</th>
-                      <th>LMP</th>
-                      <th>MCC</th>
-                      <th>MLC</th>
-                      <th>vs System Avg</th>
-                      <th>Interpretation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {zonal.map((z, i) => (
-                      <tr key={z.Zone}>
-                        <td><span className="rank-num">{i + 1}</span></td>
-                        <td style={{ fontWeight: 600 }}>{z.Zone}</td>
-                        <td>${z.LMP.toFixed(2)}</td>
-                        <td style={{ fontWeight: 700, color: Math.abs(z.MCC) > 2 ? (z.MCC > 0 ? 'var(--danger)' : 'var(--accent)') : 'var(--text)' }}>
-                          ${z.MCC.toFixed(2)}
-                        </td>
-                        <td>${z.MLC.toFixed(2)}</td>
-                        <td style={{ color: z.delta_vs_system > 0 ? 'var(--danger)' : 'var(--accent)' }}>
-                          {z.delta_vs_system > 0 ? '+' : ''}{z.delta_vs_system.toFixed(2)}
-                        </td>
-                        <td>
-                          <span className={`cia-tag ${z.interpretation.startsWith('Bullish') ? 'cia-bullish' : z.interpretation.startsWith('Bearish') ? 'cia-bearish' : 'cia-neutral'}`}>
-                            {z.interpretation.startsWith('Bullish') ? 'Bullish' : z.interpretation.startsWith('Bearish') ? 'Bearish' : 'Neutral'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {zonal.length > 0 && (
-            <div className="insight-card" style={{ marginBottom: 16 }}>
-              <div className="insight-title">Zonal Impact Interpretation</div>
-              <div className="insight-body">
-                {summary?.is_clean_print && (
-                  <><strong>High-confidence analysis:</strong> This is a clean print — only this constraint was materially binding at this hour, so MCC values are directly attributable. </>
+                {showZonal && (
+                  <>
+                    <table className="rank-table" style={{ borderSpacing: 0 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 40 }}>#</th>
+                          <th>Zone</th>
+                          <th>LMP</th>
+                          <th>MCC</th>
+                          <th>MLC</th>
+                          <th>vs System Avg</th>
+                          <th>Interpretation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {zonal.map((z, i) => (
+                          <tr key={z.Zone}>
+                            <td><span className="rank-num">{i + 1}</span></td>
+                            <td style={{ fontWeight: 600 }}>{z.Zone}</td>
+                            <td>${z.LMP.toFixed(2)}</td>
+                            <td style={{ fontWeight: 700, color: Math.abs(z.MCC) > 2 ? (z.MCC > 0 ? 'var(--danger)' : 'var(--accent)') : 'var(--text)' }}>
+                              ${z.MCC.toFixed(2)}
+                            </td>
+                            <td>${z.MLC.toFixed(2)}</td>
+                            <td style={{ color: z.delta_vs_system > 0 ? 'var(--danger)' : 'var(--accent)' }}>
+                              {z.delta_vs_system > 0 ? '+' : ''}{z.delta_vs_system.toFixed(2)}
+                            </td>
+                            <td>
+                              <span className={`cia-tag ${z.interpretation.startsWith('Bullish') ? 'cia-bullish' : z.interpretation.startsWith('Bearish') ? 'cia-bearish' : 'cia-neutral'}`}>
+                                {z.interpretation.startsWith('Bullish') ? 'Bullish' : z.interpretation.startsWith('Bearish') ? 'Bearish' : 'Neutral'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {summary?.is_clean_print && (
+                        <><strong>High-confidence analysis:</strong> This is a clean print — only this constraint was materially binding, so MCC values are directly attributable. </>
+                      )}
+                      {(() => {
+                        const bearish = zonal.filter(z => z.MCC > 2);
+                        const bullish = zonal.filter(z => z.MCC < -2);
+                        const neutral = zonal.filter(z => Math.abs(z.MCC) <= 2);
+                        return (
+                          <>
+                            {bearish.length > 0 && (
+                              <><strong>{bearish.map(z => z.Zone).join(', ')}</strong> paying congestion costs (positive MCC). </>
+                            )}
+                            {bullish.length > 0 && (
+                              <><strong>{bullish.map(z => z.Zone).join(', ')}</strong> receiving congestion credits (negative MCC). </>
+                            )}
+                            {neutral.length > 0 && (
+                              <><strong>{neutral.length}</strong> zone{neutral.length > 1 ? 's' : ''} with minimal impact (|MCC| &lt; $2).</>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </>
                 )}
-                {(() => {
-                  const bearish = zonal.filter(z => z.MCC > 2);
-                  const bullish = zonal.filter(z => z.MCC < -2);
-                  const neutral = zonal.filter(z => Math.abs(z.MCC) <= 2);
-                  return (
-                    <>
-                      {bearish.length > 0 && (
-                        <><strong>{bearish.map(z => z.Zone).join(', ')}</strong> {bearish.length === 1 ? 'is' : 'are'} paying congestion costs (positive MCC), making prices higher than they would be without this constraint. </>
-                      )}
-                      {bullish.length > 0 && (
-                        <><strong>{bullish.map(z => z.Zone).join(', ')}</strong> {bullish.length === 1 ? 'is' : 'are'} receiving congestion credits (negative MCC), benefiting from this constraint pattern. </>
-                      )}
-                      {neutral.length > 0 && (
-                        <><strong>{neutral.length}</strong> zone{neutral.length > 1 ? 's' : ''} {neutral.length === 1 ? 'shows' : 'show'} minimal congestion impact (|MCC| &lt; $2).</>
-                      )}
-                    </>
-                  );
-                })()}
               </div>
             </div>
           )}
@@ -395,45 +428,52 @@ function ConstraintImpactAnalysis() {
           {gens.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div className="chart-card-header" style={{ padding: '14px 20px' }}>
-                  <div className="chart-card-title">Generator-Level Impact (Top 25)</div>
-                  <span className="badge badge-primary">ranked by |MCC|</span>
+                <div
+                  className="chart-card-header"
+                  style={{ padding: '14px 20px', cursor: 'pointer' }}
+                  onClick={() => setShowGens(!showGens)}
+                >
+                  <div className="chart-card-title">
+                    <span className="chevron">{showGens ? '▾' : '▸'}</span>{' '}
+                    Generator-Level Impact Analysis
+                  </div>
+                  <span className="badge badge-primary">{gens.length} generators · ranked by |MCC|</span>
                 </div>
-                <table className="rank-table" style={{ borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }}>#</th>
-                      <th>Generator</th>
-                      <th>PTID</th>
-                      <th>Zone</th>
-                      <th>LMP</th>
-                      <th>MCC</th>
-                      <th>MLC</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {gens.map((g, i) => (
-                      <tr key={`${g.PTID}-${i}`}>
-                        <td><span className="rank-num">{i + 1}</span></td>
-                        <td style={{ fontWeight: 600, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.Generator}</td>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{g.PTID}</td>
-                        <td>{g.Zone || '—'}</td>
-                        <td>${g.LMP?.toFixed(2) ?? '—'}</td>
-                        <td style={{ fontWeight: 700, color: Math.abs(g.MCC || 0) > 5 ? (g.MCC > 0 ? 'var(--danger)' : 'var(--accent)') : 'var(--text)' }}>
-                          ${g.MCC?.toFixed(2) ?? '—'}
-                        </td>
-                        <td>${g.MLC?.toFixed(2) ?? '—'}</td>
+                {showGens && (
+                  <table className="rank-table" style={{ borderSpacing: 0 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 40 }}>#</th>
+                        <th>Generator</th>
+                        <th>PTID</th>
+                        <th>Zone</th>
+                        <th>LMP</th>
+                        <th>MCC</th>
+                        <th>MLC</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {gens.map((g, i) => (
+                        <tr key={`${g.PTID}-${i}`}>
+                          <td><span className="rank-num">{i + 1}</span></td>
+                          <td style={{ fontWeight: 600, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.Generator}</td>
+                          <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{g.PTID}</td>
+                          <td>{g.Zone || '—'}</td>
+                          <td>${g.LMP?.toFixed(2) ?? '—'}</td>
+                          <td style={{ fontWeight: 700, color: Math.abs(g.MCC || 0) > 5 ? (g.MCC > 0 ? 'var(--danger)' : 'var(--accent)') : 'var(--text)' }}>
+                            ${g.MCC?.toFixed(2) ?? '—'}
+                          </td>
+                          <td>${g.MLC?.toFixed(2) ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           )}
         </>
       )}
-
-      {!loading && !summary && data?.status !== 'no_data' && !data && null}
 
       {!loading && data?.status === 'no_data' && (
         <div className="insight-card">
@@ -449,158 +489,134 @@ function ConstraintImpactAnalysis() {
   );
 }
 
-
-interface StackedBarData {
-  status: string;
-  market?: string;
-  date?: string;
-  stacked_data: Record<string, any>[];
-  constraint_names: string[];
-  available_dates?: string[];
-}
-
-function CongestionStackedBar() {
-  const [market, setMarket] = useState<'DA' | 'RT'>('DA');
-  const [date, setDate] = useState('');
-  const [data, setData] = useState<StackedBarData | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ market });
-      if (date) params.set('date', date);
-      const res = await fetch(`/api/congestion-stacked?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(json);
-      if (json.date && !date) setDate(json.date);
-    } catch {
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [market, date]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const handleMarketChange = (m: 'DA' | 'RT') => {
-    if (m === market) return;
-    setDate('');
-    setData(null);
-    setMarket(m);
-  };
-
+function CongestionChartControls({
+  constraints, selectedConstraints, onConstraintsChange,
+  resolution, onResolutionChange,
+  dateRange, onDateRangeChange,
+  startDate, endDate, onStartDateChange, onEndDateChange, availableDates,
+  chartType, onChartTypeChange,
+}: {
+  constraints: string[];
+  selectedConstraints: string[];
+  onConstraintsChange: (s: string[]) => void;
+  resolution: Resolution;
+  onResolutionChange: (r: Resolution) => void;
+  dateRange: DateRange;
+  onDateRangeChange: (r: DateRange) => void;
+  startDate: string;
+  endDate: string;
+  onStartDateChange: (d: string) => void;
+  onEndDateChange: (d: string) => void;
+  availableDates: string[];
+  chartType: ChartType;
+  onChartTypeChange: (t: ChartType) => void;
+}) {
+  const allSelected = selectedConstraints.length === constraints.length;
   return (
-    <div style={{ marginTop: 24 }}>
-      <div className="section-title" style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
-        Constraint Cost Stacked Bar
+    <div className="pcc-panel">
+      <div className="pcc-title">Chart Controls</div>
+
+      <div className="pcc-section">
+        <div className="pcc-label">Constraints</div>
+        <div className="pcc-zone-actions">
+          <button
+            className={`pcc-mini-btn${allSelected ? ' active' : ''}`}
+            onClick={() => onConstraintsChange(allSelected ? [] : [...constraints])}
+          >
+            {allSelected ? 'Clear' : 'All'}
+          </button>
+        </div>
+        <div className="pcc-zone-grid">
+          {constraints.map(s => (
+            <label key={s} className="pcc-zone-item">
+              <input
+                type="checkbox"
+                checked={selectedConstraints.includes(s)}
+                onChange={() => {
+                  onConstraintsChange(
+                    selectedConstraints.includes(s)
+                      ? selectedConstraints.filter(x => x !== s)
+                      : [...selectedConstraints, s]
+                  );
+                }}
+              />
+              <span style={{ fontSize: 11 }}>{s.length > 30 ? s.slice(0, 28) + '…' : s}</span>
+            </label>
+          ))}
+        </div>
       </div>
-      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
-        Hourly breakdown of constraint costs stacked by binding constraint. Each bar segment represents a distinct constraint's cost at that hour.
-      </p>
-      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div className="pill-group">
-          <span className="pill-label">MARKET:</span>
-          {(['DA', 'RT'] as const).map(m => (
-            <button key={m} className={`pill${market === m ? ' active' : ''}`} onClick={() => handleMarketChange(m)}>
-              {m === 'DA' ? 'Day Ahead' : 'Real Time'}
+
+      <div className="pcc-section">
+        <div className="pcc-label">Resolution</div>
+        <div className="pcc-btn-group">
+          {RESOLUTIONS.map(r => (
+            <button key={r.key} className={`pcc-btn${resolution === r.key ? ' active' : ''}`} onClick={() => onResolutionChange(r.key)}>
+              {r.label}
             </button>
           ))}
         </div>
-        {data && data.available_dates && data.available_dates.length > 0 && (
-          <select className="gen-map-select" value={date} onChange={e => { setDate(e.target.value); }}>
-            {data.available_dates.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
+      </div>
+
+      <div className="pcc-section">
+        <div className="pcc-label">Date Range</div>
+        <div className="pcc-btn-group">
+          {DATE_RANGES.map(d => (
+            <button key={d.key} className={`pcc-btn${dateRange === d.key ? ' active' : ''}`} onClick={() => onDateRangeChange(d.key)}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+        {dateRange === 'custom' && availableDates.length > 0 && (
+          <div className="pcc-date-inputs">
+            <input type="date" className="pcc-date" value={startDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onStartDateChange(e.target.value)} />
+            <span className="pcc-date-sep">to</span>
+            <input type="date" className="pcc-date" value={endDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onEndDateChange(e.target.value)} />
+          </div>
         )}
       </div>
-      {loading && <div className="loading"><div className="spinner" /> Loading stacked bar data...</div>}
-      {!loading && data && data.stacked_data.length > 0 && (
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">Constraint Costs by Hour</div>
-            <span className="badge badge-primary">
-              {data.constraint_names.length} constraints · {data.date}
-            </span>
-          </div>
-          <StackedBarChart
-            data={data.stacked_data}
-            xKey="HE"
-            yKeys={data.constraint_names}
-            height={360}
-            labelPrefix="$"
-          />
+
+      <div className="pcc-section">
+        <div className="pcc-label">Chart Type</div>
+        <div className="pcc-btn-group">
+          {CHART_TYPES.map(t => (
+            <button key={t.key} className={`pcc-btn${chartType === t.key ? ' active' : ''}`} onClick={() => onChartTypeChange(t.key)}>
+              {t.label}
+            </button>
+          ))}
         </div>
-      )}
-      {!loading && data && data.stacked_data.length === 0 && (
-        <div className="insight-card">
-          <div className="insight-body">No constraint data available for this date.</div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
 export default function Congestion() {
-  const [resolution, setResolution] = useState('hourly');
-  const [showRaw, setShowRaw] = useState(false);
+  const [resolution, setResolution] = useState<Resolution>('hourly');
+  const [dateRange, setDateRange] = useState<DateRange>('today');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedConstraints, setSelectedConstraints] = useState<string[]>([]);
+  const [showBindingTable, setShowBindingTable] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
 
-  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', resolution);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { allConstraintNames, kpis, topConstraints, chartData } = useMemo(() => {
-    const records = daConstraints?.data || [];
-    if (!records.length) return { allConstraintNames: [], kpis: {} as any, topConstraints: [], chartData: [] };
+  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', 'raw');
 
-    const costCol = records[0]?.['Constraint Cost'] !== undefined ? 'Constraint Cost' : 'ShadowPrice';
-    const nameCol = records[0]?.['Limiting Facility'] !== undefined ? 'Limiting Facility' : 'Constraint';
+  const rows: CongestionRow[] = useMemo(
+    () => (daConstraints?.data || []) as CongestionRow[],
+    [daConstraints]
+  );
 
-    const costs = records.map((r: any) => Number(r[costCol] || 0)).filter((v: number) => v !== 0);
-    const totalCost = costs.reduce((a: number, b: number) => a + Math.abs(b), 0);
-    const maxCost = costs.length ? Math.max(...costs.map(Math.abs)) : 0;
-    const avgCost = costs.length ? totalCost / costs.length : 0;
+  const { nameCol, costCol } = useMemo(() => detectColumns(rows), [rows]);
+  const allConstraintNames = useMemo(() => {
+    const stats = computeConstraintStats(rows, nameCol, costCol);
+    return stats.map(s => s.name);
+  }, [rows, nameCol, costCol]);
 
-    const byConstraint: Record<string, { total: number; count: number; max: number; name: string }> = {};
-    for (const r of records) {
-      const name = String(r[nameCol] || 'Unknown');
-      const cost = Math.abs(Number(r[costCol] || 0));
-      if (!byConstraint[name]) byConstraint[name] = { total: 0, count: 0, max: 0, name };
-      byConstraint[name].total += cost;
-      byConstraint[name].count++;
-      byConstraint[name].max = Math.max(byConstraint[name].max, cost);
-    }
-
-    const allSorted = Object.values(byConstraint)
-      .sort((a, b) => b.total - a.total);
-
-    const topConstraints = allSorted
-      .map((c, i) => ({ rank: i + 1, ...c, avg: c.total / c.count }));
-
-    const allConstraintNames = allSorted.map(c => c.name);
-    const active = selectedConstraints.length > 0 ? selectedConstraints : allConstraintNames.slice(0, 8);
-
-    const pivoted: Record<string, any> = {};
-    for (const r of records) {
-      const name = String(r[nameCol] || '');
-      if (!active.includes(name)) continue;
-      const dateKey = r.Date || r['Time Stamp'] || '';
-      const key = `${dateKey}_${r.HE || ''}`;
-      if (!pivoted[key]) pivoted[key] = { Date: dateKey, HE: r.HE };
-      pivoted[key][name] = Number(r[costCol] || 0);
-    }
-    const chartData = Object.values(pivoted).sort((a: any, b: any) => a.Date < b.Date ? -1 : 1);
-
-    if (typeof console !== 'undefined') {
-      console.log(`[Congestion] Constraints available: ${allConstraintNames.length}, displayed: ${active.length}, records: ${records.length}`);
-    }
-
-    return {
-      allConstraintNames,
-      kpis: { totalCost, maxCost, avgCost, bindingCount: allConstraintNames.length },
-      topConstraints,
-      chartData: chartData.length > 1 ? chartData : [],
-    };
-  }, [daConstraints, selectedConstraints]);
+  const availableDates = useMemo(() => getAvailableDates(rows), [rows]);
 
   useEffect(() => {
     if (allConstraintNames.length > 0 && selectedConstraints.length === 0) {
@@ -608,7 +624,64 @@ export default function Congestion() {
     }
   }, [allConstraintNames]);
 
-  const activeForChart = selectedConstraints.length > 0 ? selectedConstraints.filter(c => allConstraintNames.includes(c)) : allConstraintNames.slice(0, 8);
+  useEffect(() => {
+    if (availableDates.length > 0 && !startDate && !endDate) {
+      setStartDate(availableDates[0]);
+      setEndDate(availableDates[availableDates.length - 1]);
+    }
+  }, [availableDates]);
+
+  const kpis: CongestionKPIs = useMemo(
+    () => computeCongestionKPIs(rows),
+    [rows]
+  );
+
+  const fallbackSummary = useMemo(() => deterministicCongestionSummary(kpis), [kpis]);
+
+  useEffect(() => {
+    if (aiRequestedRef.current) return;
+    if (loading || !rows.length) return;
+    aiRequestedRef.current = true;
+    setAiLoading(true);
+    const ctx = buildCongestionSummaryContext(kpis, 'Latest available data');
+    fetchAICongestionSummary(ctx).then(s => {
+      if (s) setAiSummary(s);
+    }).finally(() => setAiLoading(false));
+  }, [loading, rows.length, kpis]);
+
+  const dateFiltered = useMemo(
+    () => filterByDateRange(rows, dateRange, startDate, endDate),
+    [rows, dateRange, startDate, endDate]
+  );
+
+  const chartData = useMemo(
+    () => pivotCongestion(dateFiltered, selectedConstraints, nameCol, costCol, resolution),
+    [dateFiltered, selectedConstraints, nameCol, costCol, resolution]
+  );
+
+  const constraintStats: ConstraintStat[] = useMemo(
+    () => computeConstraintStats(dateFiltered, nameCol, costCol),
+    [dateFiltered, nameCol, costCol]
+  );
+
+  const activeForChart = selectedConstraints.filter(c => allConstraintNames.includes(c));
+
+  const hasNegative = useMemo(() => {
+    for (const row of chartData) {
+      for (const key of Object.keys(row)) {
+        if (key === 'Date') continue;
+        if (Number(row[key]) < 0) return true;
+      }
+    }
+    return false;
+  }, [chartData]);
+
+  const effectiveChartType: ChartType = chartType === 'area' && hasNegative ? 'line' : chartType;
+  const stackWarning = chartType === 'area' && hasNegative;
+
+  const displaySummary = aiSummary || fallbackSummary;
+
+  const fmtCost = (v: number) => '$' + Math.round(Math.abs(v)).toLocaleString();
 
   return (
     <div className="page">
@@ -619,16 +692,15 @@ export default function Congestion() {
         </p>
       </div>
 
-      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <ResolutionSelector value={resolution} onChange={setResolution} />
-        {allConstraintNames.length > 0 && (
-          <SeriesSelector
-            label="Constraints"
-            allSeries={allConstraintNames}
-            selected={selectedConstraints}
-            onChange={setSelectedConstraints}
-          />
-        )}
+      <div className="price-summary-box">
+        <div className="price-summary-header">
+          <span className="price-summary-icon">&#9889;</span>
+          <span className="price-summary-title">Congestion Summary</span>
+          {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
+          {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
+          {!aiLoading && !aiSummary && <span className="price-summary-badge">Deterministic</span>}
+        </div>
+        <div className="price-summary-body">{displaySummary}</div>
       </div>
 
       {error && (
@@ -641,52 +713,139 @@ export default function Congestion() {
       {loading && <div className="loading"><div className="spinner" /> Loading congestion data...</div>}
 
       {!loading && (
-        <>
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-            <div className="kpi-card">
-              <div className="kpi-label">Total Constraint Cost</div>
-              <div className="kpi-value">
-                {kpis.totalCost ? <>${kpis.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</> : '—'}
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Max Single Cost</div>
-              <div className="kpi-value">
-                {kpis.maxCost ? <>${kpis.maxCost.toFixed(2)}</> : '—'}
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Avg Constraint Cost</div>
-              <div className="kpi-value">
-                {kpis.avgCost ? <>${kpis.avgCost.toFixed(2)}</> : '—'}
-              </div>
-            </div>
-            <div className="kpi-card accent">
-              <div className="kpi-label">Binding Constraints</div>
-              <div className="kpi-value">{kpis.bindingCount || '—'}</div>
+        <div className="kpi-grid price-kpi-grid">
+          <div className="kpi-card">
+            <div className="kpi-label">On-Peak Total Cost</div>
+            <div className="kpi-value">
+              {kpis.onPeakTotalCost != null ? <>{fmtCost(kpis.onPeakTotalCost)}</> : '—'}
             </div>
           </div>
+          <div className="kpi-card">
+            <div className="kpi-label">On-Peak Avg Cost</div>
+            <div className="kpi-value">
+              {kpis.onPeakAvgCost != null ? <>${kpis.onPeakAvgCost.toFixed(2)}</> : '—'}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Positive Cost</div>
+            <div className="kpi-value">
+              {kpis.peakPositive ? <>${kpis.peakPositive.value.toFixed(2)}</> : '—'}
+            </div>
+            {kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.constraint.length > 25 ? kpis.peakPositive.constraint.slice(0, 23) + '…' : kpis.peakPositive.constraint} · HE{kpis.peakPositive.he} · {kpis.peakPositive.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Negative Cost</div>
+            <div className="kpi-value">
+              {kpis.peakNegative ? (
+                <span style={{ color: kpis.peakNegative.value < -50 ? 'var(--danger)' : 'var(--text)' }}>
+                  ${kpis.peakNegative.value.toFixed(2)}
+                </span>
+              ) : '—'}
+            </div>
+            {kpis.peakNegative && <div className="kpi-sub">{kpis.peakNegative.constraint.length > 25 ? kpis.peakNegative.constraint.slice(0, 23) + '…' : kpis.peakNegative.constraint} · HE{kpis.peakNegative.he} · {kpis.peakNegative.date}</div>}
+          </div>
+          <div className="kpi-card accent">
+            <div className="kpi-label">Highest-Cost Constraint</div>
+            <div className="kpi-value" style={{ fontSize: '0.85rem' }}>
+              {kpis.highestCostConstraint
+                ? (kpis.highestCostConstraint.length > 25
+                  ? kpis.highestCostConstraint.slice(0, 23) + '…'
+                  : kpis.highestCostConstraint)
+                : '—'}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Avg Cost of Top</div>
+            <div className="kpi-value">
+              {kpis.avgCostTopConstraint != null ? <>${kpis.avgCostTopConstraint.toFixed(2)}</> : '—'}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Binding Constraints</div>
+            <div className="kpi-value">{kpis.bindingCount || '—'}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Top 3 Concentration</div>
+            <div className="kpi-value">
+              {kpis.top3Share != null ? <>{kpis.top3Share.toFixed(1)}<span className="kpi-unit">%</span></> : '—'}
+            </div>
+            {kpis.top3Share != null && <div className="kpi-sub">of total cost</div>}
+          </div>
+        </div>
+      )}
 
-          {chartData.length > 0 && (
+      {!loading && (
+        <div className="price-chart-layout">
+          <CongestionChartControls
+            constraints={allConstraintNames}
+            selectedConstraints={selectedConstraints}
+            onConstraintsChange={setSelectedConstraints}
+            resolution={resolution}
+            onResolutionChange={setResolution}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            availableDates={availableDates}
+            chartType={chartType}
+            onChartTypeChange={setChartType}
+          />
+
+          <div className="price-chart-main">
+            <div className="price-view-tabs">
+              <span className="price-view-info">
+                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
+                {' · '}{activeForChart.length}/{allConstraintNames.length} constraints
+                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
+              </span>
+            </div>
+
+            {stackWarning && (
+              <div style={{
+                padding: '8px 14px', background: 'color-mix(in srgb, var(--warning) 12%, transparent)',
+                border: '1px solid var(--warning)', borderRadius: 8, marginBottom: 8, fontSize: 12,
+                color: 'var(--text-muted)'
+              }}>
+                Stacked area disabled — data contains negative costs. Showing line chart instead.
+              </div>
+            )}
+
             <div className="chart-card">
               <div className="chart-card-header">
                 <div className="chart-card-title">Constraint Costs Over Time</div>
-                <span className="badge badge-primary">{resolution} · {activeForChart.length} of {allConstraintNames.length} constraints</span>
+                <span className="badge badge-primary">{chartData.length} points</span>
               </div>
-              <LineChart
+              <PriceChart
                 data={chartData}
                 xKey="Date"
                 yKeys={activeForChart}
-                height={320}
+                chartType={effectiveChartType}
+                height={380}
+                valuePrefix="$"
+                valueSuffix=""
               />
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {topConstraints.length > 0 && (
-            <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                <div className="chart-card-title">All Binding Constraints ({topConstraints.length})</div>
-              </div>
+      {!loading && constraintStats.length > 0 && (
+        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div
+            className="chart-card-header"
+            style={{ padding: '14px 20px', cursor: 'pointer' }}
+            onClick={() => setShowBindingTable(!showBindingTable)}
+          >
+            <div className="chart-card-title">
+              <span className="chevron">{showBindingTable ? '▾' : '▸'}</span>{' '}
+              Binding Constraints ({constraintStats.length})
+            </div>
+            <span className="badge badge-primary">ranked by total cost</span>
+          </div>
+          {showBindingTable && (
+            <div style={{ overflowX: 'auto' }}>
               <table className="rank-table" style={{ borderSpacing: 0 }}>
                 <thead>
                   <tr>
@@ -699,7 +858,7 @@ export default function Congestion() {
                   </tr>
                 </thead>
                 <tbody>
-                  {topConstraints.map(c => (
+                  {constraintStats.map(c => (
                     <tr key={c.name}>
                       <td><span className="rank-num">{c.rank}</span></td>
                       <td style={{ fontWeight: 600, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</td>
@@ -713,37 +872,24 @@ export default function Congestion() {
               </table>
             </div>
           )}
-
-          {topConstraints.length > 0 && (
-            <div className="insight-card">
-              <div className="insight-title">Congestion Summary</div>
-              <div className="insight-body">
-                <strong>{kpis.bindingCount} constraints</strong> were binding during this period.
-                The most expensive constraint was <strong>{topConstraints[0].name}</strong> with total cost of <strong>${topConstraints[0].total.toFixed(2)}</strong>.
-                {topConstraints[0].max > 100 && <> Peak costs reached <strong>${topConstraints[0].max.toFixed(2)}</strong>, indicating significant transmission pressure.</>}
-              </div>
-            </div>
-          )}
-
-          <CongestionStackedBar />
-
-          <ConstraintImpactAnalysis />
-
-          <div className="section-container">
-            <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
-              <span className="chevron">{showRaw ? '▾' : '▸'}</span>
-              All Congestion Datasets ({DATASETS.length})
-            </div>
-            {showRaw && (
-              <div style={{ marginTop: 8 }}>
-                {DATASETS.map((key, i) => (
-                  <DatasetSection key={key} datasetKey={key} resolution={resolution} defaultExpanded={i === 0} />
-                ))}
-              </div>
-            )}
-          </div>
-        </>
+        </div>
       )}
+
+      <ConstraintImpactAnalysis />
+
+      <div className="section-container">
+        <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
+          <span className="chevron">{showRaw ? '▾' : '▸'}</span>
+          All Congestion Datasets ({DATASETS.length})
+        </div>
+        {showRaw && (
+          <div style={{ marginTop: 8 }}>
+            {DATASETS.map((key, i) => (
+              <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
