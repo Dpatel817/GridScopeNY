@@ -9,6 +9,7 @@ import Congestion from './pages/Congestion'
 import GeneratorMap from './pages/GeneratorMap'
 import OpportunityExplorer from './pages/OpportunityExplorer'
 import AIExplainer from './pages/AIExplainer'
+import InterconnectionQueue from './pages/InterconnectionQueue'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="interfaces" element={<InterfaceFlows />} />
           <Route path="congestion" element={<Congestion />} />
           <Route path="generator-map" element={<GeneratorMap />} />
+          <Route path="interconnection-queue" element={<InterconnectionQueue />} />
           <Route path="opportunities" element={<OpportunityExplorer />} />
           <Route path="ai-explainer" element={<AIExplainer />} />
         </Route>

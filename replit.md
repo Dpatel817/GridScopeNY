@@ -59,19 +59,22 @@ frontend/
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
       OpportunityExplorer.tsx  # Opportunity & Insight Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
       AIExplainer.tsx     # AI Market Analyst — Current Market Context, structured response (Summary/Trader/Battery/Signals/Caveat), two prompt groups
+      InterconnectionQueue.tsx  # Interconnection Queue — KPIs, changes list, fuel/zone breakdown, searchable table with sheet tabs
     data/
       zones.ts            # NYISO zone constants (A-K), isNyisoZone/filterNyisoZones helpers
       interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization
 src/
-  api_data_loader.py      # Dataset metadata (40 datasets), aggregation, caching (Parquet-first, CSV fallback)
+  api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)
 ETL/
   fetch_nyiso_data.py     # Fetches CSVs from NYISO MIS (7-day rolling window)
   process_nyiso_data.py   # Cleans, renames, and saves processed CSVs
+  fetch_interconnection_queue.py  # Scrapes NYISO Interconnection Queue Excel, normalizes, snapshot comparison, change detection
 data/
   raw/                    # Raw NYISO CSV files
   processed/              # Cleaned CSVs + Parquet files consumed by the API (Parquet preferred)
+  snapshots/              # Interconnection queue snapshot for change detection
 ```
 
 ## Page Architecture

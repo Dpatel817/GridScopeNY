@@ -471,6 +471,76 @@ DATASET_META = {
         "label": "Active Transmission Nodes (P-66)",
         "native": "table",
     },
+    "interconnection_queue": {
+        "file": "interconnection_queue_processed.csv",
+        "label": "Interconnection Queue (All Sheets)",
+        "native": "table",
+        "group_cols": ["source_sheet"],
+        "value_cols": ["sp_mw", "wp_mw"],
+        "chart_y": "sp_mw",
+        "chart_group": "source_sheet",
+        "filterable": True,
+    },
+    "iq_active": {
+        "file": "iq_active_processed.csv",
+        "label": "Active Queue Projects",
+        "native": "table",
+        "group_cols": ["zone", "fuel_type"],
+        "value_cols": ["sp_mw", "wp_mw"],
+        "chart_y": "sp_mw",
+        "chart_group": "fuel_type",
+        "filterable": True,
+    },
+    "iq_cluster": {
+        "file": "iq_cluster_processed.csv",
+        "label": "Cluster Study Projects",
+        "native": "table",
+        "group_cols": ["zone", "fuel_type"],
+        "value_cols": ["sp_mw", "wp_mw"],
+        "chart_y": "sp_mw",
+        "chart_group": "fuel_type",
+        "filterable": True,
+    },
+    "iq_affected_system": {
+        "file": "iq_affected_system_processed.csv",
+        "label": "Affected System Projects",
+        "native": "table",
+        "group_cols": ["zone", "fuel_type"],
+        "value_cols": ["sp_mw", "wp_mw"],
+        "chart_y": "sp_mw",
+        "chart_group": "fuel_type",
+        "filterable": True,
+    },
+    "iq_in_service": {
+        "file": "iq_in_service_processed.csv",
+        "label": "In-Service Projects",
+        "native": "table",
+        "group_cols": ["zone", "fuel_type"],
+        "value_cols": ["sp_mw", "wp_mw"],
+        "chart_y": "sp_mw",
+        "chart_group": "fuel_type",
+        "filterable": True,
+    },
+    "iq_withdrawn": {
+        "file": "iq_withdrawn_processed.csv",
+        "label": "Withdrawn Projects",
+        "native": "table",
+        "group_cols": ["source_sheet", "fuel_type"],
+        "value_cols": ["sp_mw", "wp_mw"],
+        "chart_y": "sp_mw",
+        "chart_group": "fuel_type",
+        "filterable": True,
+    },
+    "iq_changes": {
+        "file": "iq_changes_processed.csv",
+        "label": "Queue Changes (Since Last Scrape)",
+        "native": "event",
+    },
+    "iq_summary": {
+        "file": "iq_summary_processed.csv",
+        "label": "Queue Summary",
+        "native": "table",
+    },
 }
 
 
@@ -499,6 +569,10 @@ PAGE_DATASETS = {
     "congestion": [
         "dam_limiting_constraints", "rt_limiting_constraints",
         "sc_line_outages", "rt_line_outages", "out_sched", "outage_schedule",
+    ],
+    "interconnection_queue": [
+        "interconnection_queue", "iq_active", "iq_cluster",
+        "iq_affected_system", "iq_in_service", "iq_withdrawn", "iq_changes", "iq_summary",
     ],
 }
 

@@ -8,6 +8,7 @@ const MARKET_NAV = [
   { path: '/interfaces', label: 'Interface Flows', icon: '🔌' },
   { path: '/congestion', label: 'Congestion', icon: '🚧' },
   { path: '/generator-map', label: 'Generator Map', icon: '📍' },
+  { path: '/interconnection-queue', label: 'Interconnection Queue', icon: '🔗' },
 ]
 
 const TOOL_NAV = [

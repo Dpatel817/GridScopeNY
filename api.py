@@ -1000,6 +1000,28 @@ def get_daily_events(date: Optional[str] = None):
     }
 
 
+@app.post("/api/iq/scrape")
+def scrape_interconnection_queue():
+    try:
+        result = subprocess.run(
+            [sys.executable, "ETL/fetch_interconnection_queue.py"],
+            capture_output=True, text=True, timeout=120,
+        )
+        from src.api_data_loader import _df_cache
+        for key in list(_df_cache.keys()):
+            if "iq_" in key or "interconnection" in key:
+                del _df_cache[key]
+        return {
+            "status": "ok" if result.returncode == 0 else "error",
+            "stdout": result.stdout[-2000:] if result.stdout else "",
+            "stderr": result.stderr[-500:] if result.stderr else "",
+        }
+    except subprocess.TimeoutExpired:
+        return {"status": "timeout", "message": "IQ scrape timed out"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 import threading
 _refresh_lock = threading.Lock()
 
