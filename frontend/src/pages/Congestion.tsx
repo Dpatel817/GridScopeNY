@@ -61,11 +61,14 @@ function ConstraintImpactAnalysis() {
   const [data, setData] = useState<ConstraintImpactData | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchImpact = useCallback(async (resetDate?: boolean) => {
+  const fetchIdRef = { current: 0 };
+
+  const fetchImpact = useCallback(async (overrides?: { resetDate?: boolean }) => {
+    const id = ++fetchIdRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ market });
-      const d = resetDate ? '' : date;
+      const d = overrides?.resetDate ? '' : date;
       if (d) params.set('date', d);
       if (he !== '') params.set('he', String(he));
       if (facility) params.set('facility', facility);
@@ -73,16 +76,24 @@ function ConstraintImpactAnalysis() {
       const res = await fetch(`/api/constraint-impact?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+      if (id !== fetchIdRef.current) return;
       setData(json);
       if (json.date && !d) setDate(json.date);
     } catch {
-      setData(null);
+      if (id === fetchIdRef.current) setData(null);
     } finally {
-      setLoading(false);
+      if (id === fetchIdRef.current) setLoading(false);
     }
   }, [market, date, he, facility, contingency]);
 
-  useEffect(() => { fetchImpact(); }, []);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!initialized) {
+      setInitialized(true);
+      fetchImpact();
+    }
+  }, [initialized]);
 
   function handleMarketChange(m: 'DA' | 'RT') {
     if (m === market) return;
@@ -111,9 +122,12 @@ function ConstraintImpactAnalysis() {
     setContingency('');
   }
 
-  useEffect(() => { fetchImpact(true); }, [market]);
   useEffect(() => {
-    if (date) fetchImpact();
+    if (initialized) fetchImpact({ resetDate: true });
+  }, [market]);
+
+  useEffect(() => {
+    if (initialized && date) fetchImpact();
   }, [date, he, facility, contingency]);
 
   const summary = data?.constraint_summary;

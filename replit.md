@@ -53,8 +53,10 @@ frontend/
       Prices.tsx          # Price Intelligence — DA/RT comparison, spread analysis
       Demand.tsx          # Demand Intelligence — forecast vs actual, error analysis
       Generation.tsx      # Generation Mix — fuel breakdown, share analysis
-      InterfaceFlows.tsx  # Interface Flows — utilization, pressure analysis
-      Congestion.tsx      # Congestion Analysis — constraint rankings, outages
+      InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis
+      Congestion.tsx      # Congestion Analysis — constraint rankings, outages, Constraint Impact Analysis drilldown
+    data/
+      interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
       OpportunityExplorer.tsx  # Hero: Flex Opportunity Explorer with bar charts, zone detail, drivers
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization
       AIExplainer.tsx     # AI Market Analyst — structured Q&A with drivers/caveats, context-aware
@@ -97,6 +99,7 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/page/{page}` — list datasets for a page
 - `GET /api/filters/{key}/{col}` — filter options for a column
 - `GET /api/generator-map?market=DA|RT&date=YYYY-MM-DD&he=0-23` — generator geographic price data (561 mapped generators)
+- `GET /api/constraint-impact?market=DA|RT&date=&he=&facility=&contingency=` — constraint impact analysis with zonal/generator MCC impact
 - `POST /api/ai-explainer` — structured AI market analysis with drivers/caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL
