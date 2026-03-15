@@ -598,6 +598,257 @@ def explain(body: ExplainRequest):
     return ai_explainer(req)
 
 
+# ---------------------------------------------------------------------------
+# TTCF Derates endpoint
+# ---------------------------------------------------------------------------
+TTCF_PATH_MAP = {
+    'SCH - PJ - NY': 'PJM AC',
+    'SCH - PJM_HTP': 'PJM HTP',
+    'SCH - PJM_VFT': 'PJM VFT',
+    'SCH - PJM_NEPTUNE': 'PJM Neptune',
+    'SCH - NE - NY': 'NE AC',
+    'SCH - NPX_1385': '1385',
+    'SCH - NPX_CSC': 'CSC',
+    'SCH - OH - NY': 'IMO AC',
+    'SCH - HQ - NY': 'HQ AC',
+    'SCH - HQ_CEDARS': 'HQ Cedars',
+    'CENTRAL EAST - VC': 'Central East',
+    'MOSES SOUTH': 'Moses South',
+    'SPR/DUN-SOUTH': 'Spr/Dun South',
+    'UPNY CONED': 'UPNY-ConEd',
+    'DYSINGER EAST': 'Dysinger East',
+    'TOTAL EAST': 'Total East',
+    'CONED - LIPA': 'ConEd-LIPA',
+    'WEST CENTRAL': 'West Central',
+}
+
+TTCF_RENAME = {
+    'RTSA FACILITY NAME': 'Cause Of Derate',
+    'DATE_OUT': 'Date Out',
+    'TIME_OU': 'Time Out',
+    'DATE_IN': 'Date In',
+    'TIME_IN': 'Time In',
+    'EXPORT PATH NAME': 'Path Name',
+    'FWD - Total Transfer Cap': 'Revised Import TTC',
+    'FWD - TTC transfer impact': 'Import TTC Impact',
+    'FWD - TTC ALL I/S': 'Base Import TTC',
+    'REV - Total Transfer Cap': 'Revised Export TTC',
+    'REV - TTC transfer impact': 'Export TTC Impact',
+    'REV - TTC ALL I/S': 'Base Export TTC',
+}
+
+TTCF_DROP_COLS = {'ATI', 'CALLED_IN_', 'CANCELLATI', 'mod mess', 'CANCELLATI2', 'PTID', 'ARR'}
+
+
+def _clean_time_to_hhmm(series: pd.Series) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype="object")
+    s = series.copy()
+    s = s.replace([0, 0.0, "0", "0.0"], np.nan)
+    s = s.astype("string").str.strip()
+    s = s.replace({"": pd.NA, "nan": pd.NA, "NaT": pd.NA, "None": pd.NA})
+    mask6 = s.str.fullmatch(r"\d{6}", na=False)
+    s.loc[mask6] = s.loc[mask6].str.slice(0, 2) + ":" + s.loc[mask6].str.slice(2, 4)
+    mask4 = s.str.fullmatch(r"\d{4}", na=False)
+    s.loc[mask4] = s.loc[mask4].str.slice(0, 2) + ":" + s.loc[mask4].str.slice(2, 4)
+    mask3 = s.str.fullmatch(r"\d{3}", na=False)
+    s.loc[mask3] = "0" + s.loc[mask3].str.slice(0, 1) + ":" + s.loc[mask3].str.slice(1, 3)
+    dt = pd.to_datetime(s, errors="coerce")
+    return dt.dt.strftime("%H:%M")
+
+
+@app.get("/api/ttcf-derates")
+def ttcf_derates(
+    date: Optional[str] = Query(default=None),
+):
+    import io
+    import requests as req_lib
+    from datetime import datetime as dt_cls, timedelta
+
+    if date:
+        target_date = date.replace("-", "")
+    else:
+        target_date = dt_cls.now().strftime("%Y%m%d")
+
+    actual_date = target_date
+    url = f"https://mis.nyiso.com/public/csv/ttcf/{target_date}ttcf.csv"
+    try:
+        resp = req_lib.get(url, timeout=30, verify=False)
+        if resp.status_code == 404:
+            yesterday = (dt_cls.strptime(target_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+            url = f"https://mis.nyiso.com/public/csv/ttcf/{yesterday}ttcf.csv"
+            resp = req_lib.get(url, timeout=30, verify=False)
+            actual_date = yesterday
+            if resp.status_code == 404:
+                return {"status": "no_data", "message": "No TTCF data available", "derates": [], "date": date}
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error("TTCF fetch error: %s", e)
+        return {"status": "error", "message": str(e), "derates": [], "date": date}
+
+    try:
+        df = pd.read_csv(io.StringIO(resp.text))
+        df = df.fillna(0)
+        df = df.drop(columns=[c for c in TTCF_DROP_COLS if c in df.columns], errors="ignore")
+        df = df.rename(columns=TTCF_RENAME)
+
+        if "Path Name" in df.columns:
+            df["Path Name"] = df["Path Name"].replace(TTCF_PATH_MAP)
+
+        if "Date Out" in df.columns:
+            df["Date Out"] = pd.to_datetime(df["Date Out"], errors="coerce")
+        if "Date In" in df.columns:
+            df["Date In"] = pd.to_datetime(df["Date In"], errors="coerce")
+        if "Time Out" in df.columns:
+            df["Time Out"] = _clean_time_to_hhmm(df["Time Out"])
+        if "Time In" in df.columns:
+            df["Time In"] = _clean_time_to_hhmm(df["Time In"])
+
+        for col in ["Import TTC Impact", "Export TTC Impact", "Revised Import TTC",
+                     "Revised Export TTC", "Base Import TTC", "Base Export TTC"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        has_impact = (df.get("Import TTC Impact", 0).abs() > 0) | (df.get("Export TTC Impact", 0).abs() > 0)
+        derates = df[has_impact].copy() if has_impact.any() else df.head(0)
+
+        if "Date Out" in derates.columns:
+            derates["Date Out"] = derates["Date Out"].dt.strftime("%Y-%m-%d")
+        if "Date In" in derates.columns:
+            derates["Date In"] = derates["Date In"].dt.strftime("%Y-%m-%d")
+
+        derates = derates.replace({np.nan: None, np.inf: None, -np.inf: None})
+        records = derates.to_dict(orient="records")
+
+        paths = sorted(df["Path Name"].dropna().unique().tolist()) if "Path Name" in df.columns else []
+
+        fmt_actual = f"{actual_date[:4]}-{actual_date[4:6]}-{actual_date[6:8]}"
+        return {
+            "status": "ok",
+            "date": fmt_actual,
+            "requested_date": date or target_date,
+            "derates": records,
+            "total_entries": len(df),
+            "derate_count": len(records),
+            "paths": paths,
+        }
+    except Exception as e:
+        logger.error("TTCF parse error: %s", e)
+        return {"status": "error", "message": str(e), "derates": [], "date": date}
+
+
+# ---------------------------------------------------------------------------
+# OIC (Operating In Commitment) endpoint
+# ---------------------------------------------------------------------------
+@app.get("/api/oic")
+def oic_data(
+    date: Optional[str] = Query(default=None),
+):
+    import io
+    import requests as req_lib
+    from datetime import datetime as dt_cls
+
+    if date:
+        target_date = date.replace("-", "")
+    else:
+        target_date = dt_cls.now().strftime("%Y%m%d")
+
+    url = f"https://mis.nyiso.com/public/csv/OpInCommit/{target_date}OpInCommit.csv"
+    try:
+        resp = req_lib.get(url, timeout=30, verify=False)
+        if resp.status_code == 404:
+            return {"status": "no_data", "message": "No OIC data available", "data": [], "date": date}
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error("OIC fetch error: %s", e)
+        return {"status": "error", "message": str(e), "data": [], "date": date}
+
+    try:
+        df = pd.read_csv(io.StringIO(resp.text))
+        if " PTID" in df.columns:
+            df = df.drop(columns=[" PTID"])
+        if "PTID" in df.columns and df.columns.tolist().count("PTID") > 1:
+            df = df.loc[:, ~df.columns.duplicated()]
+
+        df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+        records = df.to_dict(orient="records")
+        columns = df.columns.tolist()
+
+        return {
+            "status": "ok",
+            "date": date or target_date,
+            "data": records,
+            "columns": columns,
+            "row_count": len(records),
+        }
+    except Exception as e:
+        logger.error("OIC parse error: %s", e)
+        return {"status": "error", "message": str(e), "data": [], "date": date}
+
+
+# ---------------------------------------------------------------------------
+# Congestion Stacked Bar endpoint
+# ---------------------------------------------------------------------------
+@app.get("/api/congestion-stacked")
+def congestion_stacked(
+    market: str = Query(default="DA", pattern="^(DA|RT)$"),
+    date: Optional[str] = Query(default=None),
+):
+    constr_key = "dam_limiting_constraints" if market == "DA" else "rt_limiting_constraints"
+    constr_meta = DATASET_META.get(constr_key)
+    if not constr_meta:
+        raise HTTPException(status_code=404, detail=f"Dataset {constr_key} not configured")
+
+    constr = _load_csv_safe(constr_meta["file"])
+    if constr.empty:
+        return {"status": "empty", "stacked_data": [], "constraint_names": []}
+
+    if "Date" in constr.columns and hasattr(constr["Date"].iloc[0], "strftime"):
+        constr["Date"] = constr["Date"].dt.strftime("%Y-%m-%d")
+
+    available_dates = sorted(constr["Date"].dropna().unique().tolist())
+
+    if date:
+        constr = constr[constr["Date"] == date]
+    elif available_dates:
+        constr = constr[constr["Date"] == available_dates[-1]]
+
+    if constr.empty:
+        return {"status": "empty", "stacked_data": [], "constraint_names": [], "available_dates": available_dates}
+
+    cost_col = "Constraint Cost" if "Constraint Cost" in constr.columns else "ShadowPrice"
+    name_col = "Limiting Facility" if "Limiting Facility" in constr.columns else "Constraint"
+    cont_col = "Contingency" if "Contingency" in constr.columns else None
+
+    if cont_col and cont_col in constr.columns:
+        constr["_label"] = constr[name_col].astype(str) + " | " + constr[cont_col].astype(str)
+    else:
+        constr["_label"] = constr[name_col].astype(str)
+
+    pivot = constr.pivot_table(
+        index="_label", columns="HE", values=cost_col, aggfunc="sum", fill_value=0
+    ).round(2)
+
+    he_cols = sorted(pivot.columns.tolist(), key=lambda x: int(x))
+    constraint_names = pivot.index.tolist()
+
+    stacked_data = []
+    for he in he_cols:
+        row: dict = {"HE": int(he)}
+        for name in constraint_names:
+            row[name] = float(pivot.loc[name, he])
+        stacked_data.append(row)
+
+    return {
+        "status": "ok",
+        "market": market,
+        "date": date or (available_dates[-1] if available_dates else None),
+        "stacked_data": stacked_data,
+        "constraint_names": constraint_names,
+        "available_dates": available_dates,
+    }
+
+
 @app.post("/api/etl/fetch")
 def run_etl_fetch():
     try:

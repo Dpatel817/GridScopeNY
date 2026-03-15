@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import ResolutionSelector from '../components/ResolutionSelector';
 import LineChart from '../components/LineChart';
+import StackedBarChart from '../components/StackedBarChart';
 import DatasetSection from '../components/DatasetSection';
 import SeriesSelector from '../components/SeriesSelector';
 
@@ -9,6 +10,116 @@ const DATASETS = [
   'rtfuelmix', 'gen_maint_report', 'op_in_commit',
   'dam_imer', 'rt_imer', 'btm_da_forecast', 'btm_estimated_actual',
 ];
+
+interface OicResponse {
+  status: string;
+  date: string;
+  data: Record<string, any>[];
+  columns: string[];
+  row_count: number;
+  message?: string;
+}
+
+function OICCommitmentSection() {
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    return d.toISOString().slice(0, 10);
+  });
+  const [data, setData] = useState<OicResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+
+  const fetchOic = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/oic?date=${date}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(await res.json());
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
+
+  useEffect(() => { fetchOic(); }, [fetchOic]);
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div className="section-title" style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
+        Operating In Commitment (OIC)
+      </div>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+        Generator commitment data from NYISO — units called on for reliability or economic purposes.
+      </p>
+      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <input
+          type="date"
+          className="gen-map-select"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+        />
+        <button className="pill active" onClick={fetchOic} style={{ cursor: 'pointer' }}>
+          Refresh
+        </button>
+      </div>
+      {loading && <div className="loading"><div className="spinner" /> Loading OIC data...</div>}
+      {!loading && data && data.status === 'error' && (
+        <div className="insight-card" style={{ borderLeftColor: 'var(--danger)' }}>
+          <div className="insight-title" style={{ color: 'var(--danger)' }}>OIC Fetch Error</div>
+          <div className="insight-body">{data.message || 'Failed to load OIC data.'}</div>
+        </div>
+      )}
+      {!loading && data && data.status === 'no_data' && (
+        <div className="insight-card">
+          <div className="insight-body">No OIC data available for {date}.</div>
+        </div>
+      )}
+      {!loading && data && data.status === 'ok' && data.data.length > 0 && (
+        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div
+            className="chart-card-header"
+            style={{ padding: '14px 20px', cursor: 'pointer' }}
+            onClick={() => setExpanded(!expanded)}
+          >
+            <div className="chart-card-title">
+              <span className="chevron">{expanded ? '▾' : '▸'}</span>{' '}
+              OIC Data — {data.date}
+            </div>
+            <span className="badge badge-primary">{data.row_count} commitments</span>
+          </div>
+          {expanded && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="rank-table" style={{ borderSpacing: 0, fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {data.columns.map(col => (
+                      <th key={col} style={{ whiteSpace: 'nowrap' }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.data.map((row, i) => (
+                    <tr key={i}>
+                      {data.columns.map(col => (
+                        <td key={col} style={{ whiteSpace: 'nowrap' }}>{row[col] ?? '—'}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+      {!loading && data && data.status === 'ok' && data.data.length === 0 && (
+        <div className="insight-card">
+          <div className="insight-body">No OIC commitments found for {date}.</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Generation() {
   const [resolution, setResolution] = useState('hourly');
@@ -140,18 +251,32 @@ export default function Generation() {
           </div>
 
           {chartData.length > 0 && (
-            <div className="chart-card">
-              <div className="chart-card-header">
-                <div className="chart-card-title">Generation by Fuel Type</div>
-                <span className="badge badge-primary">{resolution} · {activeFuels.length} of {allFuels.length} fuels</span>
+            <>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">Generation by Fuel Type</div>
+                  <span className="badge badge-primary">{resolution} · {activeFuels.length} of {allFuels.length} fuels</span>
+                </div>
+                <LineChart
+                  data={chartData}
+                  xKey="Date"
+                  yKeys={activeFuels}
+                  height={320}
+                />
               </div>
-              <LineChart
-                data={chartData}
-                xKey="Date"
-                yKeys={activeFuels}
-                height={320}
-              />
-            </div>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">Fuel Mix Stacked Bar</div>
+                  <span className="badge badge-primary">{activeFuels.length} fuel types</span>
+                </div>
+                <StackedBarChart
+                  data={chartData}
+                  xKey="Date"
+                  yKeys={activeFuels}
+                  height={340}
+                />
+              </div>
+            </>
           )}
 
           {fuelBreakdown.length > 0 && (
@@ -193,6 +318,8 @@ export default function Generation() {
               </div>
             </>
           )}
+
+          <OICCommitmentSection />
 
           <div className="section-container">
             <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>

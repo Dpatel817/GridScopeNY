@@ -40,6 +40,7 @@ frontend/
     components/
       Layout.tsx          # Dark sidebar with branding, sectioned nav
       LineChart.tsx       # Recharts line chart wrapper (multi-line, wide-format, robust fmtX for dates)
+      StackedBarChart.tsx # Recharts stacked bar chart (multi-series, uses same color palette)
       SeriesSelector.tsx  # Multi-select dropdown for filtering chart series (zones, fuels, etc.)
       MetricsRow.tsx      # Summary metrics cards (legacy, used by DatasetSection)
       DataTable.tsx       # Paginated data table
@@ -52,9 +53,9 @@ frontend/
       Home.tsx            # Market Overview — KPIs, workflow steps, nav tiles
       Prices.tsx          # Price Intelligence — DA/RT comparison, spread analysis
       Demand.tsx          # Demand Intelligence — forecast vs actual, error analysis
-      Generation.tsx      # Generation Mix — fuel breakdown, share analysis
-      InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis
-      Congestion.tsx      # Congestion Analysis — constraint rankings, outages, Constraint Impact Analysis drilldown
+      Generation.tsx      # Generation Mix — fuel breakdown, share analysis, stacked bar, OIC commitment data
+      InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis, TTCF derates
+      Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
     data/
       interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
       OpportunityExplorer.tsx  # Hero: Flex Opportunity Explorer with bar charts, zone detail, drivers
@@ -100,6 +101,9 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/filters/{key}/{col}` — filter options for a column
 - `GET /api/generator-map?market=DA|RT&date=YYYY-MM-DD&he=0-23` — generator geographic price data (561 mapped generators)
 - `GET /api/constraint-impact?market=DA|RT&date=&he=&facility=&contingency=&clean_only=true` — constraint impact analysis with clean print detection, congestion pivot, zonal/generator MCC impact
+- `GET /api/congestion-stacked?market=DA|RT&date=YYYY-MM-DD` — stacked bar data: constraint costs by hour, pivoted by constraint name
+- `GET /api/ttcf-derates?date=YYYY-MM-DD` — TTCF derate data from NYISO MIS (with fallback to previous day), path names normalized via path_map
+- `GET /api/oic?date=YYYY-MM-DD` — Operating In Commitment data from NYISO MIS
 - `POST /api/ai-explainer` — structured AI market analysis with drivers/caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL

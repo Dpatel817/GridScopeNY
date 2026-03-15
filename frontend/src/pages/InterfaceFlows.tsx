@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import ResolutionSelector from '../components/ResolutionSelector';
 import LineChart from '../components/LineChart';
@@ -24,6 +24,174 @@ interface InterfaceStat {
   min: number;
   avg: number;
   utilization: number;
+}
+
+interface TtcfResponse {
+  status: string;
+  date: string;
+  derates: Record<string, any>[];
+  total_entries?: number;
+  derate_count?: number;
+  paths?: string[];
+  message?: string;
+}
+
+function TTCFDeratesSection() {
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    return d.toISOString().slice(0, 10);
+  });
+  const [data, setData] = useState<TtcfResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const [pathFilter, setPathFilter] = useState('');
+
+  const fetchTtcf = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/ttcf-derates?date=${date}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(await res.json());
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
+
+  useEffect(() => { fetchTtcf(); }, [fetchTtcf]);
+
+  const filteredDerates = useMemo(() => {
+    if (!data?.derates) return [];
+    if (!pathFilter) return data.derates;
+    return data.derates.filter(d => d['Path Name'] === pathFilter);
+  }, [data, pathFilter]);
+
+  const displayCols = ['Path Name', 'Cause Of Derate', 'Date Out', 'Time Out', 'Date In', 'Time In',
+    'Import TTC Impact', 'Revised Import TTC', 'Base Import TTC',
+    'Export TTC Impact', 'Revised Export TTC', 'Base Export TTC'];
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div className="section-title" style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
+        TTCF Derates
+      </div>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+        Transfer capability reductions from NYISO's TTCF postings — shows active derates impacting import/export TTC on each interface path.
+      </p>
+      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input
+          type="date"
+          className="gen-map-select"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+        />
+        {data && data.paths && data.paths.length > 0 && (
+          <select className="gen-map-select" value={pathFilter} onChange={e => setPathFilter(e.target.value)}>
+            <option value="">All Paths</option>
+            {data.paths.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
+        <button className="pill active" onClick={fetchTtcf} style={{ cursor: 'pointer' }}>
+          Refresh
+        </button>
+      </div>
+      {loading && <div className="loading"><div className="spinner" /> Loading TTCF derate data...</div>}
+      {!loading && data && data.status === 'error' && (
+        <div className="insight-card" style={{ borderLeftColor: 'var(--danger)' }}>
+          <div className="insight-title" style={{ color: 'var(--danger)' }}>TTCF Fetch Error</div>
+          <div className="insight-body">{data.message || 'Failed to load TTCF data.'}</div>
+        </div>
+      )}
+      {!loading && data && data.status === 'no_data' && (
+        <div className="insight-card">
+          <div className="insight-body">{data.message || 'No TTCF data available for this date.'}</div>
+        </div>
+      )}
+      {!loading && data && data.status === 'ok' && (
+        <>
+          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 16 }}>
+            <div className="kpi-card accent">
+              <div className="kpi-label">Active Derates</div>
+              <div className="kpi-value">{filteredDerates.length}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Total TTCF Entries</div>
+              <div className="kpi-value">{data.total_entries || 0}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Paths With Derates</div>
+              <div className="kpi-value">
+                {data.derates ? new Set(data.derates.map(d => d['Path Name'])).size : 0}
+              </div>
+            </div>
+          </div>
+
+          {filteredDerates.length > 0 && (
+            <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div
+                className="chart-card-header"
+                style={{ padding: '14px 20px', cursor: 'pointer' }}
+                onClick={() => setExpanded(!expanded)}
+              >
+                <div className="chart-card-title">
+                  <span className="chevron">{expanded ? '▾' : '▸'}</span>{' '}
+                  TTCF Derate Details
+                </div>
+                <span className="badge badge-primary">
+                  {filteredDerates.length} derates{pathFilter ? ` · ${pathFilter}` : ''}
+                </span>
+              </div>
+              {expanded && (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="rank-table" style={{ borderSpacing: 0, fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        {displayCols.map(col => (
+                          <th key={col} style={{ whiteSpace: 'nowrap' }}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDerates.map((row, i) => (
+                        <tr key={i}>
+                          {displayCols.map(col => {
+                            const val = row[col];
+                            const isImpact = col.includes('Impact');
+                            const numVal = typeof val === 'number' ? val : parseFloat(val);
+                            return (
+                              <td
+                                key={col}
+                                style={{
+                                  whiteSpace: 'nowrap',
+                                  fontWeight: isImpact && !isNaN(numVal) && Math.abs(numVal) > 0 ? 700 : 400,
+                                  color: isImpact && !isNaN(numVal) && numVal < 0 ? 'var(--danger)' : isImpact && !isNaN(numVal) && numVal > 0 ? 'var(--accent)' : 'var(--text)',
+                                }}
+                              >
+                                {isImpact && !isNaN(numVal) ? `${numVal >= 0 ? '+' : ''}${numVal.toFixed(0)} MW` : (val ?? '—')}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {filteredDerates.length === 0 && (
+            <div className="insight-card">
+              <div className="insight-body">
+                No active derates found{pathFilter ? ` for ${pathFilter}` : ''} on {data.date}.
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function InterfaceFlows() {
@@ -292,6 +460,8 @@ export default function InterfaceFlows() {
               </div>
             </>
           )}
+
+          <TTCFDeratesSection />
 
           <div className="section-container">
             <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import ResolutionSelector from '../components/ResolutionSelector';
 import LineChart from '../components/LineChart';
+import StackedBarChart from '../components/StackedBarChart';
 import DatasetSection from '../components/DatasetSection';
 import SeriesSelector from '../components/SeriesSelector';
 
@@ -449,6 +450,97 @@ function ConstraintImpactAnalysis() {
 }
 
 
+interface StackedBarData {
+  status: string;
+  market?: string;
+  date?: string;
+  stacked_data: Record<string, any>[];
+  constraint_names: string[];
+  available_dates?: string[];
+}
+
+function CongestionStackedBar() {
+  const [market, setMarket] = useState<'DA' | 'RT'>('DA');
+  const [date, setDate] = useState('');
+  const [data, setData] = useState<StackedBarData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ market });
+      if (date) params.set('date', date);
+      const res = await fetch(`/api/congestion-stacked?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setData(json);
+      if (json.date && !date) setDate(json.date);
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [market, date]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleMarketChange = (m: 'DA' | 'RT') => {
+    if (m === market) return;
+    setDate('');
+    setData(null);
+    setMarket(m);
+  };
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div className="section-title" style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
+        Constraint Cost Stacked Bar
+      </div>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+        Hourly breakdown of constraint costs stacked by binding constraint. Each bar segment represents a distinct constraint's cost at that hour.
+      </p>
+      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div className="pill-group">
+          <span className="pill-label">MARKET:</span>
+          {(['DA', 'RT'] as const).map(m => (
+            <button key={m} className={`pill${market === m ? ' active' : ''}`} onClick={() => handleMarketChange(m)}>
+              {m === 'DA' ? 'Day Ahead' : 'Real Time'}
+            </button>
+          ))}
+        </div>
+        {data && data.available_dates && data.available_dates.length > 0 && (
+          <select className="gen-map-select" value={date} onChange={e => { setDate(e.target.value); }}>
+            {data.available_dates.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        )}
+      </div>
+      {loading && <div className="loading"><div className="spinner" /> Loading stacked bar data...</div>}
+      {!loading && data && data.stacked_data.length > 0 && (
+        <div className="chart-card">
+          <div className="chart-card-header">
+            <div className="chart-card-title">Constraint Costs by Hour</div>
+            <span className="badge badge-primary">
+              {data.constraint_names.length} constraints · {data.date}
+            </span>
+          </div>
+          <StackedBarChart
+            data={data.stacked_data}
+            xKey="HE"
+            yKeys={data.constraint_names}
+            height={360}
+            labelPrefix="$"
+          />
+        </div>
+      )}
+      {!loading && data && data.stacked_data.length === 0 && (
+        <div className="insight-card">
+          <div className="insight-body">No constraint data available for this date.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Congestion() {
   const [resolution, setResolution] = useState('hourly');
   const [showRaw, setShowRaw] = useState(false);
@@ -632,6 +724,8 @@ export default function Congestion() {
               </div>
             </div>
           )}
+
+          <CongestionStackedBar />
 
           <ConstraintImpactAnalysis />
 
