@@ -1837,6 +1837,9 @@ tr:hover td { background: var(--bg); }
   .ai-embed-prompts { border-right: none; border-bottom: 1px solid var(--border); }
   .iq-breakdown-row { grid-template-columns: 1fr; }
   .iq-table-header { flex-direction: column; }
+  .price-chart-layout { flex-direction: column; }
+  .pcc-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+  .price-kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
 }
 
 /* Interconnection Queue */
@@ -2073,4 +2076,249 @@ tr:hover td { background: var(--bg); }
   font-size: 12px;
   color: var(--text-muted);
   border-top: 1px solid var(--border);
+}
+
+/* Price Intelligence */
+.price-summary-box {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 6%, var(--bg-card)), color-mix(in srgb, var(--accent) 4%, var(--bg-card)));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0;
+  margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.price-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 3%, var(--bg));
+}
+.price-summary-icon { font-size: 16px; }
+.price-summary-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.price-summary-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg));
+  color: var(--primary);
+  margin-left: auto;
+}
+.price-summary-badge.ai {
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg));
+  color: var(--accent);
+}
+.price-summary-badge.loading {
+  background: color-mix(in srgb, var(--warning) 15%, var(--bg));
+  color: var(--warning, #f59e0b);
+}
+.price-summary-body {
+  padding: 14px 18px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+.price-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+}
+.kpi-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-weight: 500;
+}
+.price-chart-layout {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  background: var(--bg-card);
+}
+.price-chart-main {
+  flex: 1;
+  min-width: 0;
+}
+.price-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.price-view-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.price-chart-main .chart-card {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+}
+
+/* Price Chart Controls Panel */
+.pcc-panel {
+  width: 220px;
+  min-width: 220px;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 560px;
+}
+.pcc-title {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 3%, var(--bg));
+}
+.pcc-section {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.pcc-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+.pcc-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pcc-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.pcc-btn:hover { border-color: var(--primary); color: var(--primary); }
+.pcc-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.pcc-zone-actions {
+  margin-bottom: 6px;
+}
+.pcc-mini-btn {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.pcc-mini-btn:hover { background: color-mix(in srgb, var(--primary) 15%, var(--bg-card)); }
+.pcc-zone-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.pcc-zone-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 1px 0;
+}
+.pcc-zone-item input { margin: 0; width: 13px; height: 13px; accent-color: var(--primary); }
+.pcc-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.pcc-date {
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: var(--font);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  width: 100%;
+}
+.pcc-date-sep {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Price Chart Tooltip */
+.price-tooltip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  box-shadow: var(--shadow);
+  min-width: 140px;
+  max-width: 280px;
+}
+.price-tooltip-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.price-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.price-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.price-tooltip-name {
+  color: var(--text-secondary);
+  flex: 1;
+}
+.price-tooltip-val {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }

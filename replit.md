@@ -52,7 +52,7 @@ frontend/
       useDataRefresh.ts   # Data refresh hook: auto-refresh (5 min), manual refresh, cache clear
     pages/
       Home.tsx            # Market Overview — KPIs, Live System Context (RT events + oper announcements), workflow steps, nav tiles
-      Prices.tsx          # Price Intelligence — DA/RT comparison, spread analysis
+      Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards (on-peak avg, peak/low DA/RT, top DART), side chart controls, 3 view tabs (DA/RT/DART), flexible chart types (line/area/bar)
       Demand.tsx          # Demand Intelligence — forecast vs actual, error analysis
       Generation.tsx      # Generation Mix — fuel breakdown, share analysis, stacked bar, OIC commitment data
       InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis, TTCF derates
@@ -60,10 +60,16 @@ frontend/
       OpportunityExplorer.tsx  # Opportunity & Insight Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
       AIExplainer.tsx     # AI Market Analyst — Current Market Context, structured response (Summary/Trader/Battery/Signals/Caveat), two prompt groups
       InterconnectionQueue.tsx  # Interconnection Queue — KPIs, changes list, fuel/zone breakdown, searchable table with sheet tabs
+    components/
+      PriceChart.tsx      # Flexible chart (line/line+markers/stacked area/stacked bar) with custom tooltip
+      PriceChartControls.tsx  # Side control panel (zones, resolution, date range, chart type)
     data/
       zones.ts            # NYISO zone constants (A-K), isNyisoZone/filterNyisoZones helpers
       interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization
+      priceTransforms.ts  # Date/zone filtering, OPA/OFFPA/daily aggregation, DART computation, pivoting
+      priceMetrics.ts     # KPI stats (on-peak avg, peak/low with hour+zone, top DART zone)
+      priceSummary.ts     # AI summary context builder, deterministic fallback summary, API fetch
 src/
   api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)

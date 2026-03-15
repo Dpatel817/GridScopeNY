@@ -659,6 +659,68 @@ def explain(body: ExplainRequest):
 
 
 # ---------------------------------------------------------------------------
+# AI Price Summary endpoint
+# ---------------------------------------------------------------------------
+class PriceSummaryRequest(BaseModel):
+    onPeakAvgDA: str = ""
+    onPeakAvgRT: str = ""
+    peakDA: str = ""
+    peakRT: str = ""
+    lowDA: str = ""
+    lowRT: str = ""
+    topDartZone: str = ""
+    topDartAvg: str = ""
+    topDartMax: str = ""
+    dateRange: str = ""
+
+
+@app.post("/api/ai-price-summary")
+def ai_price_summary(body: PriceSummaryRequest):
+    if not OPENAI_API_KEY:
+        return {"summary": "", "status": "unconfigured"}
+
+    stats_block = (
+        f"On-Peak Avg DA LMP: ${body.onPeakAvgDA}/MWh\n"
+        f"On-Peak Avg RT LMP: ${body.onPeakAvgRT}/MWh\n"
+        f"Peak DA LMP: {body.peakDA}\n"
+        f"Peak RT LMP: {body.peakRT}\n"
+        f"Low DA LMP: {body.lowDA}\n"
+        f"Low RT LMP: {body.lowRT}\n"
+        f"Top DART Zone: {body.topDartZone} (avg ${body.topDartAvg}, max ${body.topDartMax})\n"
+        f"Date Range: {body.dateRange}"
+    )
+
+    system_prompt = (
+        "You are a senior NYISO electricity market analyst. Write a concise 3-5 sentence "
+        "market commentary paragraph about current NYISO price conditions based on the stats below. "
+        "Cover: DA vs RT price levels, strongest DART spread zone, notable peak/low hours, "
+        "and intraday shape or volatility. Use specific numbers from the data. "
+        "Do NOT use markdown formatting. No **, no #, no `. Write plain professional prose. "
+        "Do NOT invent data not provided. Keep under 120 words."
+    )
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": stats_block},
+            ],
+            max_tokens=300,
+            temperature=0.2,
+        )
+        raw = completion.choices[0].message.content or ""
+        return {"summary": _strip_markdown(raw), "status": "ok"}
+    except ImportError:
+        return {"summary": "", "status": "error"}
+    except Exception as exc:
+        logger.error("AI price summary error: %s", exc)
+        return {"summary": "", "status": "error"}
+
+
+# ---------------------------------------------------------------------------
 # TTCF Derates endpoint
 # ---------------------------------------------------------------------------
 TTCF_PATH_MAP = {

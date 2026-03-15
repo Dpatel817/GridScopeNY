@@ -1,0 +1,272 @@
+I need you to update the Price Intelligence page in my React/TypeScript NYISO dashboard.
+
+Important:
+- Focus only on the Price page and the components/hooks/utilities it depends on.
+- Do not refactor unrelated pages unless required for shared charting controls.
+- First inspect the existing codebase structure and identify the exact files responsible for:
+  - the Price page
+  - KPI cards
+  - price summary box
+  - chart rendering
+  - resolution controls
+  - zone selectors
+  - dataset fetching via useDataset/useInventory
+- Then implement the edits below end-to-end.
+
+GOALS
+
+I want the following changes on the Price page:
+
+1. Move the Price Summary box to the top of the page.
+2. Enhance the Price Summary using the app’s OpenAI integration if one already exists.
+3. Change the KPI cards so they always default to these metrics, regardless of what chart resolution is selected:
+   - On-Peak Average DA LMP
+   - On-Peak Average RT LMP
+   - Peak DA LMP and its hour
+   - Peak RT LMP and its hour
+   - Low DA LMP and its hour
+   - Low RT LMP and its hour
+   - Top Zone for DART Spread
+4. Replace the current resolution bar above the charts with a side control panel called something like:
+   - “Chart Controls”
+   - or “Charting UI Controls”
+5. Add richer chart controls:
+   - zone selection (single, multi-select, or all zones)
+   - aggregation/resolution selection:
+     - Hourly
+     - On-Peak Average
+     - Off-Peak Average
+     - Daily Average
+   - date range selection:
+     - today only by default
+     - custom date range
+     - option for all dates
+   - chart type selection:
+     - line chart with markers
+     - regular line chart
+     - stacked area chart
+     - stacked bar chart
+6. Improve hover behavior on the price line chart so hovering a timestamp shows all visible zone values clearly at that timestamp.
+7. Rework the DART Spread graph so it follows the same charting/control model as the main line chart, or combine the behavior so the user effectively interacts with it in the same way.
+8. Keep the UI clean, modern, and consistent with the current design language.
+
+DETAILS / REQUIRED BEHAVIOR
+
+PART 1 — Price Summary at the top
+Move the “Price Summary” box to the top section of the Price page, above the KPI cards and charts.
+
+Enhance the summary:
+- If there is already an OpenAI/API-based summary generation utility in the project, reuse it.
+- If there is no existing integration, create a graceful architecture hook for it but do not block the page if AI is unavailable.
+- Summary should be grounded in the loaded price data and should never hallucinate unsupported claims.
+- It should produce a concise market commentary paragraph, for example:
+  - average DA vs RT conditions
+  - strongest DART zone
+  - notable peak/low hours
+  - broad intraday shape or volatility
+- Add fallback deterministic summary text if the AI summary fails or is disabled.
+
+Implementation guidance:
+- Prefer a helper like:
+  - buildPriceSummaryContext(...)
+  - generatePriceSummary(...)
+- If OpenAI exists already, pass structured stats rather than raw massive data if possible.
+- Add loading/error/stale states for the summary box if needed.
+
+PART 2 — KPI card logic
+Replace the current KPI logic.
+
+The KPI cards should always be based on default on-peak or absolute daily metrics, NOT on the currently selected chart resolution.
+
+Required KPI metrics:
+1. On-Peak Avg DA LMP
+2. On-Peak Avg RT LMP
+3. Peak DA LMP + HE/hour + zone if available
+4. Peak RT LMP + HE/hour + zone if available
+5. Low DA LMP + HE/hour + zone if available
+6. Low RT LMP + HE/hour + zone if available
+7. Top Zone for DART Spread
+
+Notes:
+- These should be computed from the relevant default base datasets, not from whatever transformed chart view is active.
+- If the page uses zonal DA and RT datasets, compute these from those source datasets directly.
+- For on-peak use HE 7–22 unless the project already defines it differently.
+- DART = DA - RT unless the codebase already defines it differently.
+- Top Zone for DART Spread should remain present and should still work even if the chart is filtered to a subset of zones.
+
+UI guidance:
+- Keep cards visually consistent with the current KPI style.
+- It is okay to expand the KPI grid if more cards are needed.
+- If space gets tight, use a responsive two-row KPI layout rather than cramming.
+
+PART 3 — Replace top resolution bar with side “Chart Controls”
+The current resolution bar appears above the charts. Remove that top control layout and instead create a side panel associated with the main price chart.
+
+Create a dedicated chart control panel component, for example:
+- PriceChartControls.tsx
+
+This panel should include:
+1. Zone selector
+   - multi-select
+   - “All Zones” shortcut
+   - default to all zones
+2. Resolution selector
+   - Hourly
+   - OPA
+   - OFFPA
+   - Daily
+3. Date range selector
+   - Today (default)
+   - Custom start/end date
+   - All Dates
+4. Chart type selector
+   - Line + markers
+   - Line
+   - Stacked area
+   - Stacked bar
+5. Optional toggles if helpful:
+   - show legend
+   - smooth lines on/off
+   - normalize off by default
+
+Use existing design tokens/styling if available.
+
+Layout preference:
+- On desktop: controls panel on the side of the main chart card
+- On smaller widths: controls collapse above or below the chart
+- Keep this implementation production-like, not hacky
+
+PART 4 — Main DA/RT price chart behavior
+Update the main price chart so it supports the new controls.
+
+Required behavior:
+- User can view one or more selected zones
+- User can change aggregation/resolution:
+  - Hourly
+  - OPA
+  - OFFPA
+  - Daily average
+- User can change date range
+- User can switch chart type between:
+  - line with markers
+  - line without markers
+  - stacked area
+  - stacked bar
+
+Important:
+- Make sure each chart type is actually mapped correctly to the chosen data structure.
+- If stacked visualizations only make sense for certain transformed data shapes, handle that cleanly.
+- If stacked chart for some dataset combination is misleading, either:
+  - implement it safely, or
+  - gracefully disable it with a helpful note in the UI.
+
+Hover interaction:
+- For line charts, hovering a timestamp should display all visible series values at that timestamp.
+- Tooltip should clearly show:
+  - timestamp/date
+  - each visible zone
+  - value
+- Tooltip should be readable and styled consistently.
+- If markers mode is selected, ensure hovered point markers are visually obvious.
+
+PART 5 — DART Spread chart rework
+The DART Spread graph should be updated to follow the same chart-control logic as the main chart.
+
+Preferred approach:
+- Rebuild the DART section using the same shared chart component / control state model as the main chart.
+- Keep it as one graph area rather than multiple disconnected chart experiences.
+
+Possible acceptable implementations:
+A. A second chart using the same control state model
+B. A toggle in the main chart section that switches between:
+   - DA/RT zonal LMP view
+   - DART spread view
+C. Shared controls with separate chart cards
+
+Whichever is cleanest in the current architecture is fine.
+
+For DART:
+- DART should be computed from DA - RT if not already present
+- It should respect:
+  - selected zones
+  - selected resolution
+  - selected date range
+  - selected chart type where appropriate
+- Tooltip behavior should match the main chart experience
+
+PART 6 — Data transformation requirements
+Please inspect the current dataset structure and create clean reusable transformers.
+
+I want reusable utilities for:
+- filtering by date range
+- filtering by selected zones
+- computing OPA
+- computing OFFPA
+- computing daily averages
+- computing DART by zone
+- computing KPI stats
+- computing peak/low hour metrics
+- building AI summary context
+
+Suggested utility files if needed:
+- priceTransforms.ts
+- priceMetrics.ts
+- priceSummary.ts
+- chartOptions.ts
+
+Be careful with:
+- timestamp parsing
+- zone naming consistency
+- missing/null values
+- DA vs RT alignment by timestamp
+- timezone assumptions
+- hour-ending logic for OPA/OFFPA
+
+PART 7 — Design / UX expectations
+Keep the UI close to the current aesthetic shown on the Price page:
+- clean card layout
+- soft borders
+- rounded corners
+- modern analytics dashboard feel
+- readable typography
+- clear legend labels
+
+Specific UX requests:
+- Summary box at top
+- KPI cards directly below summary
+- Main chart section with side control panel
+- DART chart updated to match charting system
+- Avoid clutter
+- Do not make the page feel overly “developer tool” or raw
+
+PART 8 — OpenAI integration
+If the app already has OpenAI integration:
+- locate it
+- reuse it properly
+- add a price-summary-specific summarization path
+
+If there is not an existing integration:
+- create the summary generation architecture in a way that can easily plug into one later
+- but include a deterministic fallback summary so the page still works immediately
+
+The summary should be based on structured computed stats like:
+- DA OPA avg
+- RT OPA avg
+- max/min DA
+- max/min RT
+- top DART zone
+- volatility notes
+- date range covered
+
+Avoid sending unnecessary raw data to the model if an LLM integration exists.
+
+PART 9 — Deliverables I want from you
+After implementing, show me:
+1. Which files you changed
+2. Which new files you added
+3. The key code snippets
+4. Any commands I need to run
+5. Any assumptions you made
+
+Please do not stop to ask me follow-up questions unless absolutely necessary.
+Make reasonable assumptions from the current codebase and implement the cleanest working version.
