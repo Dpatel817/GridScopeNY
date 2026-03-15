@@ -55,7 +55,7 @@ frontend/
       Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards (on-peak avg, peak/low DA/RT, top DART), side chart controls, 3 view tabs (DA/RT/DART), flexible chart types (line/area/bar)
       Demand.tsx          # Demand Intelligence — AI summary, 10 KPI cards (forecast/actual peaks+lows, error metrics), side chart controls, 3 view tabs (Zonal/FvA/Error)
       Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC section
-      InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis, TTCF derates
+      InterfaceFlows.tsx  # Interface Flows — AI summary, 8 KPI cards (on-peak totals, peak flows, most active, top internal/external, count), side chart controls with class/interface/resolution/date/chart-type, flow chart, interface summary table, TTCF Derates section
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
       OpportunityExplorer.tsx  # Opportunity & Insight Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
       AIExplainer.tsx     # AI Market Analyst — Current Market Context, structured response (Summary/Trader/Battery/Signals/Caveat), two prompt groups
@@ -77,6 +77,9 @@ frontend/
       generationTransforms.ts # Generation fuel filtering, deduped pivoting, fuel breakdown computation
       generationMetrics.ts    # Generation KPI stats (on-peak total, peak/low gen, fuel shares, renewable%)
       generationSummary.ts    # AI generation summary context builder, deterministic fallback, API fetch
+      interfaceTransforms.ts  # Interface flow date/class/interface filtering, resolution aggregation, pivoting
+      interfaceMetrics.ts     # Interface flow KPI stats (on-peak totals, peak flows, most active, top internal/external)
+      interfaceSummary.ts     # AI flow summary context builder, deterministic fallback, API fetch
 src/
   api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)
@@ -125,6 +128,7 @@ CSS classes: `.series-selector-*` in `index.css`
 - `POST /api/ai-price-summary` — AI-generated price market commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-demand-summary` — AI-generated demand/load commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-generation-summary` — AI-generated generation mix commentary (gpt-4o-mini, max 300 tokens)
+- `POST /api/ai-flow-summary` — AI-generated interface flow commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-explainer` — structured AI market analysis: Summary, Trader Takeaways, Battery Strategist Takeaways, Key Signals, Caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/refresh` — full data refresh: ETL fetch + process + cache clear (concurrency-guarded)

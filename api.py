@@ -779,6 +779,66 @@ def ai_generation_summary(body: GenerationSummaryRequest):
         return {"summary": "", "status": "error"}
 
 
+class FlowSummaryRequest(BaseModel):
+    onPeakAvgInternal: str = ""
+    onPeakAvgExternal: str = ""
+    peakPositive: str = ""
+    peakNegative: str = ""
+    mostActive: str = ""
+    topInternal: str = ""
+    topExternal: str = ""
+    activeCount: str = ""
+    dateRange: str = ""
+
+
+@app.post("/api/ai-flow-summary")
+def ai_flow_summary(body: FlowSummaryRequest):
+    if not OPENAI_API_KEY:
+        return {"summary": "", "status": "unconfigured"}
+
+    stats_block = (
+        f"On-Peak Avg Internal Flow: {body.onPeakAvgInternal}\n"
+        f"On-Peak Avg External Flow: {body.onPeakAvgExternal}\n"
+        f"Peak Positive Flow: {body.peakPositive}\n"
+        f"Peak Negative Flow: {body.peakNegative}\n"
+        f"Most Active Interface: {body.mostActive}\n"
+        f"Top Internal Interface: {body.topInternal}\n"
+        f"Top External Interface: {body.topExternal}\n"
+        f"Active Interfaces: {body.activeCount}\n"
+        f"Date Range: {body.dateRange}"
+    )
+
+    system_prompt = (
+        "You are a senior NYISO electricity market analyst. Write a concise 3-5 sentence "
+        "market commentary paragraph about current NYISO interface flow conditions based on the stats below. "
+        "Cover: most active transfer paths, internal vs external flow pressure, "
+        "peak flow magnitudes, import/export dynamics, and whether flows are concentrated or broad-based. "
+        "Use specific numbers from the data. "
+        "Do NOT use markdown formatting. No **, no #, no `. Write plain professional prose. "
+        "Do NOT invent data not provided. Keep under 120 words."
+    )
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"NYISO Interface Flow Statistics:\n{stats_block}"},
+            ],
+            max_tokens=300,
+            temperature=0.2,
+        )
+        raw = completion.choices[0].message.content or ""
+        return {"summary": _strip_markdown(raw), "status": "ok"}
+    except ImportError:
+        return {"summary": "", "status": "error"}
+    except Exception as exc:
+        logger.error("AI flow summary error: %s", exc)
+        return {"summary": "", "status": "error"}
+
+
 class DemandSummaryRequest(BaseModel):
     onPeakAvgForecast: str = ""
     onPeakAvgActual: str = ""

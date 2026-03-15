@@ -1,30 +1,23 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDataset } from '../hooks/useDataset';
-import ResolutionSelector from '../components/ResolutionSelector';
-import LineChart from '../components/LineChart';
 import DatasetSection from '../components/DatasetSection';
-import SeriesSelector from '../components/SeriesSelector';
-import { getInterfaceMeta, getDisplayName } from '../data/interfaceMetadata';
-import type { InterfaceMeta } from '../data/interfaceMetadata';
+import PriceChart from '../components/PriceChart';
+import type { FlowRow, ClassFilter, InterfaceInfo, InterfaceStat, ChartType, Resolution, DateRange } from '../data/interfaceTransforms';
+import {
+  detectFlowColumns, extractInterfaces, getAvailableDates,
+  filterByDateRange, filterByClass, pivotFlows,
+  computeInterfaceStats,
+} from '../data/interfaceTransforms';
+import { computeFlowKPIs } from '../data/interfaceMetrics';
+import type { FlowKPIs } from '../data/interfaceMetrics';
+import {
+  buildFlowSummaryContext, deterministicFlowSummary, fetchAIFlowSummary,
+} from '../data/interfaceSummary';
 
 const DATASETS = [
   'external_limits_flows', 'atc_ttc', 'ttcf',
   'par_flows', 'erie_circulation_da', 'erie_circulation_rt',
 ];
-
-type ClassFilter = 'all' | 'Internal' | 'External';
-
-interface InterfaceStat {
-  raw: string;
-  display: string;
-  meta: InterfaceMeta;
-  total: number;
-  count: number;
-  max: number;
-  min: number;
-  avg: number;
-  utilization: number;
-}
 
 interface TtcfResponse {
   status: string;
@@ -194,114 +187,273 @@ function TTCFDeratesSection() {
   );
 }
 
+const RESOLUTIONS: { key: Resolution; label: string }[] = [
+  { key: 'hourly', label: 'Hourly' },
+  { key: 'on_peak', label: 'On-Peak Avg' },
+  { key: 'off_peak', label: 'Off-Peak Avg' },
+  { key: 'daily', label: 'Daily Avg' },
+];
+
+const CHART_TYPES: { key: ChartType; label: string }[] = [
+  { key: 'line-markers', label: 'Line + Markers' },
+  { key: 'line', label: 'Line' },
+  { key: 'area', label: 'Stacked Area' },
+  { key: 'bar', label: 'Stacked Bar' },
+];
+
+const DATE_RANGES: { key: DateRange; label: string }[] = [
+  { key: 'today', label: 'Latest Day' },
+  { key: 'custom', label: 'Custom Range' },
+  { key: 'all', label: 'All Dates' },
+];
+
+interface FlowControlsProps {
+  classFilter: ClassFilter;
+  onClassFilterChange: (c: ClassFilter) => void;
+  internalCount: number;
+  externalCount: number;
+  interfaces: string[];
+  selectedInterfaces: string[];
+  onInterfacesChange: (s: string[]) => void;
+  resolution: Resolution;
+  onResolutionChange: (r: Resolution) => void;
+  dateRange: DateRange;
+  onDateRangeChange: (r: DateRange) => void;
+  startDate: string;
+  endDate: string;
+  onStartDateChange: (d: string) => void;
+  onEndDateChange: (d: string) => void;
+  availableDates: string[];
+  chartType: ChartType;
+  onChartTypeChange: (t: ChartType) => void;
+}
+
+function FlowChartControls({
+  classFilter, onClassFilterChange, internalCount, externalCount,
+  interfaces, selectedInterfaces, onInterfacesChange,
+  resolution, onResolutionChange,
+  dateRange, onDateRangeChange,
+  startDate, endDate, onStartDateChange, onEndDateChange, availableDates,
+  chartType, onChartTypeChange,
+}: FlowControlsProps) {
+  const allSelected = selectedInterfaces.length === interfaces.length;
+  return (
+    <div className="pcc-panel">
+      <div className="pcc-title">Chart Controls</div>
+
+      <div className="pcc-section">
+        <div className="pcc-label">Class</div>
+        <div className="pcc-btn-group">
+          {([['all', `All (${internalCount + externalCount})`], ['Internal', `Internal (${internalCount})`], ['External', `External (${externalCount})`]] as [ClassFilter, string][]).map(([val, lbl]) => (
+            <button key={val} className={`pcc-btn${classFilter === val ? ' active' : ''}`} onClick={() => onClassFilterChange(val)}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pcc-section">
+        <div className="pcc-label">Interfaces</div>
+        <div className="pcc-zone-actions">
+          <button
+            className={`pcc-mini-btn${allSelected ? ' active' : ''}`}
+            onClick={() => onInterfacesChange(allSelected ? [] : [...interfaces])}
+          >
+            {allSelected ? 'Clear' : 'All'}
+          </button>
+        </div>
+        <div className="pcc-zone-grid">
+          {interfaces.map(s => (
+            <label key={s} className="pcc-zone-item">
+              <input
+                type="checkbox"
+                checked={selectedInterfaces.includes(s)}
+                onChange={() => {
+                  onInterfacesChange(
+                    selectedInterfaces.includes(s)
+                      ? selectedInterfaces.filter(x => x !== s)
+                      : [...selectedInterfaces, s]
+                  );
+                }}
+              />
+              <span>{s}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="pcc-section">
+        <div className="pcc-label">Resolution</div>
+        <div className="pcc-btn-group">
+          {RESOLUTIONS.map(r => (
+            <button key={r.key} className={`pcc-btn${resolution === r.key ? ' active' : ''}`} onClick={() => onResolutionChange(r.key)}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pcc-section">
+        <div className="pcc-label">Date Range</div>
+        <div className="pcc-btn-group">
+          {DATE_RANGES.map(d => (
+            <button key={d.key} className={`pcc-btn${dateRange === d.key ? ' active' : ''}`} onClick={() => onDateRangeChange(d.key)}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+        {dateRange === 'custom' && availableDates.length > 0 && (
+          <div className="pcc-date-inputs">
+            <input type="date" className="pcc-date" value={startDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onStartDateChange(e.target.value)} />
+            <span className="pcc-date-sep">to</span>
+            <input type="date" className="pcc-date" value={endDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onEndDateChange(e.target.value)} />
+          </div>
+        )}
+      </div>
+
+      <div className="pcc-section">
+        <div className="pcc-label">Chart Type</div>
+        <div className="pcc-btn-group">
+          {CHART_TYPES.map(t => (
+            <button key={t.key} className={`pcc-btn${chartType === t.key ? ' active' : ''}`} onClick={() => onChartTypeChange(t.key)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function InterfaceFlows() {
-  const [resolution, setResolution] = useState('hourly');
-  const [showRaw, setShowRaw] = useState(false);
+  const [resolution, setResolution] = useState<Resolution>('hourly');
+  const [dateRange, setDateRange] = useState<DateRange>('today');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedInterfaces, setSelectedInterfaces] = useState<string[]>([]);
   const [classFilter, setClassFilter] = useState<ClassFilter>('all');
+  const [showRaw, setShowRaw] = useState(false);
+  const [highlightedInterface, setHighlightedInterface] = useState<string | null>(null);
 
-  const { data: flowData, loading, error } = useDataset('external_limits_flows', resolution);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { allDisplayNames, kpis, chartData, interfaceStats, internalCount, externalCount } = useMemo(() => {
-    const records = flowData?.data || [];
-    if (!records.length) return {
-      allDisplayNames: [] as string[], kpis: {} as any, chartData: [] as any[],
-      interfaceStats: [] as InterfaceStat[], internalCount: 0, externalCount: 0,
-    };
+  const { data: flowData, loading, error } = useDataset('external_limits_flows', 'raw');
 
-    const flowCol = records[0]?.Flow !== undefined ? 'Flow' : 'Flow (MW)';
-    const nameCol = records[0]?.Interface !== undefined ? 'Interface' : 'Interface Name';
+  const rows: FlowRow[] = useMemo(
+    () => (flowData?.data || []) as FlowRow[],
+    [flowData]
+  );
 
-    const flows = records.map((r: any) => Number(r[flowCol] || 0)).filter((v: number) => !isNaN(v));
-    const avgFlow = flows.length ? flows.reduce((a: number, b: number) => a + b, 0) / flows.length : null;
-    const maxFlow = flows.length ? Math.max(...flows) : null;
-    const minFlow = flows.length ? Math.min(...flows) : null;
+  const { nameCol, flowCol } = useMemo(() => detectFlowColumns(rows), [rows]);
 
-    const byInterface: Record<string, { total: number; count: number; max: number; min: number; raw: string }> = {};
-    for (const r of records) {
-      const raw = String(r[nameCol] || 'Unknown');
-      const flow = Number(r[flowCol] || 0);
-      if (!byInterface[raw]) byInterface[raw] = { total: 0, count: 0, max: -Infinity, min: Infinity, raw };
-      byInterface[raw].total += flow;
-      byInterface[raw].count++;
-      byInterface[raw].max = Math.max(byInterface[raw].max, flow);
-      byInterface[raw].min = Math.min(byInterface[raw].min, flow);
-    }
+  const allInterfaces: InterfaceInfo[] = useMemo(
+    () => extractInterfaces(rows, nameCol),
+    [rows, nameCol]
+  );
 
-    const rawToDisplay: Record<string,string> = {};
-    const displayToRaw: Record<string,string> = {};
-    for (const raw of Object.keys(byInterface)) {
-      const dn = getDisplayName(raw);
-      rawToDisplay[raw] = dn;
-      displayToRaw[dn] = raw;
-    }
+  const availableDates = useMemo(() => getAvailableDates(rows), [rows]);
 
-    let stats: InterfaceStat[] = Object.values(byInterface)
-      .map(s => {
-        const meta = getInterfaceMeta(s.raw);
-        return {
-          raw: s.raw,
-          display: meta.display,
-          meta,
-          total: s.total,
-          count: s.count,
-          max: s.max,
-          min: s.min,
-          avg: s.total / s.count,
-          utilization: Math.abs(s.max),
-        };
-      })
-      .sort((a, b) => b.utilization - a.utilization);
+  const internalCount = useMemo(
+    () => allInterfaces.filter(i => i.meta.classification === 'Internal').length,
+    [allInterfaces]
+  );
+  const externalCount = useMemo(
+    () => allInterfaces.filter(i => i.meta.classification === 'External').length,
+    [allInterfaces]
+  );
 
-    const internalCount = stats.filter(s => s.meta.classification === 'Internal').length;
-    const externalCount = stats.filter(s => s.meta.classification === 'External').length;
+  const visibleInterfaces = useMemo(() => {
+    if (classFilter === 'all') return allInterfaces;
+    return allInterfaces.filter(i => i.meta.classification === classFilter);
+  }, [allInterfaces, classFilter]);
 
-    if (classFilter !== 'all') {
-      stats = stats.filter(s => s.meta.classification === classFilter);
-    }
-
-    const allDN = stats.map(s => s.display);
-    const active = selectedInterfaces.length > 0
-      ? selectedInterfaces.filter((d: string) => allDN.includes(d))
-      : allDN.slice(0, 8);
-
-    const activeRawNames = active.map((d: string) => displayToRaw[d]).filter(Boolean);
-
-    const pivoted: Record<string, any> = {};
-    for (const r of records) {
-      const raw = String(r[nameCol] || '');
-      if (!activeRawNames.includes(raw)) continue;
-      const display = rawToDisplay[raw];
-      const dateKey = r.Date || r['Time Stamp'] || '';
-      const key = `${dateKey}_${r.HE || ''}`;
-      if (!pivoted[key]) pivoted[key] = { Date: dateKey };
-      pivoted[key][display] = Number(r[flowCol] || 0);
-    }
-    const chartData = Object.values(pivoted).sort((a: any, b: any) => a.Date < b.Date ? -1 : 1);
-
-    return {
-      allDisplayNames: allDN,
-      kpis: { avgFlow, maxFlow, minFlow, interfaceCount: stats.length, mostStressed: stats[0]?.display },
-      chartData: chartData.length > 1 ? chartData : [],
-      interfaceStats: stats,
-      internalCount,
-      externalCount,
-    };
-  }, [flowData, selectedInterfaces, classFilter]);
+  const visibleDisplayNames = useMemo(
+    () => visibleInterfaces.map(i => i.display),
+    [visibleInterfaces]
+  );
 
   useEffect(() => {
-    setSelectedInterfaces([]);
+    if (visibleDisplayNames.length > 0 && selectedInterfaces.length === 0) {
+      setSelectedInterfaces(visibleDisplayNames.slice(0, 8));
+    }
+  }, [visibleDisplayNames]);
+
+  useEffect(() => {
+    setSelectedInterfaces(visibleDisplayNames.slice(0, 8));
   }, [classFilter]);
 
-  useEffect(() => {
-    if (allDisplayNames.length > 0 && selectedInterfaces.length === 0) {
-      setSelectedInterfaces(allDisplayNames.slice(0, 8));
-    }
-  }, [allDisplayNames]);
+  const kpis: FlowKPIs = useMemo(
+    () => computeFlowKPIs(rows),
+    [rows]
+  );
 
-  const activeForChart = selectedInterfaces.length > 0
-    ? selectedInterfaces.filter(i => allDisplayNames.includes(i))
-    : allDisplayNames.slice(0, 8);
+  const fallbackSummary = useMemo(() => deterministicFlowSummary(kpis), [kpis]);
+
+  useEffect(() => {
+    if (aiRequestedRef.current) return;
+    if (loading || !rows.length) return;
+    aiRequestedRef.current = true;
+    setAiLoading(true);
+    const ctx = buildFlowSummaryContext(kpis, 'Latest available data');
+    fetchAIFlowSummary(ctx).then(s => {
+      if (s) setAiSummary(s);
+    }).finally(() => setAiLoading(false));
+  }, [loading, rows.length, kpis]);
+
+  const dateFiltered = useMemo(
+    () => filterByDateRange(rows, dateRange, startDate, endDate),
+    [rows, dateRange, startDate, endDate]
+  );
+
+  const classFiltered = useMemo(
+    () => filterByClass(dateFiltered, classFilter, nameCol),
+    [dateFiltered, classFilter, nameCol]
+  );
+
+  const chartData = useMemo(
+    () => pivotFlows(classFiltered, selectedInterfaces, nameCol, flowCol, resolution),
+    [classFiltered, selectedInterfaces, nameCol, flowCol, resolution]
+  );
+
+  const interfaceStats: InterfaceStat[] = useMemo(
+    () => computeInterfaceStats(dateFiltered, nameCol, flowCol, classFilter),
+    [dateFiltered, nameCol, flowCol, classFilter]
+  );
+
+  const activeForChart = selectedInterfaces.filter(i => visibleDisplayNames.includes(i));
+
+  const hasNegative = useMemo(() => {
+    for (const row of chartData) {
+      for (const key of Object.keys(row)) {
+        if (key === 'Date') continue;
+        if (Number(row[key]) < 0) return true;
+      }
+    }
+    return false;
+  }, [chartData]);
+
+  const effectiveChartType: ChartType = (chartType === 'area' || chartType === 'bar') && hasNegative
+    ? 'line' : chartType;
+
+  const stackWarning = (chartType === 'area' || chartType === 'bar') && hasNegative;
+
+  const displaySummary = aiSummary || fallbackSummary;
+
+  const fmtFlow = (v: number) => Math.round(v).toLocaleString();
+
+  const handleRowClick = (display: string) => {
+    if (highlightedInterface === display) {
+      setHighlightedInterface(null);
+      return;
+    }
+    setHighlightedInterface(display);
+    if (!selectedInterfaces.includes(display)) {
+      setSelectedInterfaces([...selectedInterfaces, display]);
+    }
+  };
 
   return (
     <div className="page">
@@ -312,29 +464,15 @@ export default function InterfaceFlows() {
         </p>
       </div>
 
-      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <ResolutionSelector value={resolution} onChange={setResolution} />
-
-        <div className="pill-group">
-          <span className="pill-label">CLASS:</span>
-          {([['all', 'All'], ['Internal', 'Internal'], ['External', 'External']] as const).map(([val, lbl]) => (
-            <button key={val} className={`pill${classFilter === val ? ' active' : ''}`} onClick={() => setClassFilter(val as ClassFilter)}>
-              {lbl}
-              <span style={{ marginLeft: 4, opacity: 0.6, fontSize: 11 }}>
-                {val === 'all' ? `${internalCount + externalCount}` : val === 'Internal' ? `${internalCount}` : `${externalCount}`}
-              </span>
-            </button>
-          ))}
+      <div className="price-summary-box">
+        <div className="price-summary-header">
+          <span className="price-summary-icon">&#9889;</span>
+          <span className="price-summary-title">Flow Summary</span>
+          {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
+          {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
+          {!aiLoading && !aiSummary && <span className="price-summary-badge">Deterministic</span>}
         </div>
-
-        {allDisplayNames.length > 0 && (
-          <SeriesSelector
-            label="Interfaces"
-            allSeries={allDisplayNames}
-            selected={selectedInterfaces}
-            onChange={setSelectedInterfaces}
-          />
-        )}
+        <div className="price-summary-body">{displaySummary}</div>
       </div>
 
       {error && (
@@ -347,137 +485,187 @@ export default function InterfaceFlows() {
       {loading && <div className="loading"><div className="spinner" /> Loading flow data...</div>}
 
       {!loading && (
-        <>
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-            <div className="kpi-card accent">
-              <div className="kpi-label">Most Active Interface</div>
-              <div className="kpi-value" style={{ fontSize: '1.1rem' }}>{kpis.mostStressed || '—'}</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Max Flow</div>
-              <div className="kpi-value">
-                {kpis.maxFlow != null ? <>{kpis.maxFlow.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Min Flow</div>
-              <div className="kpi-value">
-                {kpis.minFlow != null ? <>{kpis.minFlow.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Active Interfaces</div>
-              <div className="kpi-value">{kpis.interfaceCount || '—'}</div>
+        <div className="kpi-grid price-kpi-grid">
+          <div className="kpi-card">
+            <div className="kpi-label">On-Peak Avg Internal</div>
+            <div className="kpi-value">
+              {kpis.onPeakAvgInternal != null ? <>{fmtFlow(kpis.onPeakAvgInternal)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
           </div>
+          <div className="kpi-card">
+            <div className="kpi-label">On-Peak Avg External</div>
+            <div className="kpi-value">
+              {kpis.onPeakAvgExternal != null ? <>{fmtFlow(kpis.onPeakAvgExternal)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Positive Flow</div>
+            <div className="kpi-value">
+              {kpis.peakPositive ? <>{fmtFlow(kpis.peakPositive.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.iface} · HE{kpis.peakPositive.he} · {kpis.peakPositive.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Negative Flow</div>
+            <div className="kpi-value">
+              {kpis.peakNegative ? (
+                <span style={{ color: kpis.peakNegative.value < -500 ? 'var(--danger)' : 'var(--text)' }}>
+                  {fmtFlow(kpis.peakNegative.value)}<span className="kpi-unit">MW</span>
+                </span>
+              ) : '—'}
+            </div>
+            {kpis.peakNegative && <div className="kpi-sub">{kpis.peakNegative.iface} · HE{kpis.peakNegative.he} · {kpis.peakNegative.date}</div>}
+          </div>
+          <div className="kpi-card accent">
+            <div className="kpi-label">Most Active Interface</div>
+            <div className="kpi-value" style={{ fontSize: '1rem' }}>{kpis.mostActive || '—'}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Top Internal Interface</div>
+            <div className="kpi-value" style={{ fontSize: '1rem' }}>{kpis.topInternal || '—'}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Top External Interface</div>
+            <div className="kpi-value" style={{ fontSize: '1rem' }}>{kpis.topExternal || '—'}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Active Interfaces</div>
+            <div className="kpi-value">{kpis.activeCount || '—'}</div>
+            <div className="kpi-sub">{internalCount} internal · {externalCount} external</div>
+          </div>
+        </div>
+      )}
 
-          {chartData.length > 0 && (
+      {!loading && (
+        <div className="price-chart-layout">
+          <FlowChartControls
+            classFilter={classFilter}
+            onClassFilterChange={setClassFilter}
+            internalCount={internalCount}
+            externalCount={externalCount}
+            interfaces={visibleDisplayNames}
+            selectedInterfaces={selectedInterfaces}
+            onInterfacesChange={setSelectedInterfaces}
+            resolution={resolution}
+            onResolutionChange={setResolution}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            availableDates={availableDates}
+            chartType={chartType}
+            onChartTypeChange={setChartType}
+          />
+
+          <div className="price-chart-main">
+            <div className="price-view-tabs">
+              <span className="price-view-info">
+                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
+                {' · '}{activeForChart.length}/{visibleDisplayNames.length} interfaces
+                {classFilter !== 'all' && ` · ${classFilter}`}
+                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
+              </span>
+            </div>
+
+            {stackWarning && (
+              <div style={{
+                padding: '8px 14px', background: 'color-mix(in srgb, var(--warning) 12%, transparent)',
+                border: '1px solid var(--warning)', borderRadius: 8, marginBottom: 8, fontSize: 12,
+                color: 'var(--text-muted)'
+              }}>
+                Stacked charts disabled — data contains negative flows. Showing line chart instead.
+              </div>
+            )}
+
             <div className="chart-card">
               <div className="chart-card-header">
                 <div className="chart-card-title">Interface Flows Over Time</div>
-                <span className="badge badge-primary">
-                  {resolution} · {activeForChart.length} of {allDisplayNames.length} interfaces
-                  {classFilter !== 'all' && ` · ${classFilter}`}
-                </span>
+                <span className="badge badge-primary">{chartData.length} points</span>
               </div>
-              <LineChart
+              <PriceChart
                 data={chartData}
                 xKey="Date"
                 yKeys={activeForChart}
-                height={320}
+                chartType={effectiveChartType}
+                height={380}
+                valuePrefix=""
+                valueSuffix=" MW"
               />
             </div>
-          )}
-
-          {interfaceStats.length > 0 && (
-            <>
-              <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div className="chart-card-title">
-                    Interface Summary ({interfaceStats.length} interfaces{classFilter !== 'all' ? ` · ${classFilter} only` : ''})
-                  </div>
-                </div>
-                <table className="rank-table" style={{ borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Interface</th>
-                      <th>Class</th>
-                      <th>Region / Path</th>
-                      <th>Direction</th>
-                      <th>Avg Flow (MW)</th>
-                      <th>Max Flow (MW)</th>
-                      <th>Min Flow (MW)</th>
-                      <th>Observations</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {interfaceStats.map(s => (
-                      <tr key={s.raw}>
-                        <td style={{ fontWeight: 600 }}>{s.display}</td>
-                        <td>
-                          <span className={`intf-class-tag ${s.meta.classification === 'Internal' ? 'intf-internal' : 'intf-external'}`}>
-                            {s.meta.classification}
-                          </span>
-                        </td>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.region}</td>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.direction}</td>
-                        <td>{s.avg.toFixed(1)}</td>
-                        <td style={{ fontWeight: 600, color: s.max > 2000 ? 'var(--danger)' : 'var(--text)' }}>{s.max.toFixed(0)}</td>
-                        <td>{s.min.toFixed(0)}</td>
-                        <td>{s.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="insight-card">
-                <div className="insight-title">Flow Summary</div>
-                <div className="insight-body">
-                  {(() => {
-                    const topInternal = interfaceStats.find(s => s.meta.classification === 'Internal');
-                    const topExternal = interfaceStats.find(s => s.meta.classification === 'External');
-                    return (
-                      <>
-                        {topInternal && (
-                          <>
-                            <strong>{topInternal.display}</strong> is the most active internal transfer path with flows ranging from
-                            <strong> {topInternal.min.toFixed(0)} MW</strong> to <strong>{topInternal.max.toFixed(0)} MW</strong>.
-                            {topInternal.max > 2000 && <> High utilization suggests potential transfer constraint pressure. </>}
-                          </>
-                        )}
-                        {topExternal && (
-                          <>
-                            {' '}The most active external path is <strong>{topExternal.display}</strong> ({topExternal.meta.region}),
-                            with average flow of <strong>{topExternal.avg.toFixed(0)} MW</strong>.
-                          </>
-                        )}
-                        {' '}A total of <strong>{internalCount} internal</strong> and <strong>{externalCount} external</strong> interfaces are tracked.
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            </>
-          )}
-
-          <TTCFDeratesSection />
-
-          <div className="section-container">
-            <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
-              <span className="chevron">{showRaw ? '▾' : '▸'}</span>
-              All Flow Datasets ({DATASETS.length})
-            </div>
-            {showRaw && (
-              <div style={{ marginTop: 8 }}>
-                {DATASETS.map((key, i) => (
-                  <DatasetSection key={key} datasetKey={key} resolution={resolution} defaultExpanded={i === 0} />
-                ))}
-              </div>
-            )}
           </div>
-        </>
+        </div>
       )}
+
+      {!loading && interfaceStats.length > 0 && (
+        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <div className="chart-card-title">
+              Interface Summary ({interfaceStats.length} interfaces{classFilter !== 'all' ? ` · ${classFilter} only` : ''})
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="rank-table" style={{ borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  <th>Interface</th>
+                  <th>Class</th>
+                  <th>Region / Path</th>
+                  <th>Direction</th>
+                  <th>Avg Flow (MW)</th>
+                  <th>Max Flow (MW)</th>
+                  <th>Min Flow (MW)</th>
+                  <th>Observations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {interfaceStats.map(s => (
+                  <tr
+                    key={s.raw}
+                    onClick={() => handleRowClick(s.display)}
+                    style={{
+                      cursor: 'pointer',
+                      background: highlightedInterface === s.display
+                        ? 'color-mix(in srgb, var(--primary) 10%, transparent)'
+                        : undefined,
+                    }}
+                  >
+                    <td style={{ fontWeight: 600 }}>{s.display}</td>
+                    <td>
+                      <span className={`intf-class-tag ${s.meta.classification === 'Internal' ? 'intf-internal' : 'intf-external'}`}>
+                        {s.meta.classification}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.region}</td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.direction}</td>
+                    <td>{s.avg.toFixed(1)}</td>
+                    <td style={{ fontWeight: 600, color: s.max > 2000 ? 'var(--danger)' : 'var(--text)' }}>{s.max.toFixed(0)}</td>
+                    <td>{s.min.toFixed(0)}</td>
+                    <td>{s.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <TTCFDeratesSection />
+
+      <div className="section-container">
+        <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
+          <span className="chevron">{showRaw ? '▾' : '▸'}</span>
+          All Flow Datasets ({DATASETS.length})
+        </div>
+        {showRaw && (
+          <div style={{ marginTop: 8 }}>
+            {DATASETS.map((key, i) => (
+              <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
