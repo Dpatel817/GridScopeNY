@@ -95,6 +95,172 @@ def filters(dataset_key: str, column: str):
 
 
 # ---------------------------------------------------------------------------
+# Constraint Impact Analysis endpoint
+# ---------------------------------------------------------------------------
+@app.get("/api/constraint-impact")
+def constraint_impact(
+    market: str = Query(default="DA", pattern="^(DA|RT)$"),
+    date: Optional[str] = Query(default=None),
+    he: Optional[int] = Query(default=None, ge=0, le=23),
+    facility: Optional[str] = Query(default=None),
+    contingency: Optional[str] = Query(default=None),
+):
+    constr_key = "dam_limiting_constraints" if market == "DA" else "rt_limiting_constraints"
+    zone_key = "da_lbmp_zone" if market == "DA" else "rt_lbmp_zone"
+    gen_key = "da_lbmp_gen" if market == "DA" else "rt_lbmp_gen"
+    gen_names_meta = DATASET_META.get("generator_names")
+
+    constr_meta = DATASET_META.get(constr_key)
+    zone_meta = DATASET_META.get(zone_key)
+    gen_meta = DATASET_META.get(gen_key)
+
+    if not constr_meta:
+        raise HTTPException(status_code=404, detail=f"Constraint dataset {constr_key} not configured")
+
+    constr = _load_csv_safe(constr_meta["file"])
+    if constr.empty:
+        return {"status": "empty", "message": "No constraint data available"}
+
+    if "Date" in constr.columns and hasattr(constr["Date"].iloc[0], "strftime"):
+        constr["Date"] = constr["Date"].dt.strftime("%Y-%m-%d")
+
+    available_dates = sorted(constr["Date"].dropna().unique().tolist())
+    available_hes = sorted(constr["HE"].dropna().unique().astype(int).tolist()) if "HE" in constr.columns else []
+
+    if not date and available_dates:
+        date = available_dates[-1]
+
+    date_filtered = constr.copy()
+    if date:
+        date_filtered = date_filtered[date_filtered["Date"] == date]
+    if he is not None and "HE" in date_filtered.columns:
+        date_filtered = date_filtered[date_filtered["HE"] == he]
+
+    facilities = sorted(date_filtered["Limiting Facility"].dropna().unique().tolist())
+
+    fac_filtered = date_filtered.copy()
+    if facility:
+        fac_filtered = fac_filtered[fac_filtered["Limiting Facility"] == facility]
+
+    contingencies = sorted(fac_filtered["Contingency"].dropna().unique().tolist())
+
+    selected = fac_filtered.copy()
+    if contingency:
+        selected = selected[selected["Contingency"] == contingency]
+
+    if selected.empty:
+        return {
+            "market": market,
+            "date": date,
+            "he": he,
+            "facility": facility,
+            "contingency": contingency,
+            "constraint_summary": None,
+            "zonal_impact": [],
+            "generator_impact": [],
+            "available_dates": available_dates,
+            "available_hes": available_hes,
+            "facilities": facilities,
+            "contingencies": contingencies,
+            "status": "no_data",
+        }
+
+    costs = selected["Constraint Cost"].dropna().tolist()
+    constraint_summary = {
+        "facility": facility or "All",
+        "contingency": contingency or "All",
+        "date": date,
+        "he": he,
+        "total_cost": round(sum(abs(c) for c in costs), 2),
+        "avg_cost": round(sum(abs(c) for c in costs) / len(costs), 2) if costs else 0,
+        "max_cost": round(max(abs(c) for c in costs), 2) if costs else 0,
+        "min_cost": round(min(abs(c) for c in costs), 2) if costs else 0,
+        "binding_count": len(costs),
+        "unique_hours": int(selected["HE"].nunique()) if "HE" in selected.columns else 0,
+        "unique_dates": int(selected["Date"].nunique()),
+    }
+
+    date_hes = selected[["Date", "HE"]].drop_duplicates()
+    zonal_impact = []
+    if zone_meta:
+        zone_df = _load_csv_safe(zone_meta["file"])
+        if not zone_df.empty:
+            if "Date" in zone_df.columns and hasattr(zone_df["Date"].iloc[0], "strftime"):
+                zone_df["Date"] = zone_df["Date"].dt.strftime("%Y-%m-%d")
+
+            zone_match = zone_df.merge(date_hes, on=["Date", "HE"], how="inner")
+
+            if market == "RT" and len(zone_match) > 0:
+                zone_match = zone_match.groupby("Zone")[["LMP", "MLC", "MCC"]].mean().reset_index()
+            elif len(zone_match) > 0:
+                zone_match = zone_match.groupby("Zone")[["LMP", "MLC", "MCC"]].mean().reset_index()
+
+            if len(zone_match) > 0:
+                sys_avg_lmp = zone_match["LMP"].mean()
+                sys_avg_mcc = zone_match["MCC"].mean()
+                zone_match["delta_vs_system"] = (zone_match["LMP"] - sys_avg_lmp).round(2)
+                zone_match["mcc_abs"] = zone_match["MCC"].abs()
+                zone_match = zone_match.sort_values("mcc_abs", ascending=False)
+
+                def interpret(row):
+                    mcc = row["MCC"]
+                    if abs(mcc) < 0.5:
+                        return "Neutral"
+                    if mcc > 0:
+                        return "Bearish (paying congestion)"
+                    return "Bullish (receiving congestion credit)"
+
+                zone_match["interpretation"] = zone_match.apply(interpret, axis=1)
+                zone_match = zone_match.replace({np.nan: None, np.inf: None, -np.inf: None})
+                zonal_impact = zone_match[["Zone", "LMP", "MLC", "MCC", "delta_vs_system", "interpretation"]].round(2).to_dict(orient="records")
+
+    generator_impact = []
+    if gen_meta and gen_names_meta:
+        gen_df = _load_csv_safe(gen_meta["file"])
+        gn_df = _load_csv_safe(gen_names_meta["file"])
+
+        if not gen_df.empty:
+            if "Date" in gen_df.columns and hasattr(gen_df["Date"].iloc[0], "strftime"):
+                gen_df["Date"] = gen_df["Date"].dt.strftime("%Y-%m-%d")
+
+            gen_match = gen_df.merge(date_hes, on=["Date", "HE"], how="inner")
+
+            if len(gen_match) > 0:
+                gen_lookup = gen_match.drop_duplicates("PTID")[["PTID", "Generator"]]
+                gen_agg = gen_match.groupby("PTID")[["LMP", "MLC", "MCC"]].mean().reset_index()
+                gen_agg = gen_agg.merge(gen_lookup, on="PTID", how="left")
+
+                if not gn_df.empty:
+                    zone_lookup = gn_df[["PTID", "Zone"]].drop_duplicates("PTID")
+                    gen_agg = gen_agg.merge(zone_lookup, on="PTID", how="left")
+
+                gen_agg["mcc_abs"] = gen_agg["MCC"].abs()
+                gen_agg = gen_agg.sort_values("mcc_abs", ascending=False)
+                gen_agg = gen_agg.replace({np.nan: None, np.inf: None, -np.inf: None})
+
+                top_gens = gen_agg.head(25)
+                generator_impact = top_gens[
+                    [c for c in ["Generator", "PTID", "Zone", "LMP", "MLC", "MCC"] if c in top_gens.columns]
+                ].round(2).to_dict(orient="records")
+
+    return {
+        "market": market,
+        "date": date,
+        "he": he,
+        "facility": facility,
+        "contingency": contingency,
+        "constraint_summary": constraint_summary,
+        "zonal_impact": zonal_impact,
+        "generator_impact": generator_impact,
+        "available_dates": available_dates,
+        "available_hes": available_hes,
+        "facilities": facilities,
+        "contingencies": contingencies,
+        "status": "ok",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Generator Map endpoint
 # ---------------------------------------------------------------------------
 @app.get("/api/generator-map")
