@@ -850,60 +850,6 @@ def process_rt_lbmp_gen(df):
     return df
 
 
-def process_zonal_uplift(df):
-    df = df.rename(columns={
-        "Time Stamp": "Time Stamp",
-        "Timestamp": "Time Stamp",
-        "Time Zone": "Time Zone",
-        "Name": "Zone",
-        "Zone Name": "Zone",
-        "Uplift ($)": "Zonal Uplift",
-        "Zonal Uplift ($)": "Zonal Uplift",
-        "Uplift": "Zonal Uplift"
-    })
-
-    df = add_time_cols_safe(df, "Time Stamp")
-    df = add_date_parts_safe(df, "Date")
-    df = clean_source_cols(df)
-
-    cols = [
-        "Time Stamp", "Date", "HE", "Month", "Year",
-        "Time Zone", "Zone", "PTID", "Zonal Uplift",
-        "source_date", "source_file"
-    ]
-    cols = [col for col in cols if col in df.columns]
-    df = df[cols]
-    df = sort_if_possible(df, ["Time Stamp", "Zone"])
-    return df
-
-
-def process_resource_uplift(df):
-    df = df.rename(columns={
-        "Time Stamp": "Time Stamp",
-        "Timestamp": "Time Stamp",
-        "Time Zone": "Time Zone",
-        "Name": "Resource",
-        "Resource Name": "Resource",
-        "Uplift ($)": "Resource Uplift",
-        "Resource Uplift ($)": "Resource Uplift",
-        "Uplift": "Resource Uplift"
-    })
-
-    df = add_time_cols_safe(df, "Time Stamp")
-    df = add_date_parts_safe(df, "Date")
-    df = clean_source_cols(df)
-
-    cols = [
-        "Time Stamp", "Date", "HE", "Month", "Year",
-        "Time Zone", "Resource", "PTID", "Resource Uplift",
-        "source_date", "source_file"
-    ]
-    cols = [col for col in cols if col in df.columns]
-    df = df[cols]
-    df = sort_if_possible(df, ["Time Stamp", "Resource"])
-    return df
-
-
 def process_rt_lbmp_zone(df):
     df = df.rename(columns={
         "Time Stamp": "Time Stamp",
@@ -1209,8 +1155,6 @@ PROCESSOR_MAP = {
     "rt_events_raw.csv": process_rt_events,
     "rt_imer_raw.csv": process_rt_imer,
     "rt_lbmp_gen_raw.csv": process_rt_lbmp_gen,
-    "zonal_uplift_raw.csv": process_zonal_uplift,
-    "resource_uplift_raw.csv": process_resource_uplift,
     "rt_lbmp_zone_raw.csv": process_rt_lbmp_zone,
     "rtasp_raw.csv": process_rtasp,
     "rtfuelmix_raw.csv": process_rtfuelmix,
@@ -1250,7 +1194,6 @@ EXPECTED_RAW_FILES = [
     "pal_raw.csv",
     "par_flows_raw.csv",
     "reference_bus_lbmp_raw.csv",
-    "resource_uplift_raw.csv",
     "rt_events_raw.csv",
     "rt_imer_raw.csv",
     "rt_lbmp_gen_raw.csv",
@@ -1261,7 +1204,6 @@ EXPECTED_RAW_FILES = [
     "rtfuelmix_raw.csv",
     "sc_line_outages_raw.csv",
     "ttcf_raw.csv",
-    "zonal_uplift_raw.csv",
 ]
 
 

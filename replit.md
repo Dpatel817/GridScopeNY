@@ -48,7 +48,8 @@ frontend/
       ResolutionSelector.tsx  # Resolution pill toggle buttons
       EmptyState.tsx      # Empty state with ETL trigger button
     hooks/
-      useDataset.ts       # Data fetching hook with resolution support
+      useDataset.ts       # Data fetching hook with resolution support + auto-refetch on data refresh
+      useDataRefresh.ts   # Data refresh hook: auto-refresh (5 min), manual refresh, cache clear
     pages/
       Home.tsx            # Market Overview — KPIs, Live System Context (RT events + oper announcements), workflow steps, nav tiles
       Prices.tsx          # Price Intelligence — DA/RT comparison, spread analysis
@@ -107,6 +108,8 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/oic?date=YYYY-MM-DD` — Operating In Commitment data from NYISO MIS
 - `POST /api/ai-explainer` — structured AI market analysis: Summary, Trader Takeaways, Battery Strategist Takeaways, Key Signals, Caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
+- `POST /api/refresh` — full data refresh: ETL fetch + process + cache clear (concurrency-guarded)
+- `POST /api/cache/clear` — clear in-memory DataFrame cache only
 - `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL
 
 ## Resolution Aggregation

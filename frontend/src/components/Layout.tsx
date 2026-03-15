@@ -1,4 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
+import { useDataRefresh } from '../hooks/useDataRefresh'
 
 const MARKET_NAV = [
   { path: '/prices', label: 'Prices', icon: '💲' },
@@ -14,7 +15,14 @@ const TOOL_NAV = [
   { path: '/ai-explainer', label: 'AI Market Analyst', icon: '🤖' },
 ]
 
+function formatTime(date: Date | null) {
+  if (!date) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 export default function Layout() {
+  const { refreshing, lastRefresh, error, fullRefresh, autoRefreshEnabled, toggleAutoRefresh } = useDataRefresh();
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -62,8 +70,37 @@ export default function Layout() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span className="status-dot" />
-          Live data from NYISO MIS
+          <div className="refresh-controls">
+            <button
+              className={`refresh-btn${refreshing ? ' refreshing' : ''}`}
+              onClick={() => fullRefresh()}
+              disabled={refreshing}
+              title={refreshing ? 'Refreshing data...' : 'Fetch latest data from NYISO'}
+            >
+              <span className={`refresh-icon${refreshing ? ' spin' : ''}`}>↻</span>
+              {refreshing ? 'Refreshing...' : 'Refresh Data'}
+            </button>
+            <div className="refresh-meta">
+              <label className="auto-refresh-toggle" title="Auto-refresh every 5 minutes">
+                <input
+                  type="checkbox"
+                  checked={autoRefreshEnabled}
+                  onChange={toggleAutoRefresh}
+                />
+                <span>Auto</span>
+              </label>
+              {lastRefresh && (
+                <span className="last-refresh">Updated {formatTime(lastRefresh)}</span>
+              )}
+              {error && (
+                <span className="refresh-error" title={error}>!</span>
+              )}
+            </div>
+          </div>
+          <div className="sidebar-status">
+            <span className="status-dot" />
+            Live data from NYISO MIS
+          </div>
         </div>
       </aside>
       <main className="main-content">

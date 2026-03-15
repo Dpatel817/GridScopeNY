@@ -56,7 +56,7 @@ def build_interface_metrics(df: pd.DataFrame) -> dict[str, str]:
 
 
 def build_congestion_metrics(df: pd.DataFrame) -> dict[str, str]:
-    for col in ["Constraint Cost", "Zonal Uplift", "Resource Uplift", "Outage Duration Hours"]:
+    for col in ["Constraint Cost", "Outage Duration Hours"]:
         if col in df.columns:
             return build_numeric_metrics(df, col)
 

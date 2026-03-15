@@ -108,7 +108,7 @@ def show_basic_metrics(df, value_col):
 
 
 tab_overview, tab_constraints, tab_outages, tab_reference = st.tabs(
-    ["Overview", "Constraints", "Outages & Uplift", "Reference Tables"]
+    ["Overview", "Constraints", "Outages", "Reference Tables"]
 )
 
 with tab_overview:
@@ -128,13 +128,6 @@ with tab_overview:
             "entity_col": "Limiting Facility",
             "value_options": ["Constraint Cost"],
             "default_value": "Constraint Cost",
-        },
-        "Zonal Uplift": {
-            "key": "zonal_uplift",
-            "time_col": "Time Stamp",
-            "entity_col": "Zone",
-            "value_options": ["Zonal Uplift"],
-            "default_value": "Zonal Uplift",
         },
         "DA Scheduled Outages": {
             "key": "out_sched",
@@ -408,10 +401,10 @@ with tab_constraints:
             st.dataframe(rt_df, use_container_width=True)
 
 with tab_outages:
-    st.subheader("Outages & Uplift")
+    st.subheader("Outages")
 
     outage_tabs = st.tabs(
-        ["DA Scheduled Outages", "Scheduled Line Outages", "RT Line Outages", "Outage Schedule", "Zonal Uplift"]
+        ["DA Scheduled Outages", "Scheduled Line Outages", "RT Line Outages", "Outage Schedule"]
     )
 
     with outage_tabs[0]:
@@ -542,56 +535,6 @@ with tab_outages:
                 outage_schedule_df = outage_schedule_df[outage_schedule_df["Status"].astype(str).isin(selected_status)].copy()
 
             st.dataframe(outage_schedule_df, use_container_width=True)
-
-    with outage_tabs[4]:
-        zonal_uplift_df = congestion.get("zonal_uplift", pd.DataFrame()).copy()
-
-        if zonal_uplift_df.empty:
-            st.info("No zonal uplift available.")
-        else:
-            date_min, date_max = get_default_date_range(zonal_uplift_df, "Time Stamp")
-            date_range = st.date_input(
-                "Zonal uplift date range",
-                value=(date_min, date_max),
-                key="zonal_uplift_date_range"
-            )
-            if isinstance(date_range, tuple) and len(date_range) == 2:
-                start_date, end_date = date_range
-            else:
-                start_date = date_range
-                end_date = date_range
-
-            zonal_uplift_df = filter_by_date(zonal_uplift_df, "Time Stamp", start_date, end_date)
-
-            zone_options = sorted(zonal_uplift_df["Zone"].dropna().astype(str).unique().tolist()) if "Zone" in zonal_uplift_df.columns else []
-            selected_zones = st.multiselect(
-                "Zones",
-                zone_options,
-                default=zone_options,
-                key="zonal_uplift_zones"
-            )
-
-            if selected_zones:
-                zonal_uplift_df = zonal_uplift_df[zonal_uplift_df["Zone"].astype(str).isin(selected_zones)].copy()
-
-            show_basic_metrics(zonal_uplift_df, "Zonal Uplift")
-
-            if not zonal_uplift_df.empty and "Zonal Uplift" in zonal_uplift_df.columns:
-                fig = px.line(
-                    zonal_uplift_df,
-                    x="Time Stamp",
-                    y="Zonal Uplift",
-                    color="Zone" if "Zone" in zonal_uplift_df.columns else None,
-                    title="Zonal Uplift"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                opa_df = calculate_opa(zonal_uplift_df, "Zonal Uplift", "Zone")
-                st.markdown("#### OPA Summary")
-                if not opa_df.empty:
-                    st.dataframe(opa_df, use_container_width=True, hide_index=True)
-
-            st.dataframe(zonal_uplift_df, use_container_width=True)
 
 with tab_reference:
     st.subheader("Reference Tables")

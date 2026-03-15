@@ -909,6 +909,46 @@ def congestion_stacked(
     }
 
 
+import threading
+_refresh_lock = threading.Lock()
+
+@app.post("/api/refresh")
+def refresh_data():
+    if not _refresh_lock.acquire(blocking=False):
+        return {"status": "already_running", "message": "A refresh is already in progress"}
+    try:
+        from src.api_data_loader import _df_cache
+        _df_cache.clear()
+        fetch_result = subprocess.run(
+            [sys.executable, "ETL/fetch_nyiso_data.py"],
+            capture_output=True, text=True, timeout=300,
+        )
+        process_result = subprocess.run(
+            [sys.executable, "ETL/process_nyiso_data.py"],
+            capture_output=True, text=True, timeout=300,
+        )
+        _df_cache.clear()
+        return {
+            "status": "ok" if fetch_result.returncode == 0 and process_result.returncode == 0 else "partial",
+            "fetch": "ok" if fetch_result.returncode == 0 else "error",
+            "process": "ok" if process_result.returncode == 0 else "error",
+        }
+    except subprocess.TimeoutExpired:
+        return {"status": "timeout", "message": "Refresh timed out after 5 minutes"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        _refresh_lock.release()
+
+
+@app.post("/api/cache/clear")
+def clear_cache():
+    from src.api_data_loader import _df_cache
+    count = len(_df_cache)
+    _df_cache.clear()
+    return {"status": "ok", "cleared": count}
+
+
 @app.post("/api/etl/fetch")
 def run_etl_fetch():
     try:

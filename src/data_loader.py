@@ -53,7 +53,6 @@ GENERATION_FILES = {
     "generator_names": "generator_names_processed.csv",
     "rt_events": "rt_events_processed.csv",
     "oper_messages": "oper_messages_processed.csv",
-    "resource_uplift": "resource_uplift_processed.csv",
 }
 
 INTERFACE_FILES = {
@@ -72,7 +71,6 @@ CONGESTION_FILES = {
     "outage_schedule": "outage_schedule_processed.csv",
     "sc_line_outages": "sc_line_outages_processed.csv",
     "rt_line_outages": "rt_line_outages_processed.csv",
-    "zonal_uplift": "zonal_uplift_processed.csv",
     "active_transmission_nodes": "active_transmission_nodes_processed.csv",
     "load_names": "load_names_processed.csv",
 }

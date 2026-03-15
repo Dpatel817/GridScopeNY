@@ -149,10 +149,15 @@ h3 { font-size: 1rem; font-weight: 600; }
 .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
 
 .sidebar-footer {
-  padding: 16px 20px;
+  padding: 12px 16px;
   border-top: 1px solid rgba(255,255,255,0.08);
   font-size: 11px;
   color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sidebar-status {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -163,6 +168,87 @@ h3 { font-size: 1rem; font-weight: 600; }
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;
+}
+.refresh-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.8);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+}
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.25);
+  color: #fff;
+}
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.refresh-btn.refreshing {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.refresh-icon {
+  font-size: 14px;
+  display: inline-block;
+}
+.refresh-icon.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.refresh-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+.auto-refresh-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: rgba(255,255,255,0.5);
+}
+.auto-refresh-toggle input {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.last-refresh {
+  color: rgba(255,255,255,0.4);
+}
+.refresh-error {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .main-content { margin-left: var(--sidebar-width); flex: 1; min-height: 100vh; }

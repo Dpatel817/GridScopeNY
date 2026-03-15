@@ -12,8 +12,6 @@ nyiso_url_dict = {
         "generator_names": "https://mis.nyiso.com/public/csv/generator/generator.csv",
         "load_names": "https://mis.nyiso.com/public/csv/load/load.csv",
         "active_transmission_nodes": "https://mis.nyiso.com/public/csv/activetransmissionnodes/activetransmissionnodes.csv",
-        "zonal_uplift": "https://mis.nyiso.com/public/csv/ZonalUplift/{date}zonaluplift.csv",
-        "resource_uplift": "https://mis.nyiso.com/public/csv/ResourceUplift/{date}resourceuplift.csv",
         "interconnection_queue": "https://www.nyiso.com/documents/20142/1407078/NYISO-Interconnection-Queue.xlsx/b91b6960-7a16-17a2-4b21-862991469bc6?t=1676069140232",
     },
 

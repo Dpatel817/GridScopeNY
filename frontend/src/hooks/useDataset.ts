@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { onDataRefreshed } from './useDataRefresh';
 
 export interface DatasetMeta {
   label: string;
@@ -58,6 +59,12 @@ export function useDataset(
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    return onDataRefreshed(() => {
+      fetchData();
+    });
   }, [fetchData]);
 
   return { data, loading, error, refetch: fetchData };

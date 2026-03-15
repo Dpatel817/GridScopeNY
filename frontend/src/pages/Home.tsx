@@ -14,11 +14,16 @@ const NAV_CARDS = [
 ];
 
 const USEFUL_LINKS = [
-  { label: 'NYISO Real-Time Dashboard', url: 'https://www.nyiso.com/real-time-dashboard' },
   { label: 'Modo Energy NYISO Research', url: 'https://modoenergy.com/research?regions=nyiso' },
+  { label: 'NYISO Real-Time Dashboard', url: 'https://www.nyiso.com/real-time-dashboard' },
   { label: 'Potomac Economics Reports', url: 'https://www.potomaceconomics.com/markets-monitored/new-york-iso/' },
   { label: 'ISO-NE Dashboard', url: 'https://www.iso-ne.com/isoexpress/' },
   { label: 'PJM Data Viewer', url: 'https://dataviewer.pjm.com/dataviewer/pages/public/load.jsf' },
+  { label: 'Iroqouis-Z2 Gas Notices', url: 'https://ioly.iroquois.com/infopost/#critical' },
+  { label: 'Tetco-M3 Gas Notices', url: 'https://infopost.enbridge.com/infopost/TEHome.asp?Pipe=TE' },
+  { label: 'Transco-Z6 Gas Notices', url: 'https://www.1line.williams.com/Transco/info-postings/notices/critical-notices.html' },
+  { label: 'TGP-Z5 Gas Notices', url: 'https://pipeline2.kindermorgan.com/Notices/Notices.aspx?type=C&code=TGP'},
+  { label: 'IESO Market Data', url: 'https://www.ieso.ca/' },
 ];
 
 function LiveSystemContext() {
@@ -230,8 +235,6 @@ export default function Home() {
             <DatasetSection datasetKey="generator_names" resolution="raw" />
             <DatasetSection datasetKey="load_names" resolution="raw" />
             <DatasetSection datasetKey="active_transmission_nodes" resolution="raw" />
-            <DatasetSection datasetKey="zonal_uplift" resolution="raw" />
-            <DatasetSection datasetKey="resource_uplift" resolution="raw" />
 
             {inventory && (
               <div className="card" style={{ marginTop: 12 }}>

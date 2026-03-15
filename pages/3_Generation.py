@@ -136,13 +136,6 @@ with tab_overview:
             "value_options": ["MW Committed / LSL / POI Withdrawal"],
             "default_value": "MW Committed / LSL / POI Withdrawal",
         },
-        "Resource Uplift": {
-            "key": "resource_uplift",
-            "time_col": "Time Stamp",
-            "entity_col": "Resource",
-            "value_options": ["Resource Uplift"],
-            "default_value": "Resource Uplift",
-        },
         "DA IMER": {
             "key": "dam_imer",
             "time_col": "Time Stamp",
@@ -528,7 +521,7 @@ with tab_imer:
 with tab_events:
     st.subheader("Events & Commitments")
 
-    event_tabs = st.tabs(["RT Events", "Operational Messages", "Resource Uplift"])
+    event_tabs = st.tabs(["RT Events", "Operational Messages"])
 
     with event_tabs[0]:
         rt_events_df = generation.get("rt_events", pd.DataFrame()).copy()
@@ -560,52 +553,3 @@ with tab_events:
             st.info("No operational messages available.")
         else:
             st.dataframe(oper_messages_df, use_container_width=True)
-
-    with event_tabs[2]:
-        uplift_df = generation.get("resource_uplift", pd.DataFrame()).copy()
-
-        if uplift_df.empty:
-            st.info("No resource uplift data available.")
-        else:
-            uplift_min, uplift_max = get_default_date_range(uplift_df, "Time Stamp")
-            uplift_range = st.date_input(
-                "Resource uplift date range",
-                value=(uplift_min, uplift_max),
-                key="resource_uplift_date_range"
-            )
-
-            if isinstance(uplift_range, tuple) and len(uplift_range) == 2:
-                uplift_start, uplift_end = uplift_range
-            else:
-                uplift_start = uplift_range
-                uplift_end = uplift_range
-
-            uplift_df = filter_by_date(uplift_df, "Time Stamp", uplift_start, uplift_end)
-
-            resource_options = sorted(uplift_df["Resource"].dropna().astype(str).unique().tolist()) if "Resource" in uplift_df.columns else []
-            selected_resources = st.multiselect(
-                "Resources",
-                resource_options,
-                default=resource_options[:10] if len(resource_options) > 10 else resource_options,
-                key="resource_uplift_resources"
-            )
-
-            if selected_resources:
-                uplift_df = uplift_df[uplift_df["Resource"].astype(str).isin(selected_resources)].copy()
-
-            if not uplift_df.empty and "Resource Uplift" in uplift_df.columns:
-                fig_uplift = px.line(
-                    uplift_df,
-                    x="Time Stamp",
-                    y="Resource Uplift",
-                    color="Resource" if "Resource" in uplift_df.columns else None,
-                    title="Resource Uplift"
-                )
-                st.plotly_chart(fig_uplift, use_container_width=True)
-
-                opa_uplift = calculate_opa(uplift_df, "Resource Uplift", "Resource")
-                st.markdown("#### OPA Summary")
-                if not opa_uplift.empty:
-                    st.dataframe(opa_uplift, use_container_width=True, hide_index=True)
-
-            st.dataframe(uplift_df, use_container_width=True)

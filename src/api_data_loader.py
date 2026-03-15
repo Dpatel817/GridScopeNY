@@ -471,16 +471,6 @@ DATASET_META = {
         "label": "Active Transmission Nodes (P-66)",
         "native": "table",
     },
-    "zonal_uplift": {
-        "file": "zonal_uplift_processed.csv",
-        "label": "Zonal Uplift Report (P-45)",
-        "native": "table",
-    },
-    "resource_uplift": {
-        "file": "resource_uplift_processed.csv",
-        "label": "Resource Uplift Report (P-46)",
-        "native": "table",
-    },
 }
 
 
@@ -488,7 +478,6 @@ PAGE_DATASETS = {
     "home": [
         "rt_events", "oper_messages", "generator_names",
         "load_names", "active_transmission_nodes",
-        "zonal_uplift", "resource_uplift",
     ],
     "prices": [
         "da_lbmp_zone", "rt_lbmp_zone", "integrated_rt_lbmp_zone",
