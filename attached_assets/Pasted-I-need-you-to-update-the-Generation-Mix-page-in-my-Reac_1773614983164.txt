@@ -1,0 +1,304 @@
+I need you to update the Generation Mix page in my React/TypeScript NYISO dashboard.
+
+Important:
+- Focus only on the Generation page and the components/hooks/utilities it depends on.
+- Do not refactor unrelated pages unless required for shared controls or reusable chart components.
+- First inspect the codebase and identify the exact files responsible for:
+  - the Generation page
+  - KPI cards
+  - generation summary box
+  - chart rendering
+  - resolution controls
+  - fuel type selectors
+  - dataset fetching via useDataset/useInventory
+  - the OIC section
+- Then implement the edits below end-to-end.
+
+GOALS
+
+I want the Generation page to follow the same UI/product direction as the revised Price and Demand pages.
+
+Main edits:
+1. Move the Generation Summary box to the top of the page.
+2. Enhance the Generation Summary using the app’s OpenAI integration if it already exists.
+3. Change the KPI cards so they use fixed “key generation insights” and do NOT depend on the currently selected chart resolution.
+4. Replace the top resolution bar with a side control panel for charting.
+5. Add richer chart controls:
+   - fuel type selection
+   - resolution / aggregation selection
+   - date range selection
+   - chart type selection
+6. Improve tooltip/hover behavior.
+7. Rework the lower generation charts so they follow the same charting/control model and feel unified.
+8. Keep the OIC section, but clean up its hierarchy so it fits naturally below the main generation analytics area.
+9. Keep the UI clean, modern, and consistent with the current dashboard aesthetic.
+
+DETAILS / REQUIRED BEHAVIOR
+
+PART 1 — Move Generation Summary to the top
+Move the “Generation Summary” box to the top of the page, above KPI cards and charts.
+
+Enhance the summary:
+- If the app already has OpenAI/API-based summary generation, reuse it.
+- If no AI integration exists, create a clean fallback architecture but do not block the page.
+- The summary must be grounded in computed generation statistics only.
+- It should produce concise commentary on things like:
+  - top fuel source
+  - fuel share concentration
+  - peak total generation
+  - major contributors over the selected/default period
+  - whether the mix was stable or shifted materially
+  - any notable wind / renewable / gas / dual fuel behavior if supported by the data
+- Include a deterministic fallback summary if AI is unavailable or fails.
+
+Suggested helper structure:
+- buildGenerationSummaryContext(...)
+- generateGenerationSummary(...)
+
+PART 2 — KPI cards should use fixed generation insight metrics
+Replace the current KPI logic.
+
+The KPI cards should always show default generation intelligence metrics, regardless of selected chart resolution.
+
+Required KPI metrics:
+1. On-Peak Avg Total Generation
+2. Peak Total Generation + hour/date
+3. Low Total Generation + hour/date
+4. Top Fuel Source
+5. Top Fuel Share %
+6. Second Fuel Source
+7. Renewable Share %
+8. Fuel Types Active
+
+Definitions / guidance:
+- On-Peak should use HE 7–22 unless the project already uses a different standard
+- Total generation should be computed as the sum across fuel types for each interval
+- Renewable Share should be computed from the renewable categories available in the current dataset, likely wind + hydro + other renewables if those are explicitly represented
+- Fuel Types Active should reflect fuel types with meaningful non-zero generation in the selected/default analysis window
+
+Important:
+- These KPI values must come from the base source datasets, not from whatever transformed chart view is currently selected
+- Do not tie KPI card values to the chart resolution selector
+- If exact renewable category composition differs in the codebase, inspect current generation labels and implement the cleanest defensible version
+
+UI guidance:
+- Keep KPI styling aligned with current dashboard cards
+- If needed, expand to a two-row responsive grid
+- Prioritize readability over squeezing everything into one row
+
+PART 3 — Replace the top resolution bar with side “Chart Controls”
+The current resolution bar above the charts should be removed and replaced with a side control panel associated with the main chart section.
+
+Create a reusable controls component, for example:
+- GenerationChartControls.tsx
+
+The control panel should include:
+1. Fuel type selector
+   - multi-select
+   - “All Fuel Types” shortcut
+   - default to all fuel types
+2. Resolution / aggregation selector
+   - Hourly
+   - On-Peak Average
+   - Off-Peak Average
+   - Daily Average
+3. Date range selector
+   - Today (default)
+   - Custom start/end date
+   - All Dates
+4. Chart type selector
+   - line with markers
+   - regular line chart
+   - stacked area chart
+   - stacked bar chart
+5. Optional useful toggles if appropriate:
+   - show legend
+   - smooth lines on/off
+   - show total generation overlay
+   - normalize off by default
+
+Layout preference:
+- desktop: controls on the side of the main chart card
+- smaller screens: controls collapse above or below the chart
+- keep the implementation polished and consistent with the rest of the app
+
+PART 4 — Main generation chart behavior
+Update the main “Generation by Fuel Type” chart so it supports the new controls.
+
+Required behavior:
+- user can select one or more fuel types
+- user can choose resolution:
+  - Hourly
+  - OPA
+  - OFFPA
+  - Daily average
+- user can choose date range:
+  - today by default
+  - custom date range
+  - all dates
+- user can switch chart type between:
+  - line with markers
+  - line
+  - stacked area
+  - stacked bar
+
+Important:
+- Make sure transformations are correct for each aggregation mode
+- If stacked views are only sensible in some cases, handle that cleanly
+- If a selected chart type would be misleading for a given configuration, disable it gracefully with a small explanatory note
+- If useful, include an optional total generation overlay when in line mode
+
+Tooltip / hover behavior:
+- hovering a timestamp should display all visible fuel type values clearly at that timestamp
+- tooltip should show:
+  - timestamp/date
+  - fuel type
+  - value
+- if total generation overlay is enabled, include total in the tooltip
+- markers mode should make hovered points easy to see
+
+PART 5 — Rework the lower generation charts so the experience is unified
+The lower generation analytics currently include:
+- Fuel Mix Stacked Bar
+- Fuel Mix Breakdown table
+- Generation Summary
+- OIC section
+
+I want these to feel like part of the same charting/analytics system.
+
+Preferred direction:
+- Rebuild the lower visualizations using shared charting primitives and shared control logic where possible
+- Keep a unified visual language and interaction pattern
+
+Acceptable implementation patterns:
+A. Keep separate chart cards but share the same control state model
+B. Add a chart mode toggle that lets the user switch among:
+   - fuel type time series
+   - stacked fuel mix
+   - total generation
+   - share breakdown
+C. Keep multiple chart cards but ensure consistent chart types, legends, tooltips, and date/resolution behavior
+
+For the stacked fuel mix chart:
+- support the same date range selection
+- support the same resolution selection where it makes sense
+- support the same fuel filters
+- tooltip should show per-fuel contribution and total
+
+For the breakdown table:
+- keep it, but make sure it is derived from the current/default analysis window
+- columns should remain clear and useful, such as:
+  - fuel type
+  - average generation
+  - peak generation
+  - share
+- sort by share descending by default
+
+PART 6 — Data transformation requirements
+Please inspect the current generation dataset structure and create clean reusable transformation utilities.
+
+I want reusable helpers for:
+- filtering by date range
+- filtering by selected fuel types
+- computing OPA
+- computing OFFPA
+- computing daily averages
+- computing total generation by interval
+- computing fuel shares
+- computing renewable share
+- computing KPI stats
+- computing peak/low timing metrics
+- building AI summary context
+
+Suggested utility files if needed:
+- generationTransforms.ts
+- generationMetrics.ts
+- generationSummary.ts
+- generationChartOptions.ts
+
+Be careful with:
+- timestamp parsing
+- fuel name consistency
+- missing/null values
+- total generation math
+- timezone assumptions
+- HE logic for OPA/OFFPA
+- whether any fuel types should be grouped or normalized
+
+PART 7 — Generation Summary logic
+The summary should be smarter and more useful.
+
+At minimum it should discuss:
+- dominant fuel type
+- top two fuel shares
+- peak total generation
+- whether the mix was concentrated or diversified
+- renewable contribution
+- whether the mix changed materially over the selected/default period
+
+If OpenAI integration exists:
+- reuse it
+- send structured computed stats, not giant raw payloads
+- keep outputs concise and grounded
+
+If no OpenAI integration exists:
+- create a deterministic templated summary generator
+
+PART 8 — OIC section cleanup, not removal
+Keep the Operating In Commitment (OIC) section, but improve its hierarchy and integration with the rest of the page.
+
+Requirements:
+- OIC should appear below the core generation analytics section
+- Keep the date selector and refresh behavior
+- Clean up spacing, heading hierarchy, and card structure so it feels like a secondary operational module rather than being visually jammed onto the page
+- Preserve current functionality unless a small improvement is needed for consistency
+
+Optional improvements if easy:
+- small summary chip showing total commitments for selected day
+- compact filter/search for resource name or zone
+- more consistent table/card styling with the rest of the dashboard
+
+Do not overbuild the OIC section unless it is straightforward.
+
+PART 9 — Design / UX expectations
+Keep the page visually close to the existing dashboard style:
+- clean card layout
+- rounded corners
+- soft borders
+- readable typography
+- modern analytics feel
+
+Desired hierarchy:
+1. Generation Summary at the top
+2. KPI cards below summary
+3. Main chart section with side Chart Controls
+4. Unified lower generation analytics
+5. OIC section below the generation analytics
+6. Detailed datasets section remains below if it already exists
+
+Avoid clutter.
+Do not make the page feel like a raw developer dashboard.
+
+PART 10 — Shared-component reuse
+If the Price and Demand pages already have or will have reusable chart controls/components after recent edits, reuse them where sensible rather than duplicating logic.
+
+For example:
+- shared side control panel
+- shared date range picker
+- shared multi-select control
+- shared chart wrapper/card component
+- shared tooltip formatter
+- shared summary card pattern
+
+But do not over-refactor unrelated modules unless needed.
+
+PART 11 — Deliverables I want from you
+After implementing, show me:
+1. Which files you changed
+2. Which new files you added
+3. The key code snippets
+4. Any commands I need to run
+5. Any assumptions you made
+
+Please do not stop to ask me follow-up questions unless absolutely necessary.
+Make reasonable assumptions from the current codebase and implement the cleanest working version.

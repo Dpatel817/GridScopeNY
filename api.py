@@ -720,6 +720,69 @@ def ai_price_summary(body: PriceSummaryRequest):
         return {"summary": "", "status": "error"}
 
 
+class DemandSummaryRequest(BaseModel):
+    onPeakAvgForecast: str = ""
+    onPeakAvgActual: str = ""
+    peakForecast: str = ""
+    peakActual: str = ""
+    lowForecast: str = ""
+    lowActual: str = ""
+    avgForecastError: str = ""
+    peakForecastError: str = ""
+    largestUnderForecast: str = ""
+    largestOverForecast: str = ""
+    dateRange: str = ""
+
+
+@app.post("/api/ai-demand-summary")
+def ai_demand_summary(body: DemandSummaryRequest):
+    if not OPENAI_API_KEY:
+        return {"summary": "", "status": "unconfigured"}
+
+    stats_block = (
+        f"On-Peak Avg Forecast Load: {body.onPeakAvgForecast}\n"
+        f"On-Peak Avg Actual Load: {body.onPeakAvgActual}\n"
+        f"Peak Forecast Load: {body.peakForecast}\n"
+        f"Peak Actual Load: {body.peakActual}\n"
+        f"Low Forecast Load: {body.lowForecast}\n"
+        f"Low Actual Load: {body.lowActual}\n"
+        f"Avg Forecast Error: {body.avgForecastError}\n"
+        f"Peak Forecast Error: {body.peakForecastError}\n"
+        f"Largest Under-Forecast: {body.largestUnderForecast}\n"
+        f"Largest Over-Forecast: {body.largestOverForecast}\n"
+        f"Date Range: {body.dateRange}"
+    )
+
+    system_prompt = (
+        "You are a senior NYISO electricity market analyst. Write a concise 3-5 sentence "
+        "market commentary paragraph about current NYISO demand conditions based on the stats below. "
+        "Cover: forecast vs actual load levels, forecast accuracy/bias, peak timing, "
+        "and any notable stress windows or surprises. Use specific numbers from the data. "
+        "Do NOT use markdown formatting. No **, no #, no `. Write plain professional prose. "
+        "Do NOT invent data not provided. Keep under 120 words."
+    )
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": stats_block},
+            ],
+            max_tokens=300,
+            temperature=0.2,
+        )
+        raw = completion.choices[0].message.content or ""
+        return {"summary": _strip_markdown(raw), "status": "ok"}
+    except ImportError:
+        return {"summary": "", "status": "error"}
+    except Exception as exc:
+        logger.error("AI demand summary error: %s", exc)
+        return {"summary": "", "status": "error"}
+
+
 # ---------------------------------------------------------------------------
 # TTCF Derates endpoint
 # ---------------------------------------------------------------------------

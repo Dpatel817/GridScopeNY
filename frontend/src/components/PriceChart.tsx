@@ -17,6 +17,8 @@ interface Props {
   yKeys: string[];
   chartType: ChartType;
   height?: number;
+  valuePrefix?: string;
+  valueSuffix?: string;
 }
 
 function fmtX(v: unknown): string {
@@ -41,25 +43,32 @@ function fmtX(v: unknown): string {
   return s.length > 16 ? s.slice(0, 16) : s;
 }
 
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="price-tooltip">
-      <div className="price-tooltip-label">{fmtX(label)}</div>
-      {payload.map((entry: any, i: number) => (
-        <div key={i} className="price-tooltip-row">
-          <span className="price-tooltip-dot" style={{ background: entry.color }} />
-          <span className="price-tooltip-name">{entry.name}</span>
-          <span className="price-tooltip-val">
-            ${typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
+function makeTooltip(prefix: string, suffix: string) {
+  return function CustomTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="price-tooltip">
+        <div className="price-tooltip-label">{fmtX(label)}</div>
+        {payload.map((entry: any, i: number) => {
+          const val = typeof entry.value === 'number'
+            ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
+            : entry.value;
+          return (
+            <div key={i} className="price-tooltip-row">
+              <span className="price-tooltip-dot" style={{ background: entry.color }} />
+              <span className="price-tooltip-name">{entry.name}</span>
+              <span className="price-tooltip-val">
+                {prefix}{val}{suffix}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 }
 
-export default function PriceChart({ data, xKey, yKeys, chartType, height = 340 }: Props) {
+export default function PriceChart({ data, xKey, yKeys, chartType, height = 340, valuePrefix = '$', valueSuffix = '' }: Props) {
   if (!data.length || !yKeys.length) return <div className="iq-empty">No chart data available</div>;
 
   const showDots = chartType === 'line-markers';
