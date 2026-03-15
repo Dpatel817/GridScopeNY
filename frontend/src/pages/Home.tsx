@@ -5,12 +5,12 @@ import EmptyState from '../components/EmptyState';
 import DatasetSection from '../components/DatasetSection';
 
 const NAV_CARDS = [
-  { path: '/prices', icon: '💲', title: 'Prices', desc: 'DA/RT LBMP spreads, ancillary services, CTS', category: 'market' },
-  { path: '/demand', icon: '📊', title: 'Demand Intelligence', desc: 'Load forecasts, actuals, forecast errors', category: 'market' },
-  { path: '/generation', icon: '⚡', title: 'Generation', desc: 'Fuel mix, commitments, BTM solar, maintenance', category: 'market' },
-  { path: '/interfaces', icon: '🔌', title: 'Interface Flows', desc: 'Transmission pressure, ATC/TTC, derates', category: 'market' },
-  { path: '/congestion', icon: '🚧', title: 'Congestion', desc: 'Binding constraints, outage schedules', category: 'market' },
-  { path: '/opportunities', icon: '🎯', title: 'Opportunity & Insight Explorer', desc: 'Zone rankings, trader takeaways, AI explanation', category: 'hero' },
+  { path: '/prices', title: 'Prices', desc: 'DA/RT LBMP spreads, ancillary services, CTS', category: 'market' },
+  { path: '/demand', title: 'Demand Intelligence', desc: 'Load forecasts, actuals, forecast errors', category: 'market' },
+  { path: '/generation', title: 'Generation', desc: 'Fuel mix, commitments, BTM solar, generator map', category: 'market' },
+  { path: '/interfaces', title: 'Interface Flows', desc: 'Transmission pressure, ATC/TTC, derates', category: 'market' },
+  { path: '/congestion', title: 'Congestion', desc: 'Binding constraints, outage schedules', category: 'market' },
+  { path: '/opportunities', title: 'Opportunity Explorer', desc: 'Zone rankings, trader takeaways, AI explanation', category: 'hero' },
 ];
 
 const USEFUL_LINKS = [
@@ -229,7 +229,6 @@ export default function Home() {
         <div className="home-grid">
           {NAV_CARDS.map(c => (
             <Link key={c.path} to={c.path} className={`home-card${c.category === 'hero' ? ' hero-card' : ''}`}>
-              <div className="card-icon">{c.icon}</div>
               <h3>{c.title}</h3>
               <p>{c.desc}</p>
             </Link>

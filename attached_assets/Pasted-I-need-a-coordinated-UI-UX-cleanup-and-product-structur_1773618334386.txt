@@ -1,0 +1,285 @@
+I need a coordinated UI/UX cleanup and product-structure pass across my React/TypeScript NYISO dashboard.
+
+Important:
+- First inspect the existing codebase structure and identify the exact files responsible for:
+  - global layout / shell / sidebar / page container
+  - shared KPI cards
+  - shared summary cards
+  - page-level chart cards
+  - Opportunity & Insight Explorer page
+  - AI Market Analyst page
+  - Generation page
+  - Generator Map page
+  - Interconnection Queue page
+  - any shared chat / assistant components
+  - any design tokens / CSS / theme files
+- Then implement the changes below end-to-end.
+- Do not ask follow-up questions unless absolutely necessary. Make reasonable assumptions and proceed.
+
+OVERALL PRODUCT DIRECTION
+
+I want the app to feel tighter, more professional, more market-intelligence oriented, and less “AI-generated demo app.”
+
+Top-level design goals:
+1. Remove emojis throughout the entire tool.
+2. Remove decorative icons throughout the design UI where possible.
+3. Tighten spacing and reduce wasted whitespace across all pages.
+4. Ensure KPI cards, filter bars, summary boxes, chart cards, and tables are consistently sized and aligned.
+5. Make the UI feel like one coherent institutional analytics product.
+6. Improve page hierarchy so key information appears sooner and large sections do not force unnecessary scrolling.
+7. Reuse shared components wherever sensible rather than duplicating page-specific UI logic.
+
+GLOBAL DESIGN CHANGES
+
+PART 1 — Remove emojis and decorative icons across the app
+I want all emoji-based navigation labels, section labels, summary cards, action cards, and decorative visual accents removed.
+
+Requirements:
+- remove emojis from sidebar/nav
+- remove emojis from page headings
+- remove emojis from summary boxes
+- remove emojis from quick question cards
+- remove emojis from chips/badges/buttons
+- remove decorative icons where they are only aesthetic and not necessary for usability
+
+If an icon is functionally important, replace it with clean text-based UI rather than a playful/demo look.
+
+Examples of what I want gone:
+- house / chart / battery / robot / lightning / target emojis
+- decorative icons inside insight cards
+- anything that makes the app look generated instead of designed
+
+Make the visual system text-led, clean, and professional.
+
+PART 2 — Tighten layout density and improve sizing consistency
+Across the app:
+- reduce excess whitespace between sections
+- standardize KPI heights and widths
+- standardize summary card spacing
+- standardize chart card paddings
+- standardize control bar heights
+- standardize table card headers
+- make content areas feel denser and more intentional without becoming cramped
+
+Requirements:
+- every page should feel balanced vertically
+- avoid oversized empty card areas
+- avoid awkward whitespace above or below charts
+- align cards to a consistent grid
+- ensure pages use available horizontal width efficiently
+- make tables and expanders feel integrated rather than floating blocks
+
+Create or update shared layout tokens/utilities if needed:
+- page max-width / content width
+- section spacing
+- card padding
+- KPI grid templates
+- summary card template
+- control row spacing
+
+GENERATOR MAP / INTERCONNECTION QUEUE CHANGES
+
+PART 3 — Remove Generator Map as its own standalone page
+I do NOT want the generator map to remain a separate page in the tool.
+
+Instead:
+- move the generator map module to the bottom of the Generation page
+- place it underneath the OIC commitments section
+- integrate it as a secondary section of the Generation page rather than a primary navigation destination
+- remove or hide the standalone Generator Map page/route from the sidebar navigation unless needed internally
+
+Desired placement on Generation page:
+1. Generation summary
+2. Generation KPIs
+3. Generation charting/analytics
+4. OIC commitments
+5. Generator map section
+6. Then any remaining detailed dataset section
+
+PART 4 — Improve the Generator Map section
+The current generator map needs cleanup and better product framing.
+
+Please improve:
+- title and subheading
+- KPI row above the map
+- filter bar density and alignment
+- map card layout
+- summary/report card below the map
+
+Requirements:
+- make it feel like “Generator Footprint / Generator Mapping Coverage” as a secondary analytics module, not a standalone app
+- keep the useful controls:
+  - market
+  - metric
+  - date/hour selector if present
+  - zone filter if present
+- make the KPIs cleaner and more relevant
+- keep the coverage report, but tighten it visually and make it read like an operational data-quality note
+
+Improve the map card:
+- reduce wasted vertical space around the map
+- tighten the header and badge area
+- make controls align cleanly
+- keep the color scale readable and compact
+- ensure tooltip/hover behavior is useful and polished
+- make the section feel consistent with the rest of the dashboard cards
+
+PART 5 — Use the interconnection queue as design and data-product inspiration
+I attached an Interconnection Queue PDF for reference. Use it to improve the interconnection queue presentation and the way queue-type information is surfaced in the app.
+
+What I want conceptually:
+- stronger queue summary cards
+- recent changes / new additions surfaced clearly
+- clean queue category segmentation (active, cluster, in service, withdrawn)
+- good use of fuel type / zone / queue counts
+- stronger search and filter behavior
+- tighter table presentation
+- cleaner summaries and chips
+- less decorative clutter
+
+Do not copy the PDF literally.
+Use it as product direction for:
+- the interconnection queue section/page if it still exists
+- how interconnection-style reference data is displayed elsewhere
+- how change detection and queue summaries should look
+
+Also make sure the interconnection queue UI follows the “no emojis / no decorative icons / tighter spacing” rule.
+
+OPPORTUNITY EXPLORER + AI ANALYST CHANGES
+
+PART 6 — Improve the Opportunity & Insight Explorer page
+I attached an Opportunity & Insight Explorer PDF for reference.
+
+I want this page improved to feel more professional and less like a demo.
+
+Key direction:
+- cleaner hierarchy
+- remove decorative icon use and emoji use
+- tighter summary cards
+- better spacing and less empty room
+- make the opportunity summary, trader takeaways, and battery takeaways feel like analytical modules rather than AI-generated callouts
+- make the zone rankings and supporting context more readable and more institutional
+
+Specific goals:
+- tighten the top summary section
+- make ranking controls and asset-duration controls cleaner
+- improve the zone ranking card / table layout
+- reduce the “AI explainer” feel in the page framing
+- keep the analysis, but make the UI more like a quant/market dashboard
+- improve chart spacing, legends, and headings
+- make supporting context cards visually consistent with the rest of the app
+- improve the zone rankings table so it looks like part of the same product system
+
+If quick question buttons/cards exist here:
+- remove decorative icon usage
+- simplify to clean text buttons/cards
+- make them compact and aligned
+
+PART 7 — Turn the AI Market Analyst into a persistent bottom-right chat assistant
+I attached an AI Market Analyst PDF for reference.
+
+I do NOT want AI Market Analyst to primarily exist as a separate full page.
+Instead:
+- create a persistent chatbot / analyst assistant anchored at the bottom-right of the app
+- make it available throughout the dashboard as the user navigates pages
+- it should behave like a market analyst assistant panel/drawer/chat widget
+- it should be docked in the lower-right corner
+- user can open/minimize it
+- it should persist across page navigation if possible
+
+Desired behavior:
+- compact launcher in bottom-right
+- opens into a chat panel/drawer/modal anchored to the bottom-right
+- can ask dashboard-grounded questions
+- can suggest relevant quick prompts
+- can summarize page-specific context
+- should know which page the user is on and use that context if possible
+- should feel like a serious analyst/copilot, not a playful consumer chatbot
+
+Important:
+- remove the standalone “AI Market Analyst” page from primary navigation if the chat widget replaces it
+- if the route must remain for technical reasons, hide it from nav or repurpose it as an internal/dev route
+- the persistent assistant should become the main UX for AI interaction
+
+PART 8 — AI assistant UX expectations
+For the bottom-right analyst assistant:
+- no emojis
+- no decorative icons unless absolutely necessary
+- clean header, concise copy
+- professional placeholder text
+- concise quick prompts
+- page-aware context summary when useful
+- should support a minimized state and expanded state
+- expanded state should not take over the whole page
+- it should look native to the dashboard
+
+Possible UX structure:
+- launcher button: “Analyst”
+- expanded header: “Market Analyst”
+- subtle context line: “Using current dashboard context”
+- quick prompts based on current page, for example:
+  - on Prices page: spread / volatility / DA vs RT questions
+  - on Generation page: fuel mix / renewables / OIC questions
+  - on Congestion page: binding constraints / MCC / impacted zones questions
+  - on Opportunity page: zone opportunity / battery strategy questions
+
+If a page-specific context object already exists, reuse it.
+If not, create a clean architecture for page context providers.
+
+PART 9 — Shared analytics product polish across all pages
+Apply the same cleanup mindset to all pages:
+- remove emoji/icon clutter
+- ensure KPI rows fit evenly
+- ensure summary cards do not feel oversized
+- ensure chart cards and tables are aligned and consistently padded
+- reduce long vertical gaps
+- improve section ordering if useful
+- make expanders/collapsibles consistent
+- make headings and subtitles tighter and more deliberate
+
+I want every page to feel:
+- deliberate
+- dense enough
+- readable
+- professional
+- consistent
+
+IMPLEMENTATION GUIDANCE
+
+PART 10 — Architecture and component reuse
+Please inspect the codebase and consolidate shared UI patterns where appropriate.
+
+Examples:
+- shared page shell
+- shared KPI card
+- shared summary card
+- shared section header
+- shared control toolbar / filter bar
+- shared chart card wrapper
+- shared expander/collapsible panel
+- shared table card
+- shared assistant widget
+- shared spacing tokens / CSS utilities
+
+Do not over-refactor for the sake of it, but remove obvious duplication where it improves consistency.
+
+PART 11 — Navigation cleanup
+Since Generator Map becomes part of Generation and AI Market Analyst becomes a persistent assistant:
+- remove those as top-level sidebar items if possible
+- keep navigation cleaner
+- ensure remaining nav labels are plain text only
+- no emoji or icon-leading labels
+
+If Interconnection Queue remains as a standalone page, keep it cleanly named in plain text.
+
+PART 12 — Deliverables I want after implementation
+After implementing, show me:
+1. Which files you changed
+2. Which new files you added
+3. Which routes/pages were removed, merged, or repurposed
+4. Key code snippets
+5. Any commands I need to run
+6. Any assumptions you made
+
+Please do not stop for clarification unless absolutely necessary.
+Inspect the project structure and implement the cleanest working version.

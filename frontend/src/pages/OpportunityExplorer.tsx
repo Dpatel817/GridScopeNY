@@ -326,8 +326,8 @@ export default function OpportunityExplorer() {
       <div className="opp-hero-header">
         <div className="opp-title-block">
           <h1>
-            Opportunity & Insight Explorer
-            <span className="opp-lens-badge">&#9889; Intelligence</span>
+            Opportunity Explorer
+            <span className="opp-lens-badge">Intelligence</span>
           </h1>
           <p className="page-subtitle" style={{ marginTop: 8, maxWidth: 680 }}>
             Identify NYISO opportunity by zone and get trader and battery-strategy takeaways.
@@ -415,7 +415,7 @@ export default function OpportunityExplorer() {
           </div>
 
           <div className="opp-insight-panel">
-            <div className="insight-badge">&#9889; Opportunity Summary</div>
+            <div className="insight-badge">Opportunity Summary</div>
             <div className="insight-headline">
               {bestZone.zone} leads all zones with ${bestZone.revenue.toFixed(2)}/MW estimated {durationLabel.toLowerCase()} battery revenue
             </div>
@@ -436,7 +436,7 @@ export default function OpportunityExplorer() {
           {traderInsights.length > 0 && (
             <div className="takeaway-section">
               <div className="takeaway-header">
-                <span className="takeaway-icon">📈</span>
+                <span className="takeaway-icon"></span>
                 <span className="takeaway-title">Trader Takeaways</span>
                 <span className="takeaway-badge trader">Short-Term Trading</span>
               </div>
@@ -454,7 +454,7 @@ export default function OpportunityExplorer() {
           {batteryInsights.length > 0 && (
             <div className="takeaway-section">
               <div className="takeaway-header">
-                <span className="takeaway-icon">🔋</span>
+                <span className="takeaway-icon"></span>
                 <span className="takeaway-title">Battery Strategist Takeaways</span>
                 <span className="takeaway-badge battery">Storage Strategy</span>
               </div>
@@ -569,7 +569,7 @@ export default function OpportunityExplorer() {
               <div className="opp-driver-grid">
                 {topConstraints.slice(0, 2).map((c, i) => (
                   <div className="opp-driver-card" key={i}>
-                    <div className="driver-icon">&#128293;</div>
+                    <div className="driver-icon"></div>
                     <div className="driver-label">Active Constraint</div>
                     <div className="driver-value">{c.name.length > 28 ? c.name.slice(0, 28) + '…' : c.name}</div>
                     <div className="driver-sub">{c.count} bindings · ${c.totalCost.toFixed(0)} total cost</div>
@@ -577,20 +577,20 @@ export default function OpportunityExplorer() {
                 ))}
                 {demandContext && (
                   <div className="opp-driver-card">
-                    <div className="driver-icon">&#128200;</div>
+                    <div className="driver-icon"></div>
                     <div className="driver-label">System Load</div>
                     <div className="driver-value">{demandContext.peak.toLocaleString()} MW peak</div>
                     <div className="driver-sub">Avg {demandContext.avg.toLocaleString()} MW · ratio {(demandContext.peak / demandContext.avg).toFixed(2)}x</div>
                   </div>
                 )}
                 <div className="opp-driver-card">
-                  <div className="driver-icon">&#9889;</div>
+                  <div className="driver-icon"></div>
                   <div className="driver-label">Highest Volatility Zone</div>
                   <div className="driver-value">{mostVolatile?.zone || '—'}</div>
                   <div className="driver-sub">σ = {mostVolatile?.volatility.toFixed(1) || '—'} · {mostVolatile?.positiveSpreads || 0} spread events</div>
                 </div>
                 <div className="opp-driver-card">
-                  <div className="driver-icon">&#128202;</div>
+                  <div className="driver-icon"></div>
                   <div className="driver-label">Zones Analyzed</div>
                   <div className="driver-value">{opportunities.length}</div>
                   <div className="driver-sub">{opportunities.filter(o => o.avgSpread > 5).length} zones with avg spread &gt; $5</div>
@@ -663,7 +663,7 @@ export default function OpportunityExplorer() {
                 {aiResponse && aiResponse.status !== 'unconfigured' && (
                   <div className="ai-response-card" style={{ marginTop: 16 }}>
                     <div className="ai-response-header">
-                      <span className="ai-response-icon">📊</span>
+                      <span className="ai-response-icon"></span>
                       <span className="ai-response-label">Analyst Note — {active}</span>
                       {aiResponse.status === 'error' && <span className="badge" style={{ background: 'var(--danger)', color: '#fff', marginLeft: 8 }}>Error</span>}
                     </div>

@@ -83,7 +83,7 @@ function MapBounds({ points }: { points: GeneratorPoint[] }) {
   return null;
 }
 
-export default function GeneratorMap() {
+export default function GeneratorMap({ embedded = false }: { embedded?: boolean }) {
   const [market, setMarket] = useState<'DA' | 'RT'>('DA');
   const [metric, setMetric] = useState<Metric>('LMP');
   const [date, setDate] = useState('');
@@ -157,14 +157,30 @@ export default function GeneratorMap() {
     if (m !== market) setMarket(m);
   }
 
+  const wrapperClass = embedded ? '' : 'page';
+
   return (
-    <div className="page">
-      <div className="page-header">
-        <h1>Generator Price Map</h1>
-        <p className="page-subtitle">
-          Geographic visualization of generator-level {market === 'DA' ? 'Day-Ahead' : 'Real-Time'} prices across New York
-        </p>
-      </div>
+    <div className={wrapperClass || undefined} style={embedded ? { marginTop: 8 } : undefined}>
+      {!embedded && (
+        <div className="page-header">
+          <h1>Generator Price Map</h1>
+          <p className="page-subtitle">
+            Geographic visualization of generator-level {market === 'DA' ? 'Day-Ahead' : 'Real-Time'} prices across New York
+          </p>
+        </div>
+      )}
+      {embedded && (
+        <div className="chart-card-header" style={{ padding: '16px 0 8px' }}>
+          <div>
+            <div className="chart-card-title" style={{ fontSize: 16, fontWeight: 700 }}>
+              Generator Price Map
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '4px 0 0' }}>
+              Geographic visualization of generator-level {market === 'DA' ? 'Day-Ahead' : 'Real-Time'} prices across New York
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <div className="pill-group">

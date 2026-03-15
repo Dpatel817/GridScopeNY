@@ -38,7 +38,8 @@ frontend/
     App.tsx               # Root with React Router
     index.css             # Full design system (CSS variables, all component styles)
     components/
-      Layout.tsx          # Dark sidebar with branding, sectioned nav
+      Layout.tsx          # Dark sidebar with branding, sectioned nav, mounts MarketAnalystWidget
+      MarketAnalystWidget.tsx  # Persistent bottom-right AI chat widget (page-aware context, quick prompts)
       LineChart.tsx       # Recharts line chart wrapper (multi-line, wide-format, robust fmtX for dates)
       StackedBarChart.tsx # Recharts stacked bar chart (multi-series, uses same color palette)
       SeriesSelector.tsx  # Multi-select dropdown for filtering chart series (zones, fuels, etc.)
@@ -54,11 +55,11 @@ frontend/
       Home.tsx            # Market Overview — KPIs, Live System Context (RT events + oper announcements), workflow steps, nav tiles
       Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards (on-peak avg, peak/low DA/RT, top DART), side chart controls, 3 view tabs (DA/RT/DART), flexible chart types (line/area/bar)
       Demand.tsx          # Demand Intelligence — AI summary, 10 KPI cards (forecast/actual peaks+lows, error metrics), side chart controls, 3 view tabs (Zonal/FvA/Error)
-      Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC section
+      Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC section, embedded Generator Map
       InterfaceFlows.tsx  # Interface Flows — AI summary, 8 KPI cards (on-peak totals, peak flows, most active, top internal/external, count), side chart controls with class/interface/resolution/date/chart-type, flow chart, interface summary table, TTCF Derates section
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
-      OpportunityExplorer.tsx  # Opportunity & Insight Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
-      AIExplainer.tsx     # AI Market Analyst — Current Market Context, structured response (Summary/Trader/Battery/Signals/Caveat), two prompt groups
+      OpportunityExplorer.tsx  # Opportunity Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
+      GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization (standalone or embedded mode)
       InterconnectionQueue.tsx  # Interconnection Queue — KPIs, changes list, fuel/zone breakdown, searchable table with sheet tabs
     components/
       PriceChart.tsx      # Flexible chart (line/line+markers/stacked area/stacked bar) with configurable tooltip prefix/suffix
@@ -67,7 +68,6 @@ frontend/
     data/
       zones.ts            # NYISO zone constants (A-K), isNyisoZone/filterNyisoZones helpers
       interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
-      GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization
       priceTransforms.ts  # Date/zone filtering, OPA/OFFPA/daily aggregation, DART computation, pivoting
       priceMetrics.ts     # KPI stats (on-peak avg, peak/low with hour+zone, top DART zone)
       priceSummary.ts     # AI summary context builder, deterministic fallback summary, API fetch

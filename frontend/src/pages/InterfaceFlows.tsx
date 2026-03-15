@@ -466,7 +466,7 @@ export default function InterfaceFlows() {
 
       <div className="price-summary-box">
         <div className="price-summary-header">
-          <span className="price-summary-icon">&#9889;</span>
+          <span className="price-summary-icon"></span>
           <span className="price-summary-title">Flow Summary</span>
           {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
           {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}

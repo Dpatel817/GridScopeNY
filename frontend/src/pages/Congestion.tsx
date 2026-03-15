@@ -666,19 +666,6 @@ export default function Congestion() {
 
   const activeForChart = selectedConstraints.filter(c => allConstraintNames.includes(c));
 
-  const hasNegative = useMemo(() => {
-    for (const row of chartData) {
-      for (const key of Object.keys(row)) {
-        if (key === 'Date') continue;
-        if (Number(row[key]) < 0) return true;
-      }
-    }
-    return false;
-  }, [chartData]);
-
-  const effectiveChartType: ChartType = chartType === 'area' && hasNegative ? 'line' : chartType;
-  const stackWarning = chartType === 'area' && hasNegative;
-
   const displaySummary = aiSummary || fallbackSummary;
 
   const fmtCost = (v: number) => '$' + Math.round(Math.abs(v)).toLocaleString();
@@ -694,7 +681,7 @@ export default function Congestion() {
 
       <div className="price-summary-box">
         <div className="price-summary-header">
-          <span className="price-summary-icon">&#9889;</span>
+          <span className="price-summary-icon"></span>
           <span className="price-summary-title">Congestion Summary</span>
           {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
           {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
@@ -802,16 +789,6 @@ export default function Congestion() {
               </span>
             </div>
 
-            {stackWarning && (
-              <div style={{
-                padding: '8px 14px', background: 'color-mix(in srgb, var(--warning) 12%, transparent)',
-                border: '1px solid var(--warning)', borderRadius: 8, marginBottom: 8, fontSize: 12,
-                color: 'var(--text-muted)'
-              }}>
-                Stacked area disabled — data contains negative costs. Showing line chart instead.
-              </div>
-            )}
-
             <div className="chart-card">
               <div className="chart-card-header">
                 <div className="chart-card-title">Constraint Costs Over Time</div>
@@ -821,7 +798,7 @@ export default function Congestion() {
                 data={chartData}
                 xKey="Date"
                 yKeys={activeForChart}
-                chartType={effectiveChartType}
+                chartType={chartType}
                 height={380}
                 valuePrefix="$"
                 valueSuffix=""

@@ -1,10 +1,33 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
 import ChartControls from '../components/ChartControls';
 import type { ChartType, Resolution, DateRange } from '../data/priceTransforms';
 import type { GenRow, FuelBreakdown } from '../data/generationTransforms';
+
+const GeneratorMap = lazy(() => import('./GeneratorMap'));
+
+function GeneratorMapSection() {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="section-container" style={{ marginTop: 24 }}>
+      <div
+        className="collapsible-header"
+        onClick={() => setExpanded(!expanded)}
+        style={{ cursor: 'pointer' }}
+      >
+        <span className="chevron">{expanded ? '▾' : '▸'}</span>
+        Generator Price Map
+      </div>
+      {expanded && (
+        <Suspense fallback={<div className="loading"><div className="spinner" /> Loading map...</div>}>
+          <GeneratorMap embedded />
+        </Suspense>
+      )}
+    </div>
+  );
+}
 import {
   detectColumns, extractFuels, getAvailableDates,
   filterByDateRange, pivotByFuel, computeFuelBreakdown,
@@ -224,7 +247,7 @@ export default function Generation() {
 
       <div className="price-summary-box">
         <div className="price-summary-header">
-          <span className="price-summary-icon">&#9889;</span>
+          <span className="price-summary-icon"></span>
           <span className="price-summary-title">Generation Summary</span>
           {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
           {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
@@ -425,6 +448,8 @@ export default function Generation() {
       )}
 
       <OICCommitmentSection />
+
+      <GeneratorMapSection />
 
       <div className="section-container">
         <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>

@@ -1,19 +1,18 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useDataRefresh } from '../hooks/useDataRefresh'
+import MarketAnalystWidget from './MarketAnalystWidget'
 
 const MARKET_NAV = [
-  { path: '/prices', label: 'Prices', icon: '💲' },
-  { path: '/demand', label: 'Demand', icon: '📊' },
-  { path: '/generation', label: 'Generation', icon: '⚡' },
-  { path: '/interfaces', label: 'Interface Flows', icon: '🔌' },
-  { path: '/congestion', label: 'Congestion', icon: '🚧' },
-  { path: '/generator-map', label: 'Generator Map', icon: '📍' },
-  { path: '/interconnection-queue', label: 'Interconnection Queue', icon: '🔗' },
+  { path: '/prices', label: 'Prices' },
+  { path: '/demand', label: 'Demand' },
+  { path: '/generation', label: 'Generation' },
+  { path: '/interfaces', label: 'Interface Flows' },
+  { path: '/congestion', label: 'Congestion' },
+  { path: '/interconnection-queue', label: 'Interconnection Queue' },
 ]
 
 const TOOL_NAV = [
-  { path: '/opportunities', label: 'Opportunity & Insight Explorer', icon: '🎯', hero: true },
-  { path: '/ai-explainer', label: 'AI Market Analyst', icon: '🤖' },
+  { path: '/opportunities', label: 'Opportunity Explorer', hero: true },
 ]
 
 function formatTime(date: Date | null) {
@@ -23,6 +22,20 @@ function formatTime(date: Date | null) {
 
 export default function Layout() {
   const { refreshing, lastRefresh, error, fullRefresh, autoRefreshEnabled, toggleAutoRefresh } = useDataRefresh();
+  const location = useLocation();
+
+  const currentPage = (() => {
+    const p = location.pathname;
+    if (p === '/') return 'overview';
+    if (p.startsWith('/prices')) return 'prices';
+    if (p.startsWith('/demand')) return 'demand';
+    if (p.startsWith('/generation')) return 'generation';
+    if (p.startsWith('/interfaces')) return 'interfaces';
+    if (p.startsWith('/congestion')) return 'congestion';
+    if (p.startsWith('/opportunities')) return 'opportunities';
+    if (p.startsWith('/interconnection')) return 'interconnection';
+    return 'overview';
+  })();
 
   return (
     <div className="layout">
@@ -40,7 +53,6 @@ export default function Layout() {
             end
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
           >
-            <span className="nav-icon">🏠</span>
             Overview
           </NavLink>
 
@@ -51,7 +63,6 @@ export default function Layout() {
               to={item.path}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
             >
-              <span className="nav-icon">{item.icon}</span>
               {item.label}
             </NavLink>
           ))}
@@ -62,10 +73,9 @@ export default function Layout() {
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `nav-item${isActive ? ' active' : ''}${'hero' in item && item.hero ? ' hero' : ''}`
+                `nav-item${isActive ? ' active' : ''}${item.hero ? ' hero' : ''}`
               }
             >
-              <span className="nav-icon">{item.icon}</span>
               {item.label}
             </NavLink>
           ))}
@@ -107,6 +117,7 @@ export default function Layout() {
       <main className="main-content">
         <Outlet />
       </main>
+      <MarketAnalystWidget currentPage={currentPage} />
     </div>
   )
 }
