@@ -97,6 +97,56 @@ def filters(dataset_key: str, column: str):
 # ---------------------------------------------------------------------------
 # Constraint Impact Analysis endpoint
 # ---------------------------------------------------------------------------
+def _find_clean_prints(constr_df, facility, contingency):
+    """Identify clean prints: Date+HE intervals where only one unique
+    constraint (facility+contingency) is materially binding.
+    A print is 'clean' when no other constraint has |cost| > threshold
+    at the same Date+HE, making the MCC impact more attributable."""
+    if constr_df.empty or not facility or not contingency:
+        return [], []
+
+    COST_THRESHOLD = 1.0
+    grouped = constr_df.groupby(["Date", "HE"]).apply(
+        lambda g: g[g["Constraint Cost"].abs() >= COST_THRESHOLD][["Limiting Facility", "Contingency"]].drop_duplicates().shape[0],
+        include_groups=False
+    ).reset_index(name="active_constraints")
+
+    target_rows = constr_df[
+        (constr_df["Limiting Facility"] == facility) &
+        (constr_df["Contingency"] == contingency) &
+        (constr_df["Constraint Cost"].abs() >= COST_THRESHOLD)
+    ][["Date", "HE"]].drop_duplicates()
+
+    merged = target_rows.merge(grouped, on=["Date", "HE"], how="left")
+    clean = merged[merged["active_constraints"] == 1]
+    mixed = merged[merged["active_constraints"] > 1]
+
+    clean_prints = [{"date": r["Date"], "he": int(r["HE"])} for _, r in clean.iterrows()]
+    mixed_prints = [{"date": r["Date"], "he": int(r["HE"]), "active_constraints": int(r["active_constraints"])} for _, r in mixed.iterrows()]
+    return clean_prints, mixed_prints
+
+
+def _build_congestion_pivot(constr_df, facility=None, contingency=None):
+    """Build hourly pivot of constraint costs: rows=Date, cols=HE."""
+    if constr_df.empty:
+        return []
+    work = constr_df.copy()
+    if facility:
+        work = work[work["Limiting Facility"] == facility]
+    if contingency:
+        work = work[work["Contingency"] == contingency]
+    if work.empty:
+        return []
+
+    pivot = work.pivot_table(
+        index="Date", columns="HE", values="Constraint Cost",
+        aggfunc="sum", fill_value=0
+    ).round(2)
+    pivot = pivot.reset_index()
+    pivot.columns = [str(c) for c in pivot.columns]
+    return pivot.to_dict(orient="records")
+
+
 @app.get("/api/constraint-impact")
 def constraint_impact(
     market: str = Query(default="DA", pattern="^(DA|RT)$"),
@@ -104,6 +154,7 @@ def constraint_impact(
     he: Optional[int] = Query(default=None, ge=0, le=23),
     facility: Optional[str] = Query(default=None),
     contingency: Optional[str] = Query(default=None),
+    clean_only: bool = Query(default=False),
 ):
     constr_key = "dam_limiting_constraints" if market == "DA" else "rt_limiting_constraints"
     zone_key = "da_lbmp_zone" if market == "DA" else "rt_lbmp_zone"
@@ -130,11 +181,7 @@ def constraint_impact(
     if not date and available_dates:
         date = available_dates[-1]
 
-    date_filtered = constr.copy()
-    if date:
-        date_filtered = date_filtered[date_filtered["Date"] == date]
-    if he is not None and "HE" in date_filtered.columns:
-        date_filtered = date_filtered[date_filtered["HE"] == he]
+    date_filtered = constr[constr["Date"] == date].copy() if date else constr.copy()
 
     facilities = sorted(date_filtered["Limiting Facility"].dropna().unique().tolist())
 
@@ -144,28 +191,45 @@ def constraint_impact(
 
     contingencies = sorted(fac_filtered["Contingency"].dropna().unique().tolist())
 
+    clean_prints, mixed_prints = _find_clean_prints(date_filtered, facility, contingency)
+    clean_hes = [p["he"] for p in clean_prints]
+
     selected = fac_filtered.copy()
     if contingency:
         selected = selected[selected["Contingency"] == contingency]
 
+    if he is not None and "HE" in selected.columns:
+        selected = selected[selected["HE"] == he]
+    elif clean_only and facility and contingency:
+        if clean_hes:
+            selected = selected[selected["HE"].isin(clean_hes)]
+        else:
+            selected = selected.iloc[0:0]
+
+    pivot_data = _build_congestion_pivot(date_filtered, facility, contingency)
+
+    empty_response = {
+        "market": market, "date": date, "he": he,
+        "facility": facility, "contingency": contingency,
+        "clean_only": clean_only,
+        "constraint_summary": None,
+        "zonal_impact": [], "generator_impact": [],
+        "clean_prints": clean_prints, "mixed_prints": mixed_prints,
+        "congestion_pivot": pivot_data,
+        "available_dates": available_dates, "available_hes": available_hes,
+        "facilities": facilities, "contingencies": contingencies,
+        "status": "no_data",
+    }
+
     if selected.empty:
-        return {
-            "market": market,
-            "date": date,
-            "he": he,
-            "facility": facility,
-            "contingency": contingency,
-            "constraint_summary": None,
-            "zonal_impact": [],
-            "generator_impact": [],
-            "available_dates": available_dates,
-            "available_hes": available_hes,
-            "facilities": facilities,
-            "contingencies": contingencies,
-            "status": "no_data",
-        }
+        return empty_response
 
     costs = selected["Constraint Cost"].dropna().tolist()
+
+    is_clean = False
+    if he is not None and facility and contingency:
+        is_clean = he in clean_hes
+
     constraint_summary = {
         "facility": facility or "All",
         "contingency": contingency or "All",
@@ -178,6 +242,9 @@ def constraint_impact(
         "binding_count": len(costs),
         "unique_hours": int(selected["HE"].nunique()) if "HE" in selected.columns else 0,
         "unique_dates": int(selected["Date"].nunique()),
+        "is_clean_print": is_clean,
+        "clean_print_count": len(clean_prints),
+        "mixed_print_count": len(mixed_prints),
     }
 
     date_hes = selected[["Date", "HE"]].drop_duplicates()
@@ -190,14 +257,11 @@ def constraint_impact(
 
             zone_match = zone_df.merge(date_hes, on=["Date", "HE"], how="inner")
 
-            if market == "RT" and len(zone_match) > 0:
-                zone_match = zone_match.groupby("Zone")[["LMP", "MLC", "MCC"]].mean().reset_index()
-            elif len(zone_match) > 0:
+            if len(zone_match) > 0:
                 zone_match = zone_match.groupby("Zone")[["LMP", "MLC", "MCC"]].mean().reset_index()
 
             if len(zone_match) > 0:
                 sys_avg_lmp = zone_match["LMP"].mean()
-                sys_avg_mcc = zone_match["MCC"].mean()
                 zone_match["delta_vs_system"] = (zone_match["LMP"] - sys_avg_lmp).round(2)
                 zone_match["mcc_abs"] = zone_match["MCC"].abs()
                 zone_match = zone_match.sort_values("mcc_abs", ascending=False)
@@ -249,9 +313,13 @@ def constraint_impact(
         "he": he,
         "facility": facility,
         "contingency": contingency,
+        "clean_only": clean_only,
         "constraint_summary": constraint_summary,
         "zonal_impact": zonal_impact,
         "generator_impact": generator_impact,
+        "clean_prints": clean_prints,
+        "mixed_prints": mixed_prints,
+        "congestion_pivot": pivot_data,
         "available_dates": available_dates,
         "available_hes": available_hes,
         "facilities": facilities,

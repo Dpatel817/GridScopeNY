@@ -99,7 +99,7 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/page/{page}` — list datasets for a page
 - `GET /api/filters/{key}/{col}` — filter options for a column
 - `GET /api/generator-map?market=DA|RT&date=YYYY-MM-DD&he=0-23` — generator geographic price data (561 mapped generators)
-- `GET /api/constraint-impact?market=DA|RT&date=&he=&facility=&contingency=` — constraint impact analysis with zonal/generator MCC impact
+- `GET /api/constraint-impact?market=DA|RT&date=&he=&facility=&contingency=&clean_only=true` — constraint impact analysis with clean print detection, congestion pivot, zonal/generator MCC impact
 - `POST /api/ai-explainer` — structured AI market analysis with drivers/caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL
