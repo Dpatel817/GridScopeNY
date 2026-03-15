@@ -44,7 +44,7 @@ function fmtX(v: unknown): string {
 }
 
 function makeTooltip(prefix: string, suffix: string) {
-  return function CustomTooltip({ active, payload, label }: any) {
+  return function ChartTooltip({ active, payload, label }: any) {
     if (!active || !payload?.length) return null;
     return (
       <div className="price-tooltip">
@@ -73,6 +73,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
 
   const showDots = chartType === 'line-markers';
   const interval = data.length > 100 ? Math.floor(data.length / 40) : data.length > 50 ? 2 : 'preserveStartEnd';
+  const TooltipContent = makeTooltip(valuePrefix, valueSuffix);
 
   if (chartType === 'area') {
     return (
@@ -81,7 +82,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey={xKey} tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
           <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<TooltipContent />} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
           {yKeys.map((k, i) => (
             <Area key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]}
@@ -99,7 +100,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis dataKey={xKey} tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
           <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<TooltipContent />} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
           {yKeys.map((k, i) => (
             <Bar key={k} dataKey={k} stackId="stack" fill={COLORS[i % COLORS.length]} maxBarSize={40} />
@@ -115,7 +116,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis dataKey={xKey} tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
         <YAxis tick={{ fontSize: 11 }} />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<TooltipContent />} />
         {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
         {yKeys.map((k, i) => (
           <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]}

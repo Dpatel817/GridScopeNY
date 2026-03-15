@@ -112,13 +112,21 @@ export function alignForecastActual(
   forecastRows: DemandRow[],
   actualRows: DemandRow[]
 ): AlignedRow[] {
-  const actualMap: Record<string, number> = {};
+  const zoneMap: Record<string, number> = {};
   for (const r of actualRows) {
-    const v = Number(r.NYISO || r.Load || 0);
+    const v = Number(r.Load || 0);
     if (v > 0) {
-      const key = `${r.Date}_${r.HE}`;
-      actualMap[key] = (actualMap[key] || 0) + v;
+      const zone = String(r.Zone || r.PTID || '');
+      const zoneKey = `${r.Date}_${r.HE}_${zone}`;
+      zoneMap[zoneKey] = v;
     }
+  }
+
+  const actualMap: Record<string, number> = {};
+  for (const [zk, v] of Object.entries(zoneMap)) {
+    const parts = zk.split('_');
+    const intervalKey = `${parts[0]}_${parts[1]}`;
+    actualMap[intervalKey] = (actualMap[intervalKey] || 0) + v;
   }
 
   const aligned: AlignedRow[] = [];

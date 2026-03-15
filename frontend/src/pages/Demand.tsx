@@ -1,28 +1,55 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useDataset } from '../hooks/useDataset';
-import ResolutionSelector from '../components/ResolutionSelector';
-import LineChart from '../components/LineChart';
 import DatasetSection from '../components/DatasetSection';
-import SeriesSelector from '../components/SeriesSelector';
+import PriceChart from '../components/PriceChart';
+import ChartControls from '../components/ChartControls';
+import type { ChartType, Resolution, DateRange } from '../data/priceTransforms';
+import type { DemandRow, AlignedRow } from '../data/demandTransforms';
+import {
+  extractZones, getAvailableDates, filterByDateRange,
+  pivotZonalDemand, alignForecastActual,
+  pivotForecastActual, pivotForecastError,
+} from '../data/demandTransforms';
+import { computeDemandKPIs } from '../data/demandMetrics';
+import type { DemandKPIs } from '../data/demandMetrics';
+import {
+  buildDemandSummaryContext, deterministicDemandSummary, fetchAIDemandSummary,
+} from '../data/demandSummary';
 
-const META_COLS = new Set(['Date', 'Time Stamp', 'HE', 'MONTH', 'YEAR', 'Month', 'Year',
-  'Vintage Date', 'Forecast Date', 'source_date', 'SOURCE_DATE', 'source_file', 'Time Zone']);
+const RAW_DATASETS = ['isolf', 'pal', 'pal_integrated', 'lfweather'];
+
+type ViewMode = 'zonal' | 'fva' | 'error';
 
 export default function Demand() {
-  const [resolution, setResolution] = useState('hourly');
-  const [showRaw, setShowRaw] = useState(false);
+  const [resolution, setResolution] = useState<Resolution>('hourly');
+  const [dateRange, setDateRange] = useState<DateRange>('today');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('zonal');
+  const [showRaw, setShowRaw] = useState(false);
 
-  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', resolution);
-  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', resolution);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiRequestedRef = useState(() => ({ current: false }))[0];
+
+  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'raw');
+  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'raw');
 
   const loading = fLoading || aLoading;
 
-  const allZones = useMemo(() => {
-    const fRecords = forecastData?.data || [];
-    if (!fRecords.length) return [];
-    return Object.keys(fRecords[0]).filter(k => !META_COLS.has(k)).sort();
-  }, [forecastData]);
+  const forecastRows: DemandRow[] = useMemo(
+    () => (forecastData?.data || []) as DemandRow[],
+    [forecastData]
+  );
+  const actualRows: DemandRow[] = useMemo(
+    () => (actualData?.data || []) as DemandRow[],
+    [actualData]
+  );
+
+  const allZones = useMemo(() => extractZones(forecastRows), [forecastRows]);
+  const availableDates = useMemo(() => getAvailableDates(forecastRows), [forecastRows]);
 
   useEffect(() => {
     if (allZones.length > 0 && selectedZones.length === 0) {
@@ -30,61 +57,66 @@ export default function Demand() {
     }
   }, [allZones]);
 
-  const { kpis, forecastChart, errorChart } = useMemo(() => {
-    const fRecords = forecastData?.data || [];
-    const aRecords = actualData?.data || [];
+  const aligned: AlignedRow[] = useMemo(
+    () => alignForecastActual(forecastRows, actualRows),
+    [forecastRows, actualRows]
+  );
 
-    const fVals = fRecords.map((r: any) => Number(r.NYISO || 0)).filter((v: number) => v > 0);
+  const kpis: DemandKPIs = useMemo(
+    () => computeDemandKPIs(forecastRows, aligned),
+    [forecastRows, aligned]
+  );
 
-    const aTotals: Record<string, number> = {};
-    for (const r of aRecords) {
-      const key = `${r.Date}_${r.HE}`;
-      const v = Number(r.NYISO || r.Load || 0);
-      if (v > 0) {
-        aTotals[key] = (aTotals[key] || 0) + v;
-      }
+  const fallbackSummary = useMemo(() => deterministicDemandSummary(kpis), [kpis]);
+
+  useEffect(() => {
+    if (aiRequestedRef.current) return;
+    if (loading || !forecastRows.length) return;
+    aiRequestedRef.current = true;
+    setAiLoading(true);
+    const ctx = buildDemandSummaryContext(kpis, 'Latest available data');
+    fetchAIDemandSummary(ctx).then(s => {
+      if (s) setAiSummary(s);
+    }).finally(() => setAiLoading(false));
+  }, [loading, forecastRows.length, kpis]);
+
+  const forecastFiltered = useMemo(
+    () => filterByDateRange(forecastRows, dateRange, startDate, endDate),
+    [forecastRows, dateRange, startDate, endDate]
+  );
+
+  const alignedFiltered = useMemo(() => {
+    if (dateRange === 'all') return aligned;
+    if (dateRange === 'today') {
+      const dates = getAvailableDates(forecastRows);
+      const latest = dates[dates.length - 1];
+      if (!latest) return aligned;
+      return aligned.filter(r => r.Date === latest);
     }
-
-    const aVals = Object.values(aTotals);
-    const forecastPeak = fVals.length ? Math.max(...fVals) : null;
-    const actualPeak = aVals.length ? Math.max(...aVals) : null;
-    const delta = forecastPeak !== null && actualPeak !== null ? actualPeak - forecastPeak : null;
-
-    let errorSum = 0;
-    let errorCount = 0;
-    const combined: any[] = [];
-    for (const f of fRecords) {
-      const fVal = Number(f.NYISO || 0);
-      if (!fVal) continue;
-      const aVal = aTotals[`${f.Date}_${f.HE}`];
-      if (aVal) {
-        combined.push({
-          Date: f.Date || f['Time Stamp'],
-          HE: f.HE,
-          Forecast: fVal,
-          Actual: aVal,
-          Error: fVal - aVal,
-        });
-        errorSum += Math.abs(fVal - aVal);
-        errorCount++;
-      }
+    if (dateRange === 'custom' && startDate && endDate) {
+      return aligned.filter(r => r.Date >= startDate && r.Date <= endDate);
     }
-    const avgError = errorCount > 0 ? errorSum / errorCount : null;
+    return aligned;
+  }, [aligned, dateRange, startDate, endDate, forecastRows]);
 
-    const forecastChart = fRecords.length > 0
-      ? { data: fRecords, xKey: fRecords[0]?.Date ? 'Date' : 'Time Stamp', yKeys: selectedZones }
-      : null;
+  const zonalChartData = useMemo(
+    () => pivotZonalDemand(forecastFiltered, selectedZones, resolution),
+    [forecastFiltered, selectedZones, resolution]
+  );
 
-    if (typeof console !== 'undefined') {
-      console.log(`[Demand] Zones available: ${allZones.length}, displayed: ${selectedZones.length}, forecast rows: ${fRecords.length}, actual rows: ${aRecords.length}, merged: ${combined.length}`);
-    }
+  const fvaChartData = useMemo(
+    () => pivotForecastActual(alignedFiltered, resolution),
+    [alignedFiltered, resolution]
+  );
 
-    return {
-      kpis: { forecastPeak, actualPeak, delta, avgError },
-      forecastChart,
-      errorChart: combined.length > 0 ? combined : null,
-    };
-  }, [forecastData, actualData, selectedZones, allZones]);
+  const errorChartData = useMemo(
+    () => pivotForecastError(alignedFiltered, resolution),
+    [alignedFiltered, resolution]
+  );
+
+  const displaySummary = aiSummary || fallbackSummary;
+
+  const fmtLoad = (v: number) => Math.round(v).toLocaleString();
 
   return (
     <div className="page">
@@ -95,16 +127,15 @@ export default function Demand() {
         </p>
       </div>
 
-      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <ResolutionSelector value={resolution} onChange={setResolution} />
-        {allZones.length > 0 && (
-          <SeriesSelector
-            label="Zones"
-            allSeries={allZones}
-            selected={selectedZones}
-            onChange={setSelectedZones}
-          />
-        )}
+      <div className="price-summary-box">
+        <div className="price-summary-header">
+          <span className="price-summary-icon">&#9889;</span>
+          <span className="price-summary-title">Demand Summary</span>
+          {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
+          {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
+          {!aiLoading && !aiSummary && <span className="price-summary-badge">Deterministic</span>}
+        </div>
+        <div className="price-summary-body">{displaySummary}</div>
       </div>
 
       {(fError || aError) && (
@@ -114,85 +145,183 @@ export default function Demand() {
         </div>
       )}
 
-      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <div className="kpi-card">
-          <div className="kpi-label">Forecast Peak Load</div>
-          <div className="kpi-value">
-            {kpis.forecastPeak ? <>{kpis.forecastPeak.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Actual Peak Load</div>
-          <div className="kpi-value">
-            {kpis.actualPeak ? <>{kpis.actualPeak.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Peak Delta</div>
-          <div className="kpi-value">
-            {kpis.delta !== null ? (
-              <span style={{ color: Math.abs(kpis.delta) > 500 ? 'var(--danger)' : 'var(--text)' }}>
-                {kpis.delta > 0 ? '+' : ''}{kpis.delta.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                <span className="kpi-unit">MW</span>
-              </span>
-            ) : '—'}
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Avg Forecast Error</div>
-          <div className="kpi-value">
-            {kpis.avgError !== null ? <>{kpis.avgError.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
-          </div>
-        </div>
-      </div>
-
       {loading && <div className="loading"><div className="spinner" /> Loading demand data...</div>}
 
-      {!loading && forecastChart && selectedZones.length > 0 && (
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">System Load Forecast by Zone</div>
-            <span className="badge badge-primary">{resolution} · {selectedZones.length} of {allZones.length} zones</span>
-          </div>
-          <LineChart data={forecastChart.data} xKey={forecastChart.xKey} yKeys={forecastChart.yKeys} height={300} />
-        </div>
-      )}
-
-      {!loading && errorChart && errorChart.length > 0 && (
-        <div className="grid-2" style={{ marginBottom: 16 }}>
-          <div className="chart-card">
-            <div className="chart-card-header">
-              <div className="chart-card-title">Forecast vs Actual (NYISO Total)</div>
-              <span className="badge badge-primary">{errorChart.length} matched intervals</span>
+      {!loading && (
+        <div className="kpi-grid price-kpi-grid">
+          <div className="kpi-card">
+            <div className="kpi-label">On-Peak Avg Forecast</div>
+            <div className="kpi-value">
+              {kpis.onPeakAvgForecast != null ? <>{fmtLoad(kpis.onPeakAvgForecast)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            <LineChart data={errorChart} xKey="Date" yKeys={['Forecast', 'Actual']} height={260} />
           </div>
-          <div className="chart-card">
-            <div className="chart-card-header">
-              <div className="chart-card-title">Forecast Error</div>
+          <div className="kpi-card">
+            <div className="kpi-label">On-Peak Avg Actual</div>
+            <div className="kpi-value">
+              {kpis.onPeakAvgActual != null ? <>{fmtLoad(kpis.onPeakAvgActual)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            <LineChart data={errorChart} xKey="Date" yKeys={['Error']} height={260} />
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Forecast</div>
+            <div className="kpi-value">
+              {kpis.peakForecast ? <>{fmtLoad(kpis.peakForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.peakForecast && <div className="kpi-sub">HE{kpis.peakForecast.he} · {kpis.peakForecast.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Actual</div>
+            <div className="kpi-value">
+              {kpis.peakActual ? <>{fmtLoad(kpis.peakActual.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.peakActual && <div className="kpi-sub">HE{kpis.peakActual.he} · {kpis.peakActual.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Low Forecast</div>
+            <div className="kpi-value">
+              {kpis.lowForecast ? <>{fmtLoad(kpis.lowForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.lowForecast && <div className="kpi-sub">HE{kpis.lowForecast.he} · {kpis.lowForecast.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Low Actual</div>
+            <div className="kpi-value">
+              {kpis.lowActual ? <>{fmtLoad(kpis.lowActual.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.lowActual && <div className="kpi-sub">HE{kpis.lowActual.he} · {kpis.lowActual.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Avg Forecast Error</div>
+            <div className="kpi-value">
+              {kpis.avgForecastError != null ? (
+                <span style={{ color: Math.abs(kpis.avgForecastError) > 500 ? 'var(--danger)' : 'var(--text)' }}>
+                  {kpis.avgForecastError > 0 ? '+' : ''}{fmtLoad(kpis.avgForecastError)}<span className="kpi-unit">MW</span>
+                </span>
+              ) : '—'}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Abs Error</div>
+            <div className="kpi-value">
+              {kpis.peakForecastError ? <>{fmtLoad(Math.abs(kpis.peakForecastError.value))}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.peakForecastError && <div className="kpi-sub">HE{kpis.peakForecastError.he} · {kpis.peakForecastError.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Largest Under-Forecast</div>
+            <div className="kpi-value">
+              {kpis.largestUnderForecast ? <>{fmtLoad(Math.abs(kpis.largestUnderForecast.value))}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.largestUnderForecast && <div className="kpi-sub">HE{kpis.largestUnderForecast.he} · {kpis.largestUnderForecast.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Largest Over-Forecast</div>
+            <div className="kpi-value">
+              {kpis.largestOverForecast ? <>{fmtLoad(kpis.largestOverForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.largestOverForecast && <div className="kpi-sub">HE{kpis.largestOverForecast.he} · {kpis.largestOverForecast.date}</div>}
           </div>
         </div>
       )}
 
-      {!loading && !errorChart && actualData && !aError && (
-        <div className="insight-card" style={{ background: 'var(--warning-light)' }}>
-          <div className="insight-title" style={{ color: '#92400e' }}>Actual Load Data</div>
-          <div className="insight-body">No actual load records could be matched with forecast data. This may mean the actual load dataset has a different time alignment or has not been fetched yet.</div>
-        </div>
-      )}
+      {!loading && (
+        <div className="price-chart-layout">
+          <ChartControls
+            seriesLabel="Zones"
+            series={allZones}
+            selectedSeries={selectedZones}
+            onSeriesChange={setSelectedZones}
+            resolution={resolution}
+            onResolutionChange={setResolution}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            availableDates={availableDates}
+            chartType={chartType}
+            onChartTypeChange={setChartType}
+          />
+          <div className="price-chart-main">
+            <div className="price-view-tabs">
+              <button
+                className={`pcc-btn${viewMode === 'zonal' ? ' active' : ''}`}
+                onClick={() => setViewMode('zonal')}
+              >
+                Zonal Forecast
+              </button>
+              <button
+                className={`pcc-btn${viewMode === 'fva' ? ' active' : ''}`}
+                onClick={() => setViewMode('fva')}
+              >
+                Forecast vs Actual
+              </button>
+              <button
+                className={`pcc-btn${viewMode === 'error' ? ' active' : ''}`}
+                onClick={() => setViewMode('error')}
+              >
+                Forecast Error
+              </button>
+              <span className="price-view-info">
+                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
+                {' · '}{selectedZones.length}/{allZones.length} zones
+                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
+              </span>
+            </div>
 
-      {!loading && kpis.forecastPeak && (
-        <div className="insight-card">
-          <div className="insight-title">Demand Summary</div>
-          <div className="insight-body">
-            Peak system forecast was <strong>{kpis.forecastPeak?.toLocaleString()} MW</strong>.
-            {kpis.actualPeak && <> Actual peak came in at <strong>{kpis.actualPeak.toLocaleString()} MW</strong>.</>}
-            {kpis.delta !== null && Math.abs(kpis.delta) > 200 && (
-              <> The <strong>{Math.abs(kpis.delta).toLocaleString()} MW {kpis.delta > 0 ? 'under-forecast' : 'over-forecast'}</strong> may have contributed to price deviations.</>
+            {viewMode === 'zonal' && (
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">System Load Forecast by Zone</div>
+                  <span className="badge badge-primary">{zonalChartData.length} points</span>
+                </div>
+                <PriceChart
+                  data={zonalChartData}
+                  xKey="Date"
+                  yKeys={selectedZones}
+                  chartType={chartType}
+                  height={380}
+                  valuePrefix=""
+                  valueSuffix=" MW"
+                />
+              </div>
             )}
-            {kpis.avgError && <> Average forecast error was <strong>{kpis.avgError.toLocaleString(undefined, { maximumFractionDigits: 0 })} MW</strong>.</>}
+
+            {viewMode === 'fva' && (
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">Forecast vs Actual (NYISO Total)</div>
+                  <span className="badge badge-primary">{fvaChartData.length} points</span>
+                </div>
+                <PriceChart
+                  data={fvaChartData}
+                  xKey="Date"
+                  yKeys={['Forecast', 'Actual']}
+                  chartType={chartType}
+                  height={380}
+                  valuePrefix=""
+                  valueSuffix=" MW"
+                />
+              </div>
+            )}
+
+            {viewMode === 'error' && (
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">Forecast Error (Forecast minus Actual)</div>
+                  <span className="badge badge-primary">{errorChartData.length} points</span>
+                </div>
+                <PriceChart
+                  data={errorChartData}
+                  xKey="Date"
+                  yKeys={['Error']}
+                  chartType={chartType}
+                  height={380}
+                  valuePrefix=""
+                  valueSuffix=" MW"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -200,12 +329,12 @@ export default function Demand() {
       <div className="section-container">
         <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
           <span className="chevron">{showRaw ? '▾' : '▸'}</span>
-          Detailed Data
+          Detailed Data ({RAW_DATASETS.length})
         </div>
         {showRaw && (
           <div style={{ marginTop: 8 }}>
-            {['isolf', 'pal', 'pal_integrated', 'lfweather'].map((key, i) => (
-              <DatasetSection key={key} datasetKey={key} resolution={resolution} defaultExpanded={i === 0} />
+            {RAW_DATASETS.map((key, i) => (
+              <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
             ))}
           </div>
         )}

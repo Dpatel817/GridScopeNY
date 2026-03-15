@@ -1,10 +1,20 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDataset } from '../hooks/useDataset';
-import ResolutionSelector from '../components/ResolutionSelector';
-import LineChart from '../components/LineChart';
-import StackedBarChart from '../components/StackedBarChart';
 import DatasetSection from '../components/DatasetSection';
-import SeriesSelector from '../components/SeriesSelector';
+import PriceChart from '../components/PriceChart';
+import ChartControls from '../components/ChartControls';
+import type { ChartType, Resolution, DateRange } from '../data/priceTransforms';
+import type { GenRow, FuelBreakdown } from '../data/generationTransforms';
+import {
+  detectColumns, extractFuels, getAvailableDates,
+  filterByDateRange, pivotByFuel, computeFuelBreakdown,
+} from '../data/generationTransforms';
+import { computeGenerationKPIs } from '../data/generationMetrics';
+import type { GenerationKPIs } from '../data/generationMetrics';
+import {
+  buildGenerationSummaryContext, deterministicGenerationSummary,
+  fetchAIGenerationSummary,
+} from '../data/generationSummary';
 
 const DATASETS = [
   'rtfuelmix', 'gen_maint_report', 'op_in_commit',
@@ -21,10 +31,7 @@ interface OicResponse {
 }
 
 function OICCommitmentSection() {
-  const [date, setDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  });
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [data, setData] = useState<OicResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(true);
@@ -45,23 +52,28 @@ function OICCommitmentSection() {
   useEffect(() => { fetchOic(); }, [fetchOic]);
 
   return (
-    <div style={{ marginTop: 24 }}>
-      <div className="section-title" style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
-        Operating In Commitment (OIC)
+    <div className="section-container" style={{ marginTop: 24 }}>
+      <div className="chart-card-header" style={{ padding: '16px 0 8px' }}>
+        <div>
+          <div className="chart-card-title" style={{ fontSize: 16, fontWeight: 700 }}>
+            Operating In Commitment (OIC)
+          </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '4px 0 0' }}>
+            Generator commitment data — units called on for reliability or economic purposes
+          </p>
+        </div>
       </div>
-      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
-        Generator commitment data from NYISO — units called on for reliability or economic purposes.
-      </p>
-      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <input
           type="date"
-          className="gen-map-select"
+          className="pcc-date"
           value={date}
           onChange={e => setDate(e.target.value)}
         />
-        <button className="pill active" onClick={fetchOic} style={{ cursor: 'pointer' }}>
-          Refresh
-        </button>
+        <button className="pcc-btn active" onClick={fetchOic}>Refresh</button>
+        {!loading && data && data.status === 'ok' && (
+          <span className="badge badge-primary">{data.row_count} commitments</span>
+        )}
       </div>
       {loading && <div className="loading"><div className="spinner" /> Loading OIC data...</div>}
       {!loading && data && data.status === 'error' && (
@@ -79,14 +91,13 @@ function OICCommitmentSection() {
         <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div
             className="chart-card-header"
-            style={{ padding: '14px 20px', cursor: 'pointer' }}
+            style={{ padding: '12px 20px', cursor: 'pointer' }}
             onClick={() => setExpanded(!expanded)}
           >
             <div className="chart-card-title">
               <span className="chevron">{expanded ? '▾' : '▸'}</span>{' '}
               OIC Data — {data.date}
             </div>
-            <span className="badge badge-primary">{data.row_count} commitments</span>
           </div>
           {expanded && (
             <div style={{ overflowX: 'auto' }}>
@@ -121,71 +132,29 @@ function OICCommitmentSection() {
   );
 }
 
+type ViewMode = 'fuel' | 'stacked' | 'total';
+
 export default function Generation() {
-  const [resolution, setResolution] = useState('hourly');
-  const [showRaw, setShowRaw] = useState(false);
+  const [resolution, setResolution] = useState<Resolution>('hourly');
+  const [dateRange, setDateRange] = useState<DateRange>('today');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedFuels, setSelectedFuels] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('fuel');
+  const [showRaw, setShowRaw] = useState(false);
 
-  const { data: fuelData, loading, error } = useDataset('rtfuelmix', resolution);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { allFuels, kpis, chartData, fuelBreakdown } = useMemo(() => {
-    const records = fuelData?.data || [];
-    if (!records.length) return { allFuels: [], kpis: {} as any, chartData: [], fuelBreakdown: [] };
+  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'raw');
 
-    const genCol = records[0]?.['Generation MW'] !== undefined ? 'Generation MW' : 'Gen MW';
-    const fuelCol = records[0]?.['Fuel Type'] !== undefined ? 'Fuel Type' : 'Fuel Category';
+  const rows: GenRow[] = useMemo(() => (fuelData?.data || []) as GenRow[], [fuelData]);
+  const { genCol, fuelCol } = useMemo(() => detectColumns(rows), [rows]);
 
-    const genVals = records.map((r: any) => Number(r[genCol] || 0)).filter((v: number) => v > 0);
-    const totalGen = genVals.reduce((a: number, b: number) => a + b, 0);
-    const maxGen = genVals.length ? Math.max(...genVals) : 0;
-
-    const byFuel: Record<string, { total: number; count: number; max: number; name: string }> = {};
-    for (const r of records) {
-      const fuel = String(r[fuelCol] || 'Unknown');
-      const gen = Number(r[genCol] || 0);
-      if (!byFuel[fuel]) byFuel[fuel] = { total: 0, count: 0, max: 0, name: fuel };
-      byFuel[fuel].total += gen;
-      byFuel[fuel].count++;
-      byFuel[fuel].max = Math.max(byFuel[fuel].max, gen);
-    }
-
-    const fuelBreakdown = Object.values(byFuel)
-      .sort((a, b) => b.total - a.total)
-      .map(f => ({ ...f, avg: f.total / f.count, share: totalGen > 0 ? (f.total / totalGen * 100) : 0 }));
-
-    const allFuels = fuelBreakdown.map(f => f.name);
-
-    const activeFuels = selectedFuels.length > 0 ? selectedFuels : allFuels;
-    const pivoted: Record<string, any> = {};
-    for (const r of records) {
-      const fuel = String(r[fuelCol] || '');
-      if (!activeFuels.includes(fuel)) continue;
-      const dateKey = r.Date || r['Time Stamp'] || '';
-      const key = `${dateKey}_${r.HE || ''}`;
-      if (!pivoted[key]) pivoted[key] = { Date: dateKey };
-      pivoted[key][fuel] = Number(r[genCol] || 0);
-    }
-    const chartData = Object.values(pivoted).sort((a: any, b: any) => a.Date < b.Date ? -1 : 1);
-
-    const topFuel = fuelBreakdown[0];
-
-    if (typeof console !== 'undefined') {
-      console.log(`[Generation] Fuel types available: ${allFuels.length}, displayed: ${activeFuels.length}, records: ${records.length}`);
-    }
-
-    return {
-      allFuels,
-      kpis: {
-        totalGen: totalGen / (fuelBreakdown[0]?.count || 1),
-        maxGen,
-        fuelCount: fuelBreakdown.length,
-        topFuel: topFuel?.name,
-        topFuelShare: topFuel?.share,
-      },
-      chartData: chartData.length > 1 ? chartData : [],
-      fuelBreakdown,
-    };
-  }, [fuelData, selectedFuels]);
+  const allFuels = useMemo(() => extractFuels(rows, fuelCol), [rows, fuelCol]);
+  const availableDates = useMemo(() => getAvailableDates(rows), [rows]);
 
   useEffect(() => {
     if (allFuels.length > 0 && selectedFuels.length === 0) {
@@ -193,7 +162,56 @@ export default function Generation() {
     }
   }, [allFuels]);
 
-  const activeFuels = selectedFuels.length > 0 ? selectedFuels.filter(f => allFuels.includes(f)) : allFuels;
+  const breakdown: FuelBreakdown[] = useMemo(
+    () => computeFuelBreakdown(rows, fuelCol, genCol),
+    [rows, fuelCol, genCol]
+  );
+
+  const kpis: GenerationKPIs = useMemo(
+    () => computeGenerationKPIs(rows, breakdown),
+    [rows, breakdown]
+  );
+
+  const fallbackSummary = useMemo(
+    () => deterministicGenerationSummary(kpis, breakdown),
+    [kpis, breakdown]
+  );
+
+  useEffect(() => {
+    if (aiRequestedRef.current) return;
+    if (loading || !rows.length) return;
+    aiRequestedRef.current = true;
+    setAiLoading(true);
+    const ctx = buildGenerationSummaryContext(kpis, breakdown, 'Latest available data');
+    fetchAIGenerationSummary(ctx).then(s => {
+      if (s) setAiSummary(s);
+    }).finally(() => setAiLoading(false));
+  }, [loading, rows.length, kpis, breakdown]);
+
+  const filtered = useMemo(
+    () => filterByDateRange(rows, dateRange, startDate, endDate),
+    [rows, dateRange, startDate, endDate]
+  );
+
+  const fuelChartData = useMemo(
+    () => pivotByFuel(filtered, selectedFuels, fuelCol, genCol, resolution),
+    [filtered, selectedFuels, fuelCol, genCol, resolution]
+  );
+
+  const totalChartData = useMemo(() => {
+    return fuelChartData.map(row => {
+      let total = 0;
+      for (const key of Object.keys(row)) {
+        if (key === 'Date') continue;
+        const v = Number(row[key]);
+        if (!isNaN(v)) total += v;
+      }
+      return { Date: row.Date, Total: Math.round(total) };
+    });
+  }, [fuelChartData]);
+
+  const displaySummary = aiSummary || fallbackSummary;
+  const fmtLoad = (v: number) => Math.round(v).toLocaleString();
 
   return (
     <div className="page">
@@ -204,16 +222,15 @@ export default function Generation() {
         </p>
       </div>
 
-      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <ResolutionSelector value={resolution} onChange={setResolution} />
-        {allFuels.length > 0 && (
-          <SeriesSelector
-            label="Fuel Types"
-            allSeries={allFuels}
-            selected={selectedFuels}
-            onChange={setSelectedFuels}
-          />
-        )}
+      <div className="price-summary-box">
+        <div className="price-summary-header">
+          <span className="price-summary-icon">&#9889;</span>
+          <span className="price-summary-title">Generation Summary</span>
+          {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
+          {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
+          {!aiLoading && !aiSummary && <span className="price-summary-badge">Deterministic</span>}
+        </div>
+        <div className="price-summary-body">{displaySummary}</div>
       </div>
 
       {error && (
@@ -226,116 +243,202 @@ export default function Generation() {
       {loading && <div className="loading"><div className="spinner" /> Loading generation data...</div>}
 
       {!loading && (
-        <>
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-            <div className="kpi-card">
-              <div className="kpi-label">Peak Generation</div>
-              <div className="kpi-value">
-                {kpis.maxGen ? <>{kpis.maxGen.toLocaleString(undefined, { maximumFractionDigits: 0 })}<span className="kpi-unit">MW</span></> : '—'}
-              </div>
-            </div>
-            <div className="kpi-card accent">
-              <div className="kpi-label">Top Fuel Source</div>
-              <div className="kpi-value" style={{ fontSize: '1.1rem' }}>{kpis.topFuel || '—'}</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Top Fuel Share</div>
-              <div className="kpi-value">
-                {kpis.topFuelShare ? <>{kpis.topFuelShare.toFixed(1)}<span className="kpi-unit">%</span></> : '—'}
-              </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Fuel Types</div>
-              <div className="kpi-value">{kpis.fuelCount || '—'}</div>
+        <div className="kpi-grid price-kpi-grid">
+          <div className="kpi-card">
+            <div className="kpi-label">On-Peak Avg Total Gen</div>
+            <div className="kpi-value">
+              {kpis.onPeakAvgTotal != null ? <>{fmtLoad(kpis.onPeakAvgTotal)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
           </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Peak Total Gen</div>
+            <div className="kpi-value">
+              {kpis.peakTotal ? <>{fmtLoad(kpis.peakTotal.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.peakTotal && <div className="kpi-sub">HE{kpis.peakTotal.he} · {kpis.peakTotal.date}</div>}
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Low Total Gen</div>
+            <div className="kpi-value">
+              {kpis.lowTotal ? <>{fmtLoad(kpis.lowTotal.value)}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.lowTotal && <div className="kpi-sub">HE{kpis.lowTotal.he} · {kpis.lowTotal.date}</div>}
+          </div>
+          <div className="kpi-card accent">
+            <div className="kpi-label">Top Fuel Source</div>
+            <div className="kpi-value" style={{ fontSize: '1.1rem' }}>{kpis.topFuel || '—'}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Top Fuel Share</div>
+            <div className="kpi-value">
+              {kpis.topFuelShare != null ? <>{kpis.topFuelShare.toFixed(1)}<span className="kpi-unit">%</span></> : '—'}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Second Fuel</div>
+            <div className="kpi-value" style={{ fontSize: '1.1rem' }}>{kpis.secondFuel || '—'}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Renewable Share</div>
+            <div className="kpi-value">
+              {kpis.renewableShare != null ? <>{kpis.renewableShare.toFixed(1)}<span className="kpi-unit">%</span></> : '—'}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Fuel Types Active</div>
+            <div className="kpi-value">{kpis.fuelTypesActive || '—'}</div>
+          </div>
+        </div>
+      )}
 
-          {chartData.length > 0 && (
-            <>
+      {!loading && (
+        <div className="price-chart-layout">
+          <ChartControls
+            seriesLabel="Fuel Types"
+            series={allFuels}
+            selectedSeries={selectedFuels}
+            onSeriesChange={setSelectedFuels}
+            resolution={resolution}
+            onResolutionChange={setResolution}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            availableDates={availableDates}
+            chartType={chartType}
+            onChartTypeChange={setChartType}
+          />
+          <div className="price-chart-main">
+            <div className="price-view-tabs">
+              <button
+                className={`pcc-btn${viewMode === 'fuel' ? ' active' : ''}`}
+                onClick={() => setViewMode('fuel')}
+              >
+                By Fuel Type
+              </button>
+              <button
+                className={`pcc-btn${viewMode === 'stacked' ? ' active' : ''}`}
+                onClick={() => setViewMode('stacked')}
+              >
+                Fuel Mix Stack
+              </button>
+              <button
+                className={`pcc-btn${viewMode === 'total' ? ' active' : ''}`}
+                onClick={() => setViewMode('total')}
+              >
+                Total Generation
+              </button>
+              <span className="price-view-info">
+                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
+                {' · '}{selectedFuels.length}/{allFuels.length} fuels
+                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
+              </span>
+            </div>
+
+            {viewMode === 'fuel' && (
               <div className="chart-card">
                 <div className="chart-card-header">
                   <div className="chart-card-title">Generation by Fuel Type</div>
-                  <span className="badge badge-primary">{resolution} · {activeFuels.length} of {allFuels.length} fuels</span>
+                  <span className="badge badge-primary">{fuelChartData.length} points</span>
                 </div>
-                <LineChart
-                  data={chartData}
+                <PriceChart
+                  data={fuelChartData}
                   xKey="Date"
-                  yKeys={activeFuels}
-                  height={320}
+                  yKeys={selectedFuels}
+                  chartType={chartType}
+                  height={380}
+                  valuePrefix=""
+                  valueSuffix=" MW"
                 />
               </div>
+            )}
+
+            {viewMode === 'stacked' && (
               <div className="chart-card">
                 <div className="chart-card-header">
-                  <div className="chart-card-title">Fuel Mix Stacked Bar</div>
-                  <span className="badge badge-primary">{activeFuels.length} fuel types</span>
+                  <div className="chart-card-title">Fuel Mix Stacked View</div>
+                  <span className="badge badge-primary">{fuelChartData.length} points</span>
                 </div>
-                <StackedBarChart
-                  data={chartData}
+                <PriceChart
+                  data={fuelChartData}
                   xKey="Date"
-                  yKeys={activeFuels}
-                  height={340}
+                  yKeys={selectedFuels}
+                  chartType="area"
+                  height={380}
+                  valuePrefix=""
+                  valueSuffix=" MW"
                 />
               </div>
-            </>
-          )}
+            )}
 
-          {fuelBreakdown.length > 0 && (
-            <>
-              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div className="chart-card-title">Fuel Mix Breakdown ({fuelBreakdown.length} types)</div>
+            {viewMode === 'total' && (
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">Total Generation (All Selected Fuels)</div>
+                  <span className="badge badge-primary">{totalChartData.length} points</span>
                 </div>
-                <table className="rank-table" style={{ borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Fuel Type</th>
-                      <th>Avg Generation</th>
-                      <th>Peak Generation</th>
-                      <th>Share</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fuelBreakdown.map(f => (
-                      <tr key={f.name}>
-                        <td style={{ fontWeight: 600 }}>{f.name}</td>
-                        <td>{f.avg.toFixed(0)} MW</td>
-                        <td style={{ fontWeight: 600 }}>{f.max.toFixed(0)} MW</td>
-                        <td>{f.share.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="insight-card">
-                <div className="insight-title">Generation Summary</div>
-                <div className="insight-body">
-                  <strong>{fuelBreakdown[0].name}</strong> dominates the generation mix at <strong>{fuelBreakdown[0].share.toFixed(1)}%</strong> of total output,
-                  averaging <strong>{fuelBreakdown[0].avg.toFixed(0)} MW</strong>.
-                  {fuelBreakdown.length > 1 && <> <strong>{fuelBreakdown[1].name}</strong> follows at <strong>{fuelBreakdown[1].share.toFixed(1)}%</strong>.</>}
-                  {' '}Peak generation across all fuels reached <strong>{kpis.maxGen?.toLocaleString()} MW</strong>.
-                </div>
-              </div>
-            </>
-          )}
-
-          <OICCommitmentSection />
-
-          <div className="section-container">
-            <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
-              <span className="chevron">{showRaw ? '▾' : '▸'}</span>
-              All Generation Datasets ({DATASETS.length})
-            </div>
-            {showRaw && (
-              <div style={{ marginTop: 8 }}>
-                {DATASETS.map((key, i) => (
-                  <DatasetSection key={key} datasetKey={key} resolution={resolution} defaultExpanded={i === 0} />
-                ))}
+                <PriceChart
+                  data={totalChartData}
+                  xKey="Date"
+                  yKeys={['Total']}
+                  chartType={chartType}
+                  height={380}
+                  valuePrefix=""
+                  valueSuffix=" MW"
+                />
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
+
+      {!loading && breakdown.length > 0 && (
+        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <div className="chart-card-title">Fuel Mix Breakdown ({breakdown.length} types)</div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="rank-table" style={{ borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  <th>Fuel Type</th>
+                  <th>Avg Generation</th>
+                  <th>Peak Generation</th>
+                  <th>Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {breakdown.map(f => (
+                  <tr key={f.name}>
+                    <td style={{ fontWeight: 600 }}>{f.name}</td>
+                    <td>{Math.round(f.avg).toLocaleString()} MW</td>
+                    <td style={{ fontWeight: 600 }}>{Math.round(f.max).toLocaleString()} MW</td>
+                    <td>{f.share.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <OICCommitmentSection />
+
+      <div className="section-container">
+        <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
+          <span className="chevron">{showRaw ? '▾' : '▸'}</span>
+          All Generation Datasets ({DATASETS.length})
+        </div>
+        {showRaw && (
+          <div style={{ marginTop: 8 }}>
+            {DATASETS.map((key, i) => (
+              <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

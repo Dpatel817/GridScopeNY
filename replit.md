@@ -53,16 +53,17 @@ frontend/
     pages/
       Home.tsx            # Market Overview — KPIs, Live System Context (RT events + oper announcements), workflow steps, nav tiles
       Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards (on-peak avg, peak/low DA/RT, top DART), side chart controls, 3 view tabs (DA/RT/DART), flexible chart types (line/area/bar)
-      Demand.tsx          # Demand Intelligence — forecast vs actual, error analysis
-      Generation.tsx      # Generation Mix — fuel breakdown, share analysis, stacked bar, OIC commitment data
+      Demand.tsx          # Demand Intelligence — AI summary, 10 KPI cards (forecast/actual peaks+lows, error metrics), side chart controls, 3 view tabs (Zonal/FvA/Error)
+      Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC section
       InterfaceFlows.tsx  # Interface Flows — classified internal/external, normalized names, flow analysis, TTCF derates
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
       OpportunityExplorer.tsx  # Opportunity & Insight Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
       AIExplainer.tsx     # AI Market Analyst — Current Market Context, structured response (Summary/Trader/Battery/Signals/Caveat), two prompt groups
       InterconnectionQueue.tsx  # Interconnection Queue — KPIs, changes list, fuel/zone breakdown, searchable table with sheet tabs
     components/
-      PriceChart.tsx      # Flexible chart (line/line+markers/stacked area/stacked bar) with custom tooltip
-      PriceChartControls.tsx  # Side control panel (zones, resolution, date range, chart type)
+      PriceChart.tsx      # Flexible chart (line/line+markers/stacked area/stacked bar) with configurable tooltip prefix/suffix
+      PriceChartControls.tsx  # Side control panel for Price page (zones, resolution, date range, chart type)
+      ChartControls.tsx   # Generic reusable side control panel (series label, resolution, date range, chart type)
     data/
       zones.ts            # NYISO zone constants (A-K), isNyisoZone/filterNyisoZones helpers
       interfaceMetadata.ts # Interface name normalization + internal/external classification mapping
@@ -70,6 +71,12 @@ frontend/
       priceTransforms.ts  # Date/zone filtering, OPA/OFFPA/daily aggregation, DART computation, pivoting
       priceMetrics.ts     # KPI stats (on-peak avg, peak/low with hour+zone, top DART zone)
       priceSummary.ts     # AI summary context builder, deterministic fallback summary, API fetch
+      demandTransforms.ts # Demand date/zone filtering, forecast-actual alignment (deduped), pivoting, error computation
+      demandMetrics.ts    # Demand KPI stats (on-peak avg forecast/actual, peak/low, error metrics)
+      demandSummary.ts    # AI demand summary context builder, deterministic fallback, API fetch
+      generationTransforms.ts # Generation fuel filtering, deduped pivoting, fuel breakdown computation
+      generationMetrics.ts    # Generation KPI stats (on-peak total, peak/low gen, fuel shares, renewable%)
+      generationSummary.ts    # AI generation summary context builder, deterministic fallback, API fetch
 src/
   api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)
@@ -115,6 +122,9 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/congestion-stacked?market=DA|RT&date=YYYY-MM-DD` — stacked bar data: constraint costs by hour, pivoted by constraint name
 - `GET /api/ttcf-derates?date=YYYY-MM-DD` — TTCF derate data from NYISO MIS (with fallback to previous day), path names normalized via path_map
 - `GET /api/oic?date=YYYY-MM-DD` — Operating In Commitment data from NYISO MIS
+- `POST /api/ai-price-summary` — AI-generated price market commentary (gpt-4o-mini, max 300 tokens)
+- `POST /api/ai-demand-summary` — AI-generated demand/load commentary (gpt-4o-mini, max 300 tokens)
+- `POST /api/ai-generation-summary` — AI-generated generation mix commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-explainer` — structured AI market analysis: Summary, Trader Takeaways, Battery Strategist Takeaways, Key Signals, Caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
 - `POST /api/refresh` — full data refresh: ETL fetch + process + cache clear (concurrency-guarded)
