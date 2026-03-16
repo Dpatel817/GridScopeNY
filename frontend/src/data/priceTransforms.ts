@@ -73,7 +73,7 @@ export function pivotByZone(
   field: LmpField = 'LMP'
 ): PivotedRow[] {
   const filtered = filterByZones(filterNyisoOnly(rows), zones);
-  const hasHE = filtered.some(r => r.HE != null && Number(r.HE) > 0);
+  const hasHE = filtered.some(r => r.HE != null);
 
   if (resolution === 'hourly' && hasHE) {
     return pivotHourly(filtered, zones, field);

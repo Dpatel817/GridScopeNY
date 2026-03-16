@@ -30,7 +30,10 @@ def _clean_df_for_json(df: pd.DataFrame) -> list[dict]:
         return []
     df = df.copy()
     for col in df.select_dtypes(include=["datetime64[ns]", "datetime64[ns, UTC]"]).columns:
-        df[col] = df[col].dt.strftime("%Y-%m-%dT%H:%M:%S")
+        if col in ("Date",):
+            df[col] = df[col].dt.strftime("%Y-%m-%d")
+        else:
+            df[col] = df[col].dt.strftime("%Y-%m-%dT%H:%M:%S")
     for col in df.columns:
         if df[col].dtype == "object":
             df[col] = df[col].where(df[col].notna(), None)

@@ -83,11 +83,27 @@ export default function Prices() {
     return dates.length ? dates[dates.length - 1] : null;
   }, [rtRows]);
 
-  const kpis: PriceKPIs = useMemo(() => {
-    const daLatest = latestDate ? daRows.filter(r => r.Date === latestDate) : daRows;
-    const rtLatest = (latestRTDate ? rtRows.filter(r => r.Date === latestRTDate) : rtRows);
-    return computePriceKPIs(daLatest, rtLatest);
+  const commonKpiDate = useMemo(() => {
+    if (!latestRTDate || !latestDate) return latestDate ?? latestRTDate;
+    const daFiltered = filterNyisoOnly(daRows);
+    const rtFiltered = filterNyisoOnly(rtRows);
+    const daDates = new Set(getAvailableDates(daFiltered));
+    const rtDates = getAvailableDates(rtFiltered);
+    for (let i = rtDates.length - 1; i >= 0; i--) {
+      if (daDates.has(rtDates[i]) && rtFiltered.some(r => r.Date === rtDates[i] && isOnPeak(r.HE))) {
+        return rtDates[i];
+      }
+    }
+    if (daDates.has(latestRTDate)) return latestRTDate;
+    return latestDate;
   }, [daRows, rtRows, latestDate, latestRTDate]);
+
+  const kpis: PriceKPIs = useMemo(() => {
+    const kpiDate = commonKpiDate;
+    const daLatest = kpiDate ? daRows.filter(r => r.Date === kpiDate) : daRows;
+    const rtLatest = kpiDate ? rtRows.filter(r => r.Date === kpiDate) : rtRows;
+    return computePriceKPIs(daLatest, rtLatest);
+  }, [daRows, rtRows, commonKpiDate]);
 
   const fallbackSummary = useMemo(() => deterministicSummary(kpis), [kpis]);
 
@@ -107,8 +123,13 @@ export default function Prices() {
     [daRows, dateRange, startDate, endDate]
   );
   const rtFiltered = useMemo(
-    () => filterByDateRange(filterNyisoOnly(rtRows), dateRange, startDate, endDate),
-    [rtRows, dateRange, startDate, endDate]
+    () => {
+      if (dateRange === 'today' && commonKpiDate) {
+        return filterNyisoOnly(rtRows).filter(r => r.Date === commonKpiDate);
+      }
+      return filterByDateRange(filterNyisoOnly(rtRows), dateRange, startDate, endDate);
+    },
+    [rtRows, dateRange, startDate, endDate, commonKpiDate]
   );
 
   const daChartData = useMemo(
@@ -122,8 +143,15 @@ export default function Prices() {
   );
 
   const dartChartData = useMemo(
-    () => computeDartSpread(daRows, rtRows, selectedZones, resolution, dateRange, startDate, endDate),
-    [daRows, rtRows, selectedZones, resolution, dateRange, startDate, endDate]
+    () => {
+      if (dateRange === 'today' && commonKpiDate) {
+        const daForDart = filterNyisoOnly(daRows).filter(r => r.Date === commonKpiDate);
+        const rtForDart = filterNyisoOnly(rtRows).filter(r => r.Date === commonKpiDate);
+        return computeDartSpread(daForDart, rtForDart, selectedZones, resolution, 'all');
+      }
+      return computeDartSpread(daFiltered, rtFiltered, selectedZones, resolution, 'all');
+    },
+    [daFiltered, rtFiltered, daRows, rtRows, selectedZones, resolution, dateRange, commonKpiDate]
   );
 
   const displaySummary = aiSummary || fallbackSummary;
