@@ -19,6 +19,13 @@ const DATASETS = [
   'sc_line_outages', 'rt_line_outages', 'out_sched', 'outage_schedule',
 ];
 
+type MarketType = 'DA' | 'RT';
+
+const MARKETS: { key: MarketType; label: string }[] = [
+  { key: 'DA', label: 'DAM' },
+  { key: 'RT', label: 'RTM' },
+];
+
 const RESOLUTIONS: { key: Resolution; label: string }[] = [
   { key: 'hourly', label: 'Hourly' },
   { key: 'on_peak', label: 'On-Peak Avg' },
@@ -1006,6 +1013,7 @@ function CongestionChartControls({
 }
 
 export default function Congestion() {
+  const [marketType, setMarketType] = useState<MarketType>('DA');
   const [resolution, setResolution] = useState<Resolution>('hourly');
   const [dateRange, setDateRange] = useState<DateRange>('today');
   const [startDate, setStartDate] = useState('');
@@ -1017,14 +1025,22 @@ export default function Congestion() {
 
   const [aiSummary, setAiSummary] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
-  const aiRequestedRef = useState(() => ({ current: false }))[0];
+  const aiRequestedRef = useRef(false);
 
-  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', 'hourly', undefined, undefined, 50000, 90);
+  const datasetKey = marketType === 'DA' ? 'dam_limiting_constraints' : 'rt_limiting_constraints';
+  const { data: constraintData, loading, error } = useDataset(datasetKey, 'hourly', undefined, undefined, 50000, 90);
 
   const rows: CongestionRow[] = useMemo(
-    () => (daConstraints?.data || []) as CongestionRow[],
-    [daConstraints]
+    () => (constraintData?.data || []) as CongestionRow[],
+    [constraintData]
   );
+
+  const handleMarketChange = useCallback((m: MarketType) => {
+    if (m === marketType) return;
+    setMarketType(m);
+    setAiSummary('');
+    aiRequestedRef.current = false;
+  }, [marketType]);
 
   const { nameCol, costCol } = useMemo(() => detectColumns(rows), [rows]);
   const allConstraintNames = useMemo(() => {
@@ -1045,11 +1061,14 @@ export default function Congestion() {
     }
   };
 
+  const initializedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (allConstraintNames.length > 0 && selectedConstraints.length === 0) {
-      setSelectedConstraints(allConstraintNames.slice(0, 8));
-    }
-  }, [allConstraintNames]);
+    if (loading || allConstraintNames.length === 0) return;
+    const currentKey = `${marketType}_${allConstraintNames.join(',')}`;
+    if (initializedForRef.current === currentKey) return;
+    initializedForRef.current = currentKey;
+    setSelectedConstraints(allConstraintNames.slice(0, 8));
+  }, [allConstraintNames, marketType, loading]);
 
   const latestDate = useMemo(() => {
     const dates = getAvailableDates(rows);
@@ -1069,11 +1088,12 @@ export default function Congestion() {
     if (loading || !rows.length) return;
     aiRequestedRef.current = true;
     setAiLoading(true);
-    const ctx = buildCongestionSummaryContext(kpis, 'Latest available data');
+    const marketLabel = marketType === 'DA' ? 'Day-Ahead Market (DAM)' : 'Real-Time Market (RTM)';
+    const ctx = buildCongestionSummaryContext(kpis, `${marketLabel} · Latest available data`);
     fetchAICongestionSummary(ctx).then(s => {
       if (s) setAiSummary(s);
     }).finally(() => setAiLoading(false));
-  }, [loading, rows.length, kpis]);
+  }, [loading, rows.length, kpis, marketType]);
 
   const dateFiltered = useMemo(
     () => filterByDateRange(rows, dateRange, startDate, endDate),
@@ -1103,6 +1123,19 @@ export default function Congestion() {
         <p className="page-subtitle">
           Binding constraints, shadow prices, and outage schedules driving transmission congestion
         </p>
+      </div>
+
+      <div className="resolution-bar" style={{ marginBottom: 12 }}>
+        <label>Market:</label>
+        {MARKETS.map(m => (
+          <button
+            key={m.key}
+            className={`resolution-btn ${marketType === m.key ? 'active' : ''}`}
+            onClick={() => handleMarketChange(m.key)}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
       <div className="price-summary-box">
@@ -1209,7 +1242,8 @@ export default function Congestion() {
           <div className="price-chart-main">
             <div className="price-view-tabs">
               <span className="price-view-info">
-                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
+                {marketType === 'DA' ? 'DAM' : 'RTM'}
+                {' · '}{resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
                 {' · '}{activeForChart.length}/{allConstraintNames.length} constraints
                 {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
               </span>
