@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useDataset, useFilterOptions, DatasetResponse } from '../hooks/useDataset';
+import { useDataset, useFilterOptions } from '../hooks/useDataset';
+import type { DatasetResponse } from '../hooks/useDataset';
 import LineChart from './LineChart';
 import DataTable from './DataTable';
 import MetricsRow, { buildMetrics } from './MetricsRow';
