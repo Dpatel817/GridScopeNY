@@ -88,31 +88,71 @@ export function buildAlignedData(
   startDate?: string,
   endDate?: string
 ): AlignedRow[] {
-  const daLmp = filterByDateRange(daLmpRows.filter(r => String(r.Zone) === zone), dateRange, startDate, endDate);
-  const rtLmp = filterByDateRange(rtLmpRows.filter(r => String(r.Zone) === zone), dateRange, startDate, endDate);
-
   const aspZones = getAvailableAspZones(daAspRows);
   const aspZone = aspZones.includes(zone) ? zone : (aspZones.includes('NYCA') ? 'NYCA' : aspZones[0] || '');
 
-  const daAsp = filterByDateRange(daAspRows.filter(r => String(r.Zone) === aspZone), dateRange, startDate, endDate);
-  const rtAsp = filterByDateRange(rtAspRows.filter(r => String(r.Zone) === aspZone), dateRange, startDate, endDate);
+  const daLmpFiltered = daLmpRows.filter(r => String(r.Zone) === zone);
+  const rtLmpFiltered = rtLmpRows.filter(r => String(r.Zone) === zone);
+  const daAspFiltered = daAspRows.filter(r => String(r.Zone) === aspZone);
+  const rtAspFiltered = rtAspRows.filter(r => String(r.Zone) === aspZone);
 
-  function buildMapWithDuplicates<T>(items: T[], keyFn: (r: T) => string, valueFn: (r: T) => number): Record<string, number> {
+  let effectiveDateRange = dateRange;
+  let effectiveStart = startDate;
+  let effectiveEnd = endDate;
+
+  if (dateRange === 'today') {
+    const daLmpDates = new Set(daLmpFiltered.map(r => r.Date));
+    const rtLmpDates = new Set(rtLmpFiltered.map(r => r.Date));
+    const daAspDates = new Set(daAspFiltered.map(r => r.Date));
+    const rtAspDates = new Set(rtAspFiltered.map(r => r.Date));
+
+    const dateSets = [daLmpDates, rtLmpDates, daAspDates, rtAspDates].filter(s => s.size > 0);
+
+    let commonDates: Set<string>;
+    if (dateSets.length === 0) {
+      commonDates = new Set();
+    } else {
+      commonDates = new Set(dateSets[0]);
+      for (let i = 1; i < dateSets.length; i++) {
+        for (const d of commonDates) {
+          if (!dateSets[i].has(d)) commonDates.delete(d);
+        }
+      }
+    }
+
+    let sharedLatest: string | undefined;
+    if (commonDates.size > 0) {
+      sharedLatest = [...commonDates].sort().pop();
+    } else {
+      const allDates = new Set([...daLmpDates, ...rtLmpDates, ...daAspDates, ...rtAspDates]);
+      sharedLatest = [...allDates].sort().pop();
+    }
+
+    if (sharedLatest) {
+      effectiveDateRange = 'custom';
+      effectiveStart = sharedLatest;
+      effectiveEnd = sharedLatest;
+    }
+  }
+
+  const daLmp = filterByDateRange(daLmpFiltered, effectiveDateRange, effectiveStart, effectiveEnd);
+  const rtLmp = filterByDateRange(rtLmpFiltered, effectiveDateRange, effectiveStart, effectiveEnd);
+  const daAsp = filterByDateRange(daAspFiltered, effectiveDateRange, effectiveStart, effectiveEnd);
+  const rtAsp = filterByDateRange(rtAspFiltered, effectiveDateRange, effectiveStart, effectiveEnd);
+
+  function buildMap<T>(items: T[], keyFn: (r: T) => string, valueFn: (r: T) => number): Record<string, number> {
     const map: Record<string, number> = {};
-    const counts: Record<string, number> = {};
     for (const r of items) {
-      const baseKey = keyFn(r);
-      counts[baseKey] = (counts[baseKey] || 0) + 1;
-      const key = counts[baseKey] > 1 ? `${baseKey}_dup${counts[baseKey]}` : baseKey;
+      const key = keyFn(r);
       map[key] = valueFn(r);
     }
     return map;
   }
 
-  const daLmpMap = buildMapWithDuplicates(daLmp, r => `${r.Date}_${r.HE}`, r => Number(r.LMP));
-  const rtLmpMap = buildMapWithDuplicates(rtLmp, r => `${r.Date}_${r.HE}`, r => Number(r.LMP));
-  const daAspMap = buildMapWithDuplicates(daAsp, r => `${r.Date}_${r.HE}`, r => Number(r[aspProduct] || 0));
-  const rtAspMap = buildMapWithDuplicates(rtAsp, r => `${r.Date}_${r.HE}`, r => Number(r[aspProduct] || 0));
+  const daLmpMap = buildMap(daLmp, r => `${r.Date}_${r.HE}`, r => Number(r.LMP));
+  const rtLmpMap = buildMap(rtLmp, r => `${r.Date}_${r.HE}`, r => Number(r.LMP));
+  const daAspMap = buildMap(daAsp, r => `${r.Date}_${r.HE}`, r => Number(r[aspProduct] || 0));
+  const rtAspMap = buildMap(rtAsp, r => `${r.Date}_${r.HE}`, r => Number(r[aspProduct] || 0));
 
   const allKeys = new Set([
     ...Object.keys(daLmpMap),
