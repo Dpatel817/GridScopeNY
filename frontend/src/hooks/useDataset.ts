@@ -27,6 +27,11 @@ export interface DatasetResponse {
   meta: DatasetMeta;
 }
 
+interface UseDatasetOptions {
+  refreshMs?: number;
+  loadAllPages?: boolean;
+}
+
 export function useDataset(
   datasetKey: string,
   resolution: string = 'raw',
@@ -35,8 +40,10 @@ export function useDataset(
   limit: number = 10000,
   days: number = 0,
   offset: number = 0,
-  refreshMs: number = 15 * 60 * 1000,
+  options: UseDatasetOptions = {},
 ) {
+  const refreshMs = options.refreshMs ?? 15 * 60 * 1000;
+  const loadAllPages = options.loadAllPages ?? false;
   const [data, setData] = useState<DatasetResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,21 +53,55 @@ export function useDataset(
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ resolution, limit: String(limit), days: String(days), offset: String(offset) });
-      if (filterCol && filterVal) {
-        params.set('filter_col', filterCol);
-        params.set('filter_val', filterVal);
+      const fetchPage = async (pageOffset: number): Promise<DatasetResponse> => {
+        const params = new URLSearchParams({
+          resolution,
+          limit: String(limit),
+          days: String(days),
+          offset: String(pageOffset),
+        });
+        if (filterCol && filterVal) {
+          params.set('filter_col', filterCol);
+          params.set('filter_val', filterVal);
+        }
+        const res = await fetch(`/api/dataset/${datasetKey}?${params}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      };
+
+      if (!loadAllPages) {
+        const json = await fetchPage(offset);
+        setData(json);
+        return;
       }
-      const res = await fetch(`/api/dataset/${datasetKey}?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(json);
+
+      const firstPage = await fetchPage(offset);
+      const combinedData = [...firstPage.data];
+      let nextOffset = offset + (firstPage.returned_rows || firstPage.data.length);
+      let hasMore = firstPage.has_more;
+
+      while (hasMore) {
+        const page = await fetchPage(nextOffset);
+        combinedData.push(...page.data);
+        const pageSize = page.returned_rows || page.data.length;
+        if (pageSize === 0) break;
+        nextOffset += pageSize;
+        hasMore = page.has_more;
+      }
+
+      setData({
+        ...firstPage,
+        data: combinedData,
+        returned_rows: combinedData.length,
+        offset,
+        has_more: combinedData.length < firstPage.total_rows,
+      });
     } catch (e: any) {
       setError(e.message || 'Failed to fetch');
     } finally {
       setLoading(false);
     }
-  }, [datasetKey, resolution, filterCol, filterVal, limit, days, offset]);
+  }, [datasetKey, resolution, filterCol, filterVal, limit, days, offset, loadAllPages]);
 
   useEffect(() => {
     fetchData();

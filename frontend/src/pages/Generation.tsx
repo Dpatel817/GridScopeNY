@@ -380,6 +380,7 @@ function OICCommitmentSection() {
 }
 
 type ViewMode = 'fuel' | 'stacked' | 'total';
+const LIVE_REFRESH_MS = 30 * 1000;
 
 export default function Generation() {
   const [resolution, setResolution] = useState<Resolution>('hourly');
@@ -395,7 +396,7 @@ export default function Generation() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'hourly', undefined, undefined, 50000, 0);
+  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'hourly', undefined, undefined, 50000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
 
   const rows: GenRow[] = useMemo(() => (fuelData?.data || []) as GenRow[], [fuelData]);
   const { genCol, fuelCol } = useMemo(() => detectColumns(rows), [rows]);

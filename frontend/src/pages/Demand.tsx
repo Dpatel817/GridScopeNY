@@ -17,6 +17,7 @@ import {
 } from '../data/demandSummary';
 
 const RAW_DATASETS = ['isolf', 'pal', 'pal_integrated', 'lfweather'];
+const LIVE_REFRESH_MS = 30 * 1000;
 
 type ViewMode = 'zonal' | 'fva' | 'error';
 
@@ -34,8 +35,8 @@ export default function Demand() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'hourly', undefined, undefined, 20000, 0);
-  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'hourly', undefined, undefined, 50000, 0);
+  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'hourly', undefined, undefined, 20000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
+  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'hourly', undefined, undefined, 50000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
 
   const loading = fLoading || aLoading;
 
