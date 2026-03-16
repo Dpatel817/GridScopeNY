@@ -42,6 +42,7 @@ frontend/
       MarketAnalystWidget.tsx  # Persistent bottom-right AI chat widget (global cross-market context, all datasets, server-side search_all_datasets for comprehensive analysis)
       LineChart.tsx       # Recharts line chart wrapper (multi-line, wide-format, robust fmtX for dates)
       StackedBarChart.tsx # Recharts stacked bar chart (multi-series, uses same color palette)
+      BarChart.tsx        # Recharts bar chart (horizontal/vertical, cell coloring, labels)
       SeriesSelector.tsx  # Multi-select dropdown for filtering chart series (zones, fuels, etc.)
       MetricsRow.tsx      # Summary metrics cards (legacy, used by DatasetSection)
       DataTable.tsx       # Paginated data table
@@ -56,7 +57,7 @@ frontend/
       Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards, side chart controls, 3 view tabs (DA/RT/DART), ScarcitySignalSection (Energy vs Ancillary Price Signals)
       ScarcitySignalSection.tsx  # Dual-panel scarcity/DR signal charts (LMP + ASP), zone/product/resolution/date controls, KPI cards, summary
       Demand.tsx          # Demand Intelligence — AI summary, 10 KPI cards (forecast/actual peaks+lows, error metrics), side chart controls, 3 view tabs (Zonal/FvA/Error)
-      Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC section, embedded Generator Map
+      Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC analytics section (date range picker, KPI cards, 3 chart tabs: by zone/by type/by MW, single-date raw table), embedded Generator Map
       InterfaceFlows.tsx  # Interface Flows — AI summary, 8 KPI cards (on-peak totals, peak flows, most active, top internal/external, count), side chart controls with class/interface/resolution/date/chart-type, flow chart, interface summary table, TTCF Derates section
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
       OpportunityExplorer.tsx  # Opportunity Explorer — date range picker, zone rankings, trader + battery takeaways, embedded AI analyst (all context filters by selected date range)
@@ -146,7 +147,8 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/constraint-impact?market=DA|RT&facility=&contingency=&date=&he=&clean_only=true&search=` — constraint impact analysis: drill-down flow (Market→Search Constraint→Contingency→Timestamp), returns status "pending" until facility+contingency+date selected, search param filters facility list, clean print detection, congestion pivot, zonal/generator MCC impact
 - `GET /api/congestion-stacked?market=DA|RT&date=YYYY-MM-DD` — stacked bar data: constraint costs by hour, pivoted by constraint name
 - `GET /api/ttcf-derates?date=YYYY-MM-DD` — TTCF derate data from NYISO MIS (with fallback to previous day), path names normalized via path_map
-- `GET /api/oic?date=YYYY-MM-DD` — Operating In Commitment data from NYISO MIS
+- `GET /api/oic?date=YYYY-MM-DD` — Operating In Commitment data from NYISO MIS (single day, raw records)
+- `GET /api/oic-range?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` — OIC analytics across date range (max 30 days): aggregated commitment counts by zone, by zone+type, MW by zone, and raw records
 - `POST /api/ai-price-summary` — AI-generated price market commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-demand-summary` — AI-generated demand/load commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-generation-summary` — AI-generated generation mix commentary (gpt-4o-mini, max 300 tokens)

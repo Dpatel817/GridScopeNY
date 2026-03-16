@@ -1430,6 +1430,117 @@ def oic_data(
         return {"status": "error", "message": str(e), "data": [], "date": date}
 
 
+@app.get("/api/oic-range")
+def oic_range_data(
+    start_date: str = Query(...),
+    end_date: str = Query(...),
+):
+    import io
+    import requests as req_lib
+    from datetime import datetime as dt_cls, timedelta
+
+    try:
+        sd = dt_cls.strptime(start_date, "%Y-%m-%d")
+        ed = dt_cls.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        return {"status": "error", "message": "Invalid date format. Use YYYY-MM-DD.", "data": []}
+
+    if ed < sd:
+        return {"status": "error", "message": "end_date must be >= start_date.", "data": []}
+
+    max_days = 30
+    if (ed - sd).days + 1 > max_days:
+        return {"status": "error", "message": f"Date range limited to {max_days} days.", "data": []}
+
+    all_frames = []
+    current = sd
+    while current <= ed:
+        date_str = current.strftime("%Y%m%d")
+        url = f"https://mis.nyiso.com/public/csv/OpInCommit/{date_str}OpInCommit.csv"
+        try:
+            resp = req_lib.get(url, timeout=30, verify=False)
+            if resp.status_code == 200:
+                df = pd.read_csv(io.StringIO(resp.text))
+                if " PTID" in df.columns:
+                    df = df.drop(columns=[" PTID"])
+                if "PTID" in df.columns and df.columns.tolist().count("PTID") > 1:
+                    df = df.loc[:, ~df.columns.duplicated()]
+                df["_fetch_date"] = current.strftime("%Y-%m-%d")
+                all_frames.append(df)
+        except Exception as e:
+            logger.warning("OIC range fetch error for %s: %s", date_str, e)
+        current += timedelta(days=1)
+
+    if not all_frames:
+        return {"status": "no_data", "message": "No OIC data found for the selected range.", "data": []}
+
+    combined = pd.concat(all_frames, ignore_index=True)
+    combined = combined.replace({np.nan: None, np.inf: None, -np.inf: None})
+
+    combined.columns = [c.strip() for c in combined.columns]
+
+    zone_col = None
+    for candidate in ["Load Zone of Resource", "Load Zone", "Zone"]:
+        if candidate in combined.columns:
+            zone_col = candidate
+            break
+
+    type_col = None
+    for candidate in ["Commitment Type", "Type", "OIC Type"]:
+        if candidate in combined.columns:
+            type_col = candidate
+            break
+
+    mw_col = None
+    for candidate in ["MW Committed/LSL(MWh)/POI WDL (MW)", "MW Committed", "Committed MW", "MW", "Capacity MW"]:
+        if candidate in combined.columns:
+            mw_col = candidate
+            break
+
+    by_zone = {}
+    by_zone_type = {}
+    mw_by_zone = {}
+    all_types = set()
+
+    if zone_col:
+        zone_groups = combined.groupby(zone_col)
+        for zone, grp in zone_groups:
+            if zone is None:
+                continue
+            by_zone[str(zone)] = len(grp)
+            if type_col:
+                valid_types = grp[type_col].dropna().astype(str).str.strip()
+                valid_types = valid_types[~valid_types.isin(["", "nan", "None", "none"])]
+                type_counts = valid_types.value_counts().to_dict()
+                by_zone_type[str(zone)] = {str(k): int(v) for k, v in type_counts.items()}
+                all_types.update(type_counts.keys())
+            if mw_col:
+                numeric_vals = pd.to_numeric(grp[mw_col], errors="coerce")
+                mw_by_zone[str(zone)] = round(float(numeric_vals.sum()), 2)
+
+    records = combined.to_dict(orient="records")
+    columns = [c for c in combined.columns.tolist() if c != "_fetch_date"]
+
+    top_zone = max(by_zone, key=by_zone.get) if by_zone else None
+
+    return {
+        "status": "ok",
+        "start_date": start_date,
+        "end_date": end_date,
+        "total_commitments": len(combined),
+        "active_zones": len(by_zone),
+        "top_zone": top_zone,
+        "by_zone": by_zone,
+        "by_zone_type": by_zone_type,
+        "all_types": sorted(str(t) for t in all_types if t is not None),
+        "mw_by_zone": mw_by_zone,
+        "has_mw": mw_col is not None,
+        "data": records,
+        "columns": columns,
+        "row_count": len(records),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Congestion Stacked Bar endpoint
 # ---------------------------------------------------------------------------

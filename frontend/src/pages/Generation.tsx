@@ -3,6 +3,8 @@ import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
 import ChartControls from '../components/ChartControls';
+import BarChart from '../components/BarChart';
+import StackedBarChart from '../components/StackedBarChart';
 import type { ChartType, Resolution, DateRange } from '../data/priceTransforms';
 import type { GenRow, FuelBreakdown } from '../data/generationTransforms';
 
@@ -53,104 +55,326 @@ interface OicResponse {
   message?: string;
 }
 
+interface OicRangeResponse {
+  status: string;
+  start_date: string;
+  end_date: string;
+  total_commitments: number;
+  active_zones: number;
+  top_zone: string | null;
+  by_zone: Record<string, number>;
+  by_zone_type: Record<string, Record<string, number>>;
+  all_types: string[];
+  mw_by_zone: Record<string, number>;
+  has_mw: boolean;
+  data: Record<string, any>[];
+  columns: string[];
+  row_count: number;
+  message?: string;
+}
+
+type OicChartView = 'byZone' | 'byType' | 'byMW';
+
 function OICCommitmentSection() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [data, setData] = useState<OicResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(true);
+  const today = new Date().toISOString().slice(0, 10);
+  const [tableDate, setTableDate] = useState(today);
+  const [tableData, setTableData] = useState<OicResponse | null>(null);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [tableExpanded, setTableExpanded] = useState(false);
 
-  const fetchOic = useCallback(async () => {
-    setLoading(true);
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d.toISOString().slice(0, 10);
+  });
+  const [endDate, setEndDate] = useState(today);
+  const [rangeData, setRangeData] = useState<OicRangeResponse | null>(null);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [chartView, setChartView] = useState<OicChartView>('byZone');
+
+  const fetchTable = useCallback(async () => {
+    setTableLoading(true);
     try {
-      const res = await fetch(`/api/oic?date=${date}`);
+      const res = await fetch(`/api/oic?date=${tableDate}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData(await res.json());
+      setTableData(await res.json());
     } catch {
-      setData(null);
+      setTableData(null);
     } finally {
-      setLoading(false);
+      setTableLoading(false);
     }
-  }, [date]);
+  }, [tableDate]);
 
-  useEffect(() => { fetchOic(); }, [fetchOic]);
+  const fetchRange = useCallback(async () => {
+    setRangeLoading(true);
+    try {
+      const res = await fetch(`/api/oic-range?start_date=${startDate}&end_date=${endDate}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setRangeData(await res.json());
+    } catch {
+      setRangeData(null);
+    } finally {
+      setRangeLoading(false);
+    }
+  }, [startDate, endDate]);
+
+  useEffect(() => { fetchTable(); }, [fetchTable]);
+  useEffect(() => { fetchRange(); }, [fetchRange]);
+
+  const zoneBarData = useMemo(() => {
+    if (!rangeData || rangeData.status !== 'ok') return [];
+    return Object.entries(rangeData.by_zone)
+      .map(([zone, count]) => ({ zone, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [rangeData]);
+
+  const stackedData = useMemo(() => {
+    if (!rangeData || rangeData.status !== 'ok' || !rangeData.all_types.length) return { data: [] as Record<string, unknown>[], keys: [] as string[] };
+    const types = rangeData.all_types;
+    const data = Object.entries(rangeData.by_zone_type).map(([zone, typeCounts]) => {
+      const row: Record<string, unknown> = { zone };
+      for (const t of types) {
+        row[t] = typeCounts[t] || 0;
+      }
+      return row;
+    });
+    data.sort((a, b) => {
+      const sumA = types.reduce((s, t) => s + ((a[t] as number) || 0), 0);
+      const sumB = types.reduce((s, t) => s + ((b[t] as number) || 0), 0);
+      return sumB - sumA;
+    });
+    return { data, keys: types };
+  }, [rangeData]);
+
+  const mwBarData = useMemo(() => {
+    if (!rangeData || rangeData.status !== 'ok' || !rangeData.has_mw) return [];
+    return Object.entries(rangeData.mw_by_zone)
+      .map(([zone, mw]) => ({ zone, mw }))
+      .sort((a, b) => b.mw - a.mw);
+  }, [rangeData]);
 
   return (
     <div className="section-container" style={{ marginTop: 24 }}>
       <div className="chart-card-header" style={{ padding: '16px 0 8px' }}>
         <div>
           <div className="chart-card-title" style={{ fontSize: 16, fontWeight: 700 }}>
-            Operating In Commitment (OIC)
+            Operating In Commitment (OIC) Analytics
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '4px 0 0' }}>
             Generator commitment data — units called on for reliability or economic purposes
           </p>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <input
-          type="date"
-          className="pcc-date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-        />
-        <button className="pcc-btn active" onClick={fetchOic}>Refresh</button>
-        {!loading && data && data.status === 'ok' && (
-          <span className="badge badge-primary">{data.row_count} commitments</span>
-        )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Date Range:</label>
+        <input type="date" className="pcc-date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>to</span>
+        <input type="date" className="pcc-date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        <button className="pcc-btn active" onClick={fetchRange}>Analyze</button>
+        {rangeLoading && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading...</span>}
       </div>
-      {loading && <div className="loading"><div className="spinner" /> Loading OIC data...</div>}
-      {!loading && data && data.status === 'error' && (
+
+      {rangeLoading && <div className="loading"><div className="spinner" /> Loading OIC range data...</div>}
+
+      {!rangeLoading && !rangeData && (
         <div className="insight-card" style={{ borderLeftColor: 'var(--danger)' }}>
-          <div className="insight-title" style={{ color: 'var(--danger)' }}>OIC Fetch Error</div>
-          <div className="insight-body">{data.message || 'Failed to load OIC data.'}</div>
+          <div className="insight-title" style={{ color: 'var(--danger)' }}>Connection Error</div>
+          <div className="insight-body">Failed to connect to the OIC range API. Please try again.</div>
         </div>
       )}
-      {!loading && data && data.status === 'no_data' && (
+
+      {!rangeLoading && rangeData && rangeData.status === 'error' && (
+        <div className="insight-card" style={{ borderLeftColor: 'var(--danger)' }}>
+          <div className="insight-title" style={{ color: 'var(--danger)' }}>Error</div>
+          <div className="insight-body">{rangeData.message || 'Failed to load OIC range data.'}</div>
+        </div>
+      )}
+
+      {!rangeLoading && rangeData && rangeData.status === 'no_data' && (
         <div className="insight-card">
-          <div className="insight-body">No OIC data available for {date}.</div>
+          <div className="insight-body">No OIC data available for {startDate} — {endDate}.</div>
         </div>
       )}
-      {!loading && data && data.status === 'ok' && data.data.length > 0 && (
-        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div
-            className="chart-card-header"
-            style={{ padding: '12px 20px', cursor: 'pointer' }}
-            onClick={() => setExpanded(!expanded)}
-          >
-            <div className="chart-card-title">
-              <span className="chevron">{expanded ? '▾' : '▸'}</span>{' '}
-              OIC Data — {data.date}
+
+      {!rangeLoading && rangeData && rangeData.status === 'ok' && (
+        <>
+          <div className="kpi-grid price-kpi-grid" style={{ marginBottom: 16 }}>
+            <div className="kpi-card">
+              <div className="kpi-label">Total Commitments</div>
+              <div className="kpi-value">{rangeData.total_commitments.toLocaleString()}</div>
             </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Active Zones</div>
+              <div className="kpi-value">{rangeData.active_zones}</div>
+            </div>
+            <div className="kpi-card accent">
+              <div className="kpi-label">Top Zone</div>
+              <div className="kpi-value" style={{ fontSize: '1rem' }}>{rangeData.top_zone || '—'}</div>
+            </div>
+            {rangeData.has_mw && mwBarData.length > 0 && (
+              <div className="kpi-card">
+                <div className="kpi-label">Total MW Committed</div>
+                <div className="kpi-value">
+                  {Math.round(mwBarData.reduce((s, d) => s + d.mw, 0)).toLocaleString()}
+                  <span className="kpi-unit">MW</span>
+                </div>
+              </div>
+            )}
           </div>
-          {expanded && (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="rank-table" style={{ borderSpacing: 0, fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    {data.columns.map(col => (
-                      <th key={col} style={{ whiteSpace: 'nowrap' }}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.data.map((row, i) => (
-                    <tr key={i}>
-                      {data.columns.map(col => (
-                        <td key={col} style={{ whiteSpace: 'nowrap' }}>{row[col] ?? '—'}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+          <div className="price-view-tabs" style={{ marginBottom: 12 }}>
+            <button className={`pcc-btn${chartView === 'byZone' ? ' active' : ''}`} onClick={() => setChartView('byZone')}>
+              Commitments by Zone
+            </button>
+            <button className={`pcc-btn${chartView === 'byType' ? ' active' : ''}`} onClick={() => setChartView('byType')}>
+              By Type per Zone
+            </button>
+            <button className={`pcc-btn${chartView === 'byMW' ? ' active' : ''}`} onClick={() => setChartView('byMW')}>
+              MW by Zone
+            </button>
+          </div>
+
+          {chartView === 'byZone' && (
+            <div className="chart-card">
+              <div className="chart-card-header">
+                <div className="chart-card-title">Commitment Count by Zone</div>
+                <span className="badge badge-primary">{zoneBarData.length} zones</span>
+              </div>
+              <BarChart
+                data={zoneBarData}
+                xKey="zone"
+                yKey="count"
+                height={Math.max(300, zoneBarData.length * 36)}
+                layout="horizontal"
+                showLabels
+                labelPrefix=""
+                color="#2563eb"
+              />
             </div>
           )}
-        </div>
+
+          {chartView === 'byType' && (
+            <div className="chart-card">
+              <div className="chart-card-header">
+                <div className="chart-card-title">Commitment Type by Zone</div>
+                <span className="badge badge-primary">{stackedData.keys.length} types</span>
+              </div>
+              {stackedData.data.length > 0 ? (
+                <StackedBarChart
+                  data={stackedData.data}
+                  xKey="zone"
+                  yKeys={stackedData.keys}
+                  height={Math.max(320, stackedData.data.length * 30)}
+                />
+              ) : (
+                <div className="empty-state" style={{ padding: 24 }}>No commitment type data available</div>
+              )}
+            </div>
+          )}
+
+          {chartView === 'byMW' && (
+            <div className="chart-card">
+              <div className="chart-card-header">
+                <div className="chart-card-title">Total MW by Zone</div>
+                <span className="badge badge-primary">{mwBarData.length} zones</span>
+              </div>
+              {rangeData.has_mw && mwBarData.length > 0 ? (
+                <BarChart
+                  data={mwBarData}
+                  xKey="zone"
+                  yKey="mw"
+                  height={Math.max(300, mwBarData.length * 36)}
+                  layout="horizontal"
+                  showLabels
+                  labelPrefix=""
+                  color="#10b981"
+                />
+              ) : (
+                <>
+                  <div style={{ padding: '8px 20px', fontSize: 12, color: 'var(--text-muted)' }}>
+                    MW data not available — showing commitment counts by zone instead
+                  </div>
+                  <BarChart
+                    data={zoneBarData}
+                    xKey="zone"
+                    yKey="count"
+                    height={Math.max(300, zoneBarData.length * 36)}
+                    layout="horizontal"
+                    showLabels
+                    labelPrefix=""
+                    color="#10b981"
+                  />
+                </>
+              )}
+            </div>
+          )}
+        </>
       )}
-      {!loading && data && data.status === 'ok' && data.data.length === 0 && (
-        <div className="insight-card">
-          <div className="insight-body">No OIC commitments found for {date}.</div>
+
+      <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Single Date Table:</label>
+          <input type="date" className="pcc-date" value={tableDate} onChange={e => setTableDate(e.target.value)} />
+          <button className="pcc-btn active" onClick={fetchTable}>Refresh</button>
+          {!tableLoading && tableData && tableData.status === 'ok' && (
+            <span className="badge badge-primary">{tableData.row_count} commitments</span>
+          )}
         </div>
-      )}
+        {tableLoading && <div className="loading"><div className="spinner" /> Loading OIC data...</div>}
+        {!tableLoading && tableData && tableData.status === 'error' && (
+          <div className="insight-card" style={{ borderLeftColor: 'var(--danger)' }}>
+            <div className="insight-title" style={{ color: 'var(--danger)' }}>OIC Fetch Error</div>
+            <div className="insight-body">{tableData.message || 'Failed to load OIC data.'}</div>
+          </div>
+        )}
+        {!tableLoading && tableData && tableData.status === 'no_data' && (
+          <div className="insight-card">
+            <div className="insight-body">No OIC data available for {tableDate}.</div>
+          </div>
+        )}
+        {!tableLoading && tableData && tableData.status === 'ok' && tableData.data.length > 0 && (
+          <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div
+              className="chart-card-header"
+              style={{ padding: '12px 20px', cursor: 'pointer' }}
+              onClick={() => setTableExpanded(!tableExpanded)}
+            >
+              <div className="chart-card-title">
+                <span className="chevron">{tableExpanded ? '▾' : '▸'}</span>{' '}
+                OIC Data — {tableData.date}
+              </div>
+            </div>
+            {tableExpanded && (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="rank-table" style={{ borderSpacing: 0, fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {tableData.columns.map(col => (
+                        <th key={col} style={{ whiteSpace: 'nowrap' }}>{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableData.data.map((row, i) => (
+                      <tr key={i}>
+                        {tableData.columns.map(col => (
+                          <td key={col} style={{ whiteSpace: 'nowrap' }}>{row[col] ?? '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+        {!tableLoading && tableData && tableData.status === 'ok' && tableData.data.length === 0 && (
+          <div className="insight-card">
+            <div className="insight-body">No OIC commitments found for {tableDate}.</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
