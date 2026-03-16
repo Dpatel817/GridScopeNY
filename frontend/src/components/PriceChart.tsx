@@ -6,7 +6,7 @@ import {
   BarChart as ReBarChart, Bar,
 } from 'recharts';
 import type { ChartType } from '../data/priceTransforms';
-import { makeTickFormatter, tooltipLabelFormatter } from '../utils/dateFormat';
+import { makeTickFormatter, getTickInterval, tooltipLabelFormatter } from '../utils/dateFormat';
 
 const COLORS = [
   '#2563eb','#10b981','#ef4444','#f59e0b','#8b5cf6','#06b6d4','#ec4899','#14b8a6',
@@ -23,12 +23,12 @@ interface Props {
   valueSuffix?: string;
 }
 
-function makeTooltip(prefix: string, suffix: string) {
+function makeTooltip(prefix: string, suffix: string, fmtLabel: (v: unknown) => string) {
   return function ChartTooltip({ active, payload, label }: any) {
     if (!active || !payload?.length) return null;
     return (
       <div className="price-tooltip">
-        <div className="price-tooltip-label">{tooltipLabelFormatter(label)}</div>
+        <div className="price-tooltip-label">{fmtLabel(label)}</div>
         {payload.filter((entry: any) => entry.value != null).map((entry: any, i: number) => {
           const val = typeof entry.value === 'number'
             ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
@@ -50,12 +50,13 @@ function makeTooltip(prefix: string, suffix: string) {
 
 export default function PriceChart({ data, xKey, yKeys, chartType, height = 340, valuePrefix = '$', valueSuffix = '' }: Props) {
   const fmtTick = useMemo(() => makeTickFormatter(data, xKey), [data, xKey]);
+  const interval = useMemo(() => getTickInterval(data, xKey), [data, xKey]);
+  const fmtTooltipLabel = useMemo(() => tooltipLabelFormatter(data, xKey), [data, xKey]);
 
   if (!data.length || !yKeys.length) return <div className="iq-empty">No chart data available</div>;
 
   const showDots = chartType === 'line-markers';
-  const interval = data.length > 100 ? Math.floor(data.length / 40) : data.length > 50 ? 2 : 'preserveStartEnd';
-  const TooltipContent = makeTooltip(valuePrefix, valueSuffix);
+  const TooltipContent = makeTooltip(valuePrefix, valueSuffix, fmtTooltipLabel);
 
   if (chartType === 'area') {
     return (
