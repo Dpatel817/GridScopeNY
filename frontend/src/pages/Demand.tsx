@@ -207,28 +207,28 @@ export default function Demand() {
             <div className="kpi-value">
               {kpis.peakForecast ? <>{fmtLoad(kpis.peakForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.peakForecast && <div className="kpi-sub">HE{kpis.peakForecast.he} · {kpis.peakForecast.date}</div>}
+            {kpis.peakForecast && <div className="kpi-sub">{kpis.peakForecast.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Peak Actual</div>
             <div className="kpi-value">
               {kpis.peakActual ? <>{fmtLoad(kpis.peakActual.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.peakActual && <div className="kpi-sub">HE{kpis.peakActual.he} · {kpis.peakActual.date}</div>}
+            {kpis.peakActual && <div className="kpi-sub">{kpis.peakActual.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Low Forecast</div>
             <div className="kpi-value">
               {kpis.lowForecast ? <>{fmtLoad(kpis.lowForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.lowForecast && <div className="kpi-sub">HE{kpis.lowForecast.he} · {kpis.lowForecast.date}</div>}
+            {kpis.lowForecast && <div className="kpi-sub">{kpis.lowForecast.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Low Actual</div>
             <div className="kpi-value">
               {kpis.lowActual ? <>{fmtLoad(kpis.lowActual.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.lowActual && <div className="kpi-sub">HE{kpis.lowActual.he} · {kpis.lowActual.date}</div>}
+            {kpis.lowActual && <div className="kpi-sub">{kpis.lowActual.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Avg Forecast Error</div>
@@ -245,21 +245,21 @@ export default function Demand() {
             <div className="kpi-value">
               {kpis.peakForecastError ? <>{fmtLoad(Math.abs(kpis.peakForecastError.value))}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.peakForecastError && <div className="kpi-sub">HE{kpis.peakForecastError.he} · {kpis.peakForecastError.date}</div>}
+            {kpis.peakForecastError && <div className="kpi-sub">{kpis.peakForecastError.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Largest Under-Forecast</div>
             <div className="kpi-value">
               {kpis.largestUnderForecast ? <>{fmtLoad(Math.abs(kpis.largestUnderForecast.value))}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.largestUnderForecast && <div className="kpi-sub">HE{kpis.largestUnderForecast.he} · {kpis.largestUnderForecast.date}</div>}
+            {kpis.largestUnderForecast && <div className="kpi-sub">{kpis.largestUnderForecast.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Largest Over-Forecast</div>
             <div className="kpi-value">
               {kpis.largestOverForecast ? <>{fmtLoad(kpis.largestOverForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.largestOverForecast && <div className="kpi-sub">HE{kpis.largestOverForecast.he} · {kpis.largestOverForecast.date}</div>}
+            {kpis.largestOverForecast && <div className="kpi-sub">{kpis.largestOverForecast.timestamp}</div>}
           </div>
         </div>
       )}

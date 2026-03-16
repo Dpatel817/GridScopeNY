@@ -15,8 +15,8 @@ export interface DemandSummaryContext {
 }
 
 export function buildDemandSummaryContext(kpis: DemandKPIs, dateRange: string): DemandSummaryContext {
-  const fmtLoad = (v: { value: number; he: number; date: string } | null) =>
-    v ? `${Math.round(v.value).toLocaleString()} MW at HE${v.he} (${v.date})` : 'N/A';
+  const fmtLoad = (v: { value: number; he: number; date: string; timestamp: string } | null) =>
+    v ? `${Math.round(v.value).toLocaleString()} MW at ${v.timestamp}` : 'N/A';
 
   return {
     onPeakAvgForecast: kpis.onPeakAvgForecast != null ? `${Math.round(kpis.onPeakAvgForecast).toLocaleString()} MW` : 'N/A',
@@ -48,13 +48,13 @@ export function deterministicDemandSummary(kpis: DemandKPIs): string {
 
   if (kpis.peakForecast) {
     parts.push(
-      `Peak forecast reached ${Math.round(kpis.peakForecast.value).toLocaleString()} MW at HE${kpis.peakForecast.he}.`
+      `Peak forecast reached ${Math.round(kpis.peakForecast.value).toLocaleString()} MW at ${kpis.peakForecast.timestamp}.`
     );
   }
 
   if (kpis.peakActual) {
     parts.push(
-      `Actual peak hit ${Math.round(kpis.peakActual.value).toLocaleString()} MW at HE${kpis.peakActual.he}.`
+      `Actual peak hit ${Math.round(kpis.peakActual.value).toLocaleString()} MW at ${kpis.peakActual.timestamp}.`
     );
   }
 
@@ -66,7 +66,7 @@ export function deterministicDemandSummary(kpis: DemandKPIs): string {
 
   if (kpis.peakForecastError) {
     parts.push(
-      `Largest absolute error was ${Math.abs(Math.round(kpis.peakForecastError.value)).toLocaleString()} MW at HE${kpis.peakForecastError.he}.`
+      `Largest absolute error was ${Math.abs(Math.round(kpis.peakForecastError.value)).toLocaleString()} MW at ${kpis.peakForecastError.timestamp}.`
     );
   }
 

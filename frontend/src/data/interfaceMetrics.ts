@@ -1,12 +1,13 @@
 import type { FlowRow } from './interfaceTransforms';
 import { isOnPeak, detectFlowColumns } from './interfaceTransforms';
 import { getInterfaceMeta, getDisplayName } from './interfaceMetadata';
+import { formatTimestamp } from './formatTimestamp';
 
 export interface FlowKPIs {
   onPeakAvgInternal: number | null;
   onPeakAvgExternal: number | null;
-  peakPositive: { value: number; iface: string; he: number; date: string } | null;
-  peakNegative: { value: number; iface: string; he: number; date: string } | null;
+  peakPositive: { value: number; iface: string; he: number; date: string; timestamp: string } | null;
+  peakNegative: { value: number; iface: string; he: number; date: string; timestamp: string } | null;
   mostActive: string | null;
   topInternal: string | null;
   topExternal: string | null;
@@ -47,10 +48,10 @@ export function computeFlowKPIs(rows: FlowRow[]): FlowKPIs {
     }
 
     if (peakPos === null || flow > peakPos.value) {
-      peakPos = { value: flow, iface: display, he, date: r.Date };
+      peakPos = { value: flow, iface: display, he, date: r.Date, timestamp: formatTimestamp(r.Date, he) };
     }
     if (peakNeg === null || flow < peakNeg.value) {
-      peakNeg = { value: flow, iface: display, he, date: r.Date };
+      peakNeg = { value: flow, iface: display, he, date: r.Date, timestamp: formatTimestamp(r.Date, he) };
     }
 
     if (!byIface[raw]) byIface[raw] = { absSum: 0, count: 0, classification: meta.classification };

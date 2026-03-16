@@ -13,8 +13,8 @@ export interface FlowSummaryContext {
 }
 
 export function buildFlowSummaryContext(kpis: FlowKPIs, dateRange: string): FlowSummaryContext {
-  const fmtFlow = (v: { value: number; iface: string; he: number; date: string } | null) =>
-    v ? `${Math.round(v.value).toLocaleString()} MW on ${v.iface} at HE${v.he} (${v.date})` : 'N/A';
+  const fmtFlow = (v: { value: number; iface: string; he: number; date: string; timestamp: string } | null) =>
+    v ? `${Math.round(v.value).toLocaleString()} MW on ${v.iface} at ${v.timestamp}` : 'N/A';
 
   return {
     onPeakAvgInternal: kpis.onPeakAvgInternal != null ? `${Math.round(kpis.onPeakAvgInternal).toLocaleString()} MW` : 'N/A',
@@ -46,13 +46,13 @@ export function deterministicFlowSummary(kpis: FlowKPIs): string {
 
   if (kpis.peakPositive) {
     parts.push(
-      `Peak positive flow reached ${Math.round(kpis.peakPositive.value).toLocaleString()} MW on ${kpis.peakPositive.iface} at HE${kpis.peakPositive.he}.`
+      `Peak positive flow reached ${Math.round(kpis.peakPositive.value).toLocaleString()} MW on ${kpis.peakPositive.iface} at ${kpis.peakPositive.timestamp}.`
     );
   }
 
   if (kpis.peakNegative) {
     parts.push(
-      `Peak negative flow was ${Math.round(kpis.peakNegative.value).toLocaleString()} MW on ${kpis.peakNegative.iface} at HE${kpis.peakNegative.he}.`
+      `Peak negative flow was ${Math.round(kpis.peakNegative.value).toLocaleString()} MW on ${kpis.peakNegative.iface} at ${kpis.peakNegative.timestamp}.`
     );
   }
 

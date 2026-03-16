@@ -18,16 +18,16 @@ export function buildSummaryContext(kpis: PriceKPIs, dateRange: string): PriceSu
     onPeakAvgDA: kpis.onPeakAvgDA?.toFixed(2) ?? 'N/A',
     onPeakAvgRT: kpis.onPeakAvgRT?.toFixed(2) ?? 'N/A',
     peakDA: kpis.peakDA
-      ? `$${kpis.peakDA.value.toFixed(2)} at HE${kpis.peakDA.he} (${kpis.peakDA.zone}, ${kpis.peakDA.date})`
+      ? `$${kpis.peakDA.value.toFixed(2)} at ${kpis.peakDA.timestamp} (${kpis.peakDA.zone})`
       : 'N/A',
     peakRT: kpis.peakRT
-      ? `$${kpis.peakRT.value.toFixed(2)} at HE${kpis.peakRT.he} (${kpis.peakRT.zone}, ${kpis.peakRT.date})`
+      ? `$${kpis.peakRT.value.toFixed(2)} at ${kpis.peakRT.timestamp} (${kpis.peakRT.zone})`
       : 'N/A',
     lowDA: kpis.lowDA
-      ? `$${kpis.lowDA.value.toFixed(2)} at HE${kpis.lowDA.he} (${kpis.lowDA.zone}, ${kpis.lowDA.date})`
+      ? `$${kpis.lowDA.value.toFixed(2)} at ${kpis.lowDA.timestamp} (${kpis.lowDA.zone})`
       : 'N/A',
     lowRT: kpis.lowRT
-      ? `$${kpis.lowRT.value.toFixed(2)} at HE${kpis.lowRT.he} (${kpis.lowRT.zone}, ${kpis.lowRT.date})`
+      ? `$${kpis.lowRT.value.toFixed(2)} at ${kpis.lowRT.timestamp} (${kpis.lowRT.zone})`
       : 'N/A',
     topDartZone: kpis.topDartZone?.zone ?? 'N/A',
     topDartAvg: kpis.topDartZone?.avgSpread.toFixed(2) ?? 'N/A',
@@ -51,7 +51,7 @@ export function deterministicSummary(kpis: PriceKPIs): string {
 
   if (kpis.peakDA) {
     parts.push(
-      `Peak DA price reached $${kpis.peakDA.value.toFixed(2)}/MWh at HE${kpis.peakDA.he} in ${kpis.peakDA.zone}.`
+      `Peak DA price reached $${kpis.peakDA.value.toFixed(2)}/MWh at ${kpis.peakDA.timestamp} in ${kpis.peakDA.zone}.`
     );
   }
 

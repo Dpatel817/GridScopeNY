@@ -1,18 +1,19 @@
 import type { AlignedRow } from './demandTransforms';
 import type { DemandRow } from './demandTransforms';
 import { isOnPeak } from './demandTransforms';
+import { formatTimestamp } from './formatTimestamp';
 
 export interface DemandKPIs {
   onPeakAvgForecast: number | null;
   onPeakAvgActual: number | null;
-  peakForecast: { value: number; he: number; date: string } | null;
-  peakActual: { value: number; he: number; date: string } | null;
-  lowForecast: { value: number; he: number; date: string } | null;
-  lowActual: { value: number; he: number; date: string } | null;
+  peakForecast: { value: number; he: number; date: string; timestamp: string } | null;
+  peakActual: { value: number; he: number; date: string; timestamp: string } | null;
+  lowForecast: { value: number; he: number; date: string; timestamp: string } | null;
+  lowActual: { value: number; he: number; date: string; timestamp: string } | null;
   avgForecastError: number | null;
-  peakForecastError: { value: number; he: number; date: string } | null;
-  largestUnderForecast: { value: number; he: number; date: string } | null;
-  largestOverForecast: { value: number; he: number; date: string } | null;
+  peakForecastError: { value: number; he: number; date: string; timestamp: string } | null;
+  largestUnderForecast: { value: number; he: number; date: string; timestamp: string } | null;
+  largestOverForecast: { value: number; he: number; date: string; timestamp: string } | null;
 }
 
 export function computeDemandKPIs(
@@ -72,7 +73,7 @@ function avg(values: number[]): number | null {
 function findExtremeForecast(
   rows: DemandRow[],
   mode: 'max' | 'min'
-): { value: number; he: number; date: string } | null {
+): { value: number; he: number; date: string; timestamp: string } | null {
   let best: DemandRow | null = null;
   let bestVal = mode === 'max' ? -Infinity : Infinity;
 
@@ -86,14 +87,15 @@ function findExtremeForecast(
   }
 
   if (!best) return null;
-  return { value: bestVal, he: Number(best.HE), date: best.Date };
+  const he = Number(best.HE);
+  return { value: bestVal, he, date: best.Date, timestamp: formatTimestamp(best.Date, he) };
 }
 
 function findExtremeAligned(
   rows: AlignedRow[],
   field: 'Forecast' | 'Actual',
   mode: 'max' | 'min'
-): { value: number; he: number; date: string } | null {
+): { value: number; he: number; date: string; timestamp: string } | null {
   let best: AlignedRow | null = null;
   let bestVal = mode === 'max' ? -Infinity : Infinity;
 
@@ -107,13 +109,13 @@ function findExtremeAligned(
   }
 
   if (!best) return null;
-  return { value: bestVal, he: best.HE, date: best.Date };
+  return { value: bestVal, he: best.HE, date: best.Date, timestamp: formatTimestamp(best.Date, best.HE) };
 }
 
 function findExtremeError(
   rows: AlignedRow[],
   mode: 'absMax' | 'maxPos' | 'minNeg'
-): { value: number; he: number; date: string } | null {
+): { value: number; he: number; date: string; timestamp: string } | null {
   let best: AlignedRow | null = null;
   let bestVal = mode === 'absMax' ? 0 : mode === 'maxPos' ? 0 : 0;
 
@@ -140,5 +142,5 @@ function findExtremeError(
   }
 
   if (!best) return null;
-  return { value: bestVal, he: best.HE, date: best.Date };
+  return { value: bestVal, he: best.HE, date: best.Date, timestamp: formatTimestamp(best.Date, best.HE) };
 }

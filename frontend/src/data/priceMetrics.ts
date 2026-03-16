@@ -1,13 +1,14 @@
 import type { PriceRow } from './priceTransforms';
 import { isOnPeak, filterNyisoOnly } from './priceTransforms';
+import { formatTimestamp } from './formatTimestamp';
 
 export interface PriceKPIs {
   onPeakAvgDA: number | null;
   onPeakAvgRT: number | null;
-  peakDA: { value: number; he: number; zone: string; date: string } | null;
-  peakRT: { value: number; he: number; zone: string; date: string } | null;
-  lowDA: { value: number; he: number; zone: string; date: string } | null;
-  lowRT: { value: number; he: number; zone: string; date: string } | null;
+  peakDA: { value: number; he: number; zone: string; date: string; timestamp: string } | null;
+  peakRT: { value: number; he: number; zone: string; date: string; timestamp: string } | null;
+  lowDA: { value: number; he: number; zone: string; date: string; timestamp: string } | null;
+  lowRT: { value: number; he: number; zone: string; date: string; timestamp: string } | null;
   topDartZone: { zone: string; avgSpread: number; maxSpread: number } | null;
 }
 
@@ -41,7 +42,7 @@ function avg(values: number[]): number | null {
 function findExtreme(
   rows: PriceRow[],
   mode: 'max' | 'min'
-): { value: number; he: number; zone: string; date: string } | null {
+): { value: number; he: number; zone: string; date: string; timestamp: string } | null {
   let best: PriceRow | null = null;
   let bestVal = mode === 'max' ? -Infinity : Infinity;
 
@@ -60,6 +61,7 @@ function findExtreme(
     he: best.HE,
     zone: String(best.Zone),
     date: best.Date,
+    timestamp: formatTimestamp(best.Date, best.HE),
   };
 }
 

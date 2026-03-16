@@ -13,8 +13,8 @@ export interface CongestionSummaryContext {
 }
 
 export function buildCongestionSummaryContext(kpis: CongestionKPIs, dateRange: string): CongestionSummaryContext {
-  const fmtCost = (v: { value: number; constraint: string; he: number; date: string } | null) =>
-    v ? `$${v.value.toFixed(2)} on ${v.constraint} at HE${v.he} (${v.date})` : 'N/A';
+  const fmtCost = (v: { value: number; constraint: string; he: number; date: string; timestamp: string } | null) =>
+    v ? `$${v.value.toFixed(2)} on ${v.constraint} at ${v.timestamp}` : 'N/A';
 
   return {
     onPeakTotalCost: kpis.onPeakTotalCost != null ? `$${Math.round(kpis.onPeakTotalCost).toLocaleString()}` : 'N/A',
@@ -51,7 +51,7 @@ export function deterministicCongestionSummary(kpis: CongestionKPIs): string {
 
   if (kpis.peakPositive) {
     parts.push(
-      `Peak positive cost reached $${kpis.peakPositive.value.toFixed(2)} on ${kpis.peakPositive.constraint} at HE${kpis.peakPositive.he}.`
+      `Peak positive cost reached $${kpis.peakPositive.value.toFixed(2)} on ${kpis.peakPositive.constraint} at ${kpis.peakPositive.timestamp}.`
     );
   }
 

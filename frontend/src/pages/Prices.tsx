@@ -195,28 +195,28 @@ export default function Prices() {
             <div className="kpi-value">
               {kpis.peakDA ? <>${kpis.peakDA.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
             </div>
-            {kpis.peakDA && <div className="kpi-sub">HE{kpis.peakDA.he} · {kpis.peakDA.zone}</div>}
+            {kpis.peakDA && <div className="kpi-sub">{kpis.peakDA.timestamp} · {kpis.peakDA.zone}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Peak RT LMP</div>
             <div className="kpi-value">
               {kpis.peakRT ? <>${kpis.peakRT.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
             </div>
-            {kpis.peakRT && <div className="kpi-sub">HE{kpis.peakRT.he} · {kpis.peakRT.zone}</div>}
+            {kpis.peakRT && <div className="kpi-sub">{kpis.peakRT.timestamp} · {kpis.peakRT.zone}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Low DA LMP</div>
             <div className="kpi-value">
               {kpis.lowDA ? <>${kpis.lowDA.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
             </div>
-            {kpis.lowDA && <div className="kpi-sub">HE{kpis.lowDA.he} · {kpis.lowDA.zone}</div>}
+            {kpis.lowDA && <div className="kpi-sub">{kpis.lowDA.timestamp} · {kpis.lowDA.zone}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Low RT LMP</div>
             <div className="kpi-value">
               {kpis.lowRT ? <>${kpis.lowRT.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
             </div>
-            {kpis.lowRT && <div className="kpi-sub">HE{kpis.lowRT.he} · {kpis.lowRT.zone}</div>}
+            {kpis.lowRT && <div className="kpi-sub">{kpis.lowRT.timestamp} · {kpis.lowRT.zone}</div>}
           </div>
           <div className="kpi-card accent">
             <div className="kpi-label">Top DART Zone</div>

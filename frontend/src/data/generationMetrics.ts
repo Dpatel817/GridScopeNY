@@ -1,5 +1,6 @@
 import type { GenRow, FuelBreakdown } from './generationTransforms';
 import { isOnPeak, detectColumns } from './generationTransforms';
+import { formatTimestamp } from './formatTimestamp';
 
 const RENEWABLE_FUELS = new Set([
   'Wind', 'Hydro', 'Other Renewables', 'Solar', 'Landfill Gas',
@@ -8,8 +9,8 @@ const RENEWABLE_FUELS = new Set([
 
 export interface GenerationKPIs {
   onPeakAvgTotal: number | null;
-  peakTotal: { value: number; he: number; date: string } | null;
-  lowTotal: { value: number; he: number; date: string } | null;
+  peakTotal: { value: number; he: number; date: string; timestamp: string } | null;
+  lowTotal: { value: number; he: number; date: string; timestamp: string } | null;
   topFuel: string | null;
   topFuelShare: number | null;
   secondFuel: string | null;
@@ -46,14 +47,14 @@ export function computeGenerationKPIs(
     ? onPeakIntervals.reduce((s, i) => s + i.total, 0) / onPeakIntervals.length
     : null;
 
-  let peakTotal: { value: number; he: number; date: string } | null = null;
-  let lowTotal: { value: number; he: number; date: string } | null = null;
+  let peakTotal: { value: number; he: number; date: string; timestamp: string } | null = null;
+  let lowTotal: { value: number; he: number; date: string; timestamp: string } | null = null;
   for (const i of intervals) {
     if (!peakTotal || i.total > peakTotal.value) {
-      peakTotal = { value: i.total, he: i.he, date: i.date };
+      peakTotal = { value: i.total, he: i.he, date: i.date, timestamp: formatTimestamp(i.date, i.he) };
     }
     if (!lowTotal || i.total < lowTotal.value) {
-      lowTotal = { value: i.total, he: i.he, date: i.date };
+      lowTotal = { value: i.total, he: i.he, date: i.date, timestamp: formatTimestamp(i.date, i.he) };
     }
   }
 

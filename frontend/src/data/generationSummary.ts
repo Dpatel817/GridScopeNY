@@ -19,8 +19,8 @@ export function buildGenerationSummaryContext(
   breakdown: FuelBreakdown[],
   dateRange: string
 ): GenerationSummaryContext {
-  const fmtLoad = (v: { value: number; he: number; date: string } | null) =>
-    v ? `${Math.round(v.value).toLocaleString()} MW at HE${v.he} (${v.date})` : 'N/A';
+  const fmtLoad = (v: { value: number; he: number; date: string; timestamp: string } | null) =>
+    v ? `${Math.round(v.value).toLocaleString()} MW at ${v.timestamp}` : 'N/A';
 
   return {
     onPeakAvgTotal: kpis.onPeakAvgTotal != null ? `${Math.round(kpis.onPeakAvgTotal).toLocaleString()} MW` : 'N/A',
@@ -54,7 +54,7 @@ export function deterministicGenerationSummary(
 
   if (kpis.peakTotal) {
     parts.push(
-      `Peak total generation reached ${Math.round(kpis.peakTotal.value).toLocaleString()} MW at HE${kpis.peakTotal.he}.`
+      `Peak total generation reached ${Math.round(kpis.peakTotal.value).toLocaleString()} MW at ${kpis.peakTotal.timestamp}.`
     );
   }
 

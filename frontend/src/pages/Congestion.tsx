@@ -1143,7 +1143,7 @@ export default function Congestion() {
             <div className="kpi-value">
               {kpis.peakPositive ? <>${kpis.peakPositive.value.toFixed(2)}</> : '—'}
             </div>
-            {kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.constraint.length > 25 ? kpis.peakPositive.constraint.slice(0, 23) + '…' : kpis.peakPositive.constraint} · HE{kpis.peakPositive.he} · {kpis.peakPositive.date}</div>}
+            {kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.constraint.length > 25 ? kpis.peakPositive.constraint.slice(0, 23) + '…' : kpis.peakPositive.constraint} · {kpis.peakPositive.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Peak Negative Cost</div>
@@ -1154,7 +1154,7 @@ export default function Congestion() {
                 </span>
               ) : '—'}
             </div>
-            {kpis.peakNegative && <div className="kpi-sub">{kpis.peakNegative.constraint.length > 25 ? kpis.peakNegative.constraint.slice(0, 23) + '…' : kpis.peakNegative.constraint} · HE{kpis.peakNegative.he} · {kpis.peakNegative.date}</div>}
+            {kpis.peakNegative && <div className="kpi-sub">{kpis.peakNegative.constraint.length > 25 ? kpis.peakNegative.constraint.slice(0, 23) + '…' : kpis.peakNegative.constraint} · {kpis.peakNegative.timestamp}</div>}
           </div>
           <div className="kpi-card accent">
             <div className="kpi-label">Highest-Cost Constraint</div>

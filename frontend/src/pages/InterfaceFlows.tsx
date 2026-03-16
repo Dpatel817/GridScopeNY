@@ -534,7 +534,7 @@ export default function InterfaceFlows() {
             <div className="kpi-value">
               {kpis.peakPositive ? <>{fmtFlow(kpis.peakPositive.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.iface} · HE{kpis.peakPositive.he} · {kpis.peakPositive.date}</div>}
+            {kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.iface} · {kpis.peakPositive.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Peak Negative Flow</div>
@@ -545,7 +545,7 @@ export default function InterfaceFlows() {
                 </span>
               ) : '—'}
             </div>
-            {kpis.peakNegative && <div className="kpi-sub">{kpis.peakNegative.iface} · HE{kpis.peakNegative.he} · {kpis.peakNegative.date}</div>}
+            {kpis.peakNegative && <div className="kpi-sub">{kpis.peakNegative.iface} · {kpis.peakNegative.timestamp}</div>}
           </div>
           <div className="kpi-card accent">
             <div className="kpi-label">Most Active Interface</div>

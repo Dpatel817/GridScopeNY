@@ -299,14 +299,14 @@ export default function Generation() {
             <div className="kpi-value">
               {kpis.peakTotal ? <>{fmtLoad(kpis.peakTotal.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.peakTotal && <div className="kpi-sub">HE{kpis.peakTotal.he} · {kpis.peakTotal.date}</div>}
+            {kpis.peakTotal && <div className="kpi-sub">{kpis.peakTotal.timestamp}</div>}
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Low Total Gen</div>
             <div className="kpi-value">
               {kpis.lowTotal ? <>{fmtLoad(kpis.lowTotal.value)}<span className="kpi-unit">MW</span></> : '—'}
             </div>
-            {kpis.lowTotal && <div className="kpi-sub">HE{kpis.lowTotal.he} · {kpis.lowTotal.date}</div>}
+            {kpis.lowTotal && <div className="kpi-sub">{kpis.lowTotal.timestamp}</div>}
           </div>
           <div className="kpi-card accent">
             <div className="kpi-label">Top Fuel Source</div>

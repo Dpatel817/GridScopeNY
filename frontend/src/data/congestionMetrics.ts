@@ -1,11 +1,12 @@
 import type { CongestionRow } from './congestionTransforms';
 import { isOnPeak, detectColumns } from './congestionTransforms';
+import { formatTimestamp } from './formatTimestamp';
 
 export interface CongestionKPIs {
   onPeakTotalCost: number | null;
   onPeakAvgCost: number | null;
-  peakPositive: { value: number; constraint: string; he: number; date: string } | null;
-  peakNegative: { value: number; constraint: string; he: number; date: string } | null;
+  peakPositive: { value: number; constraint: string; he: number; date: string; timestamp: string } | null;
+  peakNegative: { value: number; constraint: string; he: number; date: string; timestamp: string } | null;
   highestCostConstraint: string | null;
   avgCostTopConstraint: number | null;
   bindingCount: number;
@@ -38,10 +39,10 @@ export function computeCongestionKPIs(rows: CongestionRow[]): CongestionKPIs {
     }
 
     if (cost > 0 && (peakPos === null || cost > peakPos.value)) {
-      peakPos = { value: cost, constraint: name, he, date: r.Date };
+      peakPos = { value: cost, constraint: name, he, date: r.Date, timestamp: formatTimestamp(r.Date, he) };
     }
     if (cost < 0 && (peakNeg === null || cost < peakNeg.value)) {
-      peakNeg = { value: cost, constraint: name, he, date: r.Date };
+      peakNeg = { value: cost, constraint: name, he, date: r.Date, timestamp: formatTimestamp(r.Date, he) };
     }
 
     if (!byConstraint[name]) byConstraint[name] = { totalAbs: 0, count: 0 };
