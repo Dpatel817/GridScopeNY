@@ -1,4 +1,4 @@
-export type ChartType = 'line' | 'line-markers' | 'area';
+export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
 export type DateRange = 'today' | 'all' | 'custom';
 

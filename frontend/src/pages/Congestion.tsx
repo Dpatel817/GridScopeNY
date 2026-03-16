@@ -30,6 +30,7 @@ const CHART_TYPES: { key: ChartType; label: string }[] = [
   { key: 'line-markers', label: 'Line + Markers' },
   { key: 'line', label: 'Line' },
   { key: 'area', label: 'Stacked Area' },
+  { key: 'bar', label: 'Stacked Bar' },
 ];
 
 const DATE_RANGES: { key: DateRange; label: string }[] = [
