@@ -137,7 +137,8 @@ export function computeDartSpread(
   resolution: Resolution,
   dateRange: DateRange,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  field: LmpField = 'LMP'
 ): PivotedRow[] {
   const daFiltered = filterByDateRange(filterByZones(filterNyisoOnly(daRows), zones), dateRange, startDate, endDate);
   const rtFiltered = filterByDateRange(filterByZones(filterNyisoOnly(rtRows), zones), dateRange, startDate, endDate);
@@ -146,20 +147,20 @@ export function computeDartSpread(
   const rtMap: Record<string, number> = {};
   for (const r of rtFiltered) {
     const k = hasHE ? `${r.Date}_${r.HE}_${r.Zone}` : `${r.Date}_${r.Zone}`;
-    rtMap[k] = Number(r.LMP);
+    rtMap[k] = Number(r[field]);
   }
 
   interface DartRow { Date: string; HE: number; Zone: string; DART: number }
   const dartRows: DartRow[] = [];
   for (const r of daFiltered) {
     const key = hasHE ? `${r.Date}_${r.HE}_${String(r.Zone)}` : `${r.Date}_${String(r.Zone)}`;
-    const rtLmp = rtMap[key];
-    if (rtLmp !== undefined) {
+    const rtVal = rtMap[key];
+    if (rtVal !== undefined) {
       dartRows.push({
         Date: r.Date,
         HE: r.HE ?? 0,
         Zone: String(r.Zone),
-        DART: Number(r.LMP) - rtLmp,
+        DART: Number(r[field]) - rtVal,
       });
     }
   }

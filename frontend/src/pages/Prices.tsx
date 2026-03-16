@@ -147,11 +147,11 @@ export default function Prices() {
       if (dateRange === 'today' && commonKpiDate) {
         const daForDart = filterNyisoOnly(daRows).filter(r => r.Date === commonKpiDate);
         const rtForDart = filterNyisoOnly(rtRows).filter(r => r.Date === commonKpiDate);
-        return computeDartSpread(daForDart, rtForDart, selectedZones, resolution, 'all');
+        return computeDartSpread(daForDart, rtForDart, selectedZones, resolution, 'all', undefined, undefined, lmpField);
       }
-      return computeDartSpread(daFiltered, rtFiltered, selectedZones, resolution, 'all');
+      return computeDartSpread(daFiltered, rtFiltered, selectedZones, resolution, 'all', undefined, undefined, lmpField);
     },
-    [daFiltered, rtFiltered, daRows, rtRows, selectedZones, resolution, dateRange, commonKpiDate]
+    [daFiltered, rtFiltered, daRows, rtRows, selectedZones, resolution, dateRange, commonKpiDate, lmpField]
   );
 
   const displaySummary = aiSummary || fallbackSummary;
@@ -277,7 +277,7 @@ export default function Prices() {
               </span>
             </div>
 
-            {(viewMode === 'da' || viewMode === 'rt') && (
+            {(viewMode === 'da' || viewMode === 'rt' || viewMode === 'dart') && (
               <div className="lmp-component-selector">
                 {(['LMP', 'MLC', 'MCC'] as LmpField[]).map(f => (
                   <button
@@ -330,7 +330,7 @@ export default function Prices() {
             {viewMode === 'dart' && (
               <div className="chart-card">
                 <div className="chart-card-header">
-                  <div className="chart-card-title">DA-RT Spread (DA minus RT)</div>
+                  <div className="chart-card-title">DA-RT {lmpField === 'LMP' ? 'LMP' : lmpField === 'MLC' ? 'Losses (MLC)' : 'Congestion (MCC)'} Spread (DA minus RT)</div>
                   <span className="badge badge-primary">{dartChartData.length} points</span>
                 </div>
                 <PriceChart
