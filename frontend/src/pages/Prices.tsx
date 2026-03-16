@@ -51,18 +51,22 @@ export default function Prices() {
 
   const availableDates = useMemo(() => getAvailableDates(filterNyisoOnly(daRows)), [daRows]);
 
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range);
+    if (range === 'custom' && (!startDate || !endDate) && availableDates.length > 0) {
+      const end = availableDates[availableDates.length - 1];
+      const startIdx = Math.max(0, availableDates.length - 7);
+      const start = availableDates[startIdx];
+      setStartDate(start);
+      setEndDate(end);
+    }
+  };
+
   useEffect(() => {
     if (allZones.length > 0 && selectedZones.length === 0) {
       setSelectedZones([...allZones]);
     }
   }, [allZones]);
-
-  useEffect(() => {
-    if (availableDates.length > 0 && !startDate) {
-      setStartDate(availableDates[0]);
-      setEndDate(availableDates[availableDates.length - 1]);
-    }
-  }, [availableDates]);
 
   const latestDate = useMemo(() => {
     const dates = getAvailableDates(filterNyisoOnly(daRows));
@@ -208,15 +212,7 @@ export default function Prices() {
             resolution={resolution}
             onResolutionChange={setResolution}
             dateRange={dateRange}
-            onDateRangeChange={(r: DateRange) => {
-              setDateRange(r);
-              if (r === 'custom' && !startDate && !endDate && availableDates.length > 0) {
-                const end = availableDates[availableDates.length - 1];
-                const startIdx = Math.max(0, availableDates.length - 7);
-                setStartDate(availableDates[startIdx]);
-                setEndDate(end);
-              }
-            }}
+            onDateRangeChange={handleDateRangeChange}
             startDate={startDate}
             endDate={endDate}
             onStartDateChange={setStartDate}

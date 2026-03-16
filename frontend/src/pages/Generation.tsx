@@ -179,6 +179,17 @@ export default function Generation() {
   const allFuels = useMemo(() => extractFuels(rows, fuelCol), [rows, fuelCol]);
   const availableDates = useMemo(() => getAvailableDates(rows), [rows]);
 
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range);
+    if (range === 'custom' && (!startDate || !endDate) && availableDates.length > 0) {
+      const end = availableDates[availableDates.length - 1];
+      const startIdx = Math.max(0, availableDates.length - 7);
+      const start = availableDates[startIdx];
+      setStartDate(start);
+      setEndDate(end);
+    }
+  };
+
   useEffect(() => {
     if (allFuels.length > 0 && selectedFuels.length === 0) {
       setSelectedFuels([...allFuels]);
@@ -334,15 +345,7 @@ export default function Generation() {
             resolution={resolution}
             onResolutionChange={setResolution}
             dateRange={dateRange}
-            onDateRangeChange={(r: DateRange) => {
-              setDateRange(r);
-              if (r === 'custom' && !startDate && !endDate && availableDates.length > 0) {
-                const end = availableDates[availableDates.length - 1];
-                const startIdx = Math.max(0, availableDates.length - 7);
-                setStartDate(availableDates[startIdx]);
-                setEndDate(end);
-              }
-            }}
+            onDateRangeChange={handleDateRangeChange}
             startDate={startDate}
             endDate={endDate}
             onStartDateChange={setStartDate}

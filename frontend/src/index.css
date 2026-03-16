@@ -2746,7 +2746,7 @@ tr:hover td { background: var(--bg); }
   position: sticky;
   top: 16px;
 }
-.scarcity-controls select.pcc-date {
+.scarcity-controls .pcc-date {
   width: 100%;
   margin-bottom: 4px;
 }

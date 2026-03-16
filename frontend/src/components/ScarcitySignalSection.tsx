@@ -194,21 +194,40 @@ export default function ScarcitySignalSection() {
                   <button
                     key={d.key}
                     className={`pcc-btn${dateRange === d.key ? ' active' : ''}`}
-                    onClick={() => setDateRange(d.key)}
+                    onClick={() => {
+                      const range = d.key;
+                      setDateRange(range);
+                      if (range === 'custom' && (!startDate || !endDate) && availableDates.length > 0) {
+                        const end = availableDates[availableDates.length - 1];
+                        const si = Math.max(0, availableDates.length - 7);
+                        setStartDate(availableDates[si]);
+                        setEndDate(end);
+                      }
+                    }}
                   >
                     {d.label}
                   </button>
                 ))}
               </div>
-              {dateRange === 'custom' && availableDates.length > 0 && (
+              {dateRange === 'custom' && (
                 <div className="pcc-date-inputs">
-                  <select className="pcc-date" value={startDate} onChange={e => setStartDate(e.target.value)}>
-                    {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                  <input
+                    type="date"
+                    className="pcc-date"
+                    value={startDate}
+                    min={availableDates.length > 0 ? availableDates[0] : undefined}
+                    max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
+                    onChange={e => setStartDate(e.target.value)}
+                  />
                   <span className="pcc-date-sep">to</span>
-                  <select className="pcc-date" value={endDate} onChange={e => setEndDate(e.target.value)}>
-                    {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                  <input
+                    type="date"
+                    className="pcc-date"
+                    value={endDate}
+                    min={availableDates.length > 0 ? availableDates[0] : undefined}
+                    max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
+                    onChange={e => setEndDate(e.target.value)}
+                  />
                 </div>
               )}
             </div>

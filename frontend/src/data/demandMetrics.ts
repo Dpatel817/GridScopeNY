@@ -22,7 +22,7 @@ export function computeDemandKPIs(
   const onPeakForecasts: number[] = [];
   const onPeakActuals: number[] = [];
 
-  const hasHE = aligned.some(r => r.HE != null && !isNaN(r.HE));
+  const hasHE = aligned.some(r => r.HE != null && !isNaN(r.HE) && r.HE > 0);
   for (const r of aligned) {
     if (!hasHE || isOnPeak(r.HE)) {
       if (!isNaN(r.Forecast) && r.Forecast > 0) onPeakForecasts.push(r.Forecast);
