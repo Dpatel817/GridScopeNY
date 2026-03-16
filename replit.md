@@ -100,8 +100,6 @@ etl/
   manifests.py            # JSON manifest tracking (processed months/dates, idempotency)
   utils.py                # Logging setup
 ETL/
-  fetch_nyiso_data.py     # Legacy 7-day rolling scraper (superseded by daily_scraper.py)
-  process_nyiso_data.py   # Legacy processor (still used by api.py /api/refresh endpoint)
   fetch_interconnection_queue.py  # Queue Excel parser (used by both backfill + daily_scraper)
 raw_data/                 # Raw downloads organized by dataset (zip/, csv/, txt/, xlsx/)
 processed_csv/            # Intermediate processed CSVs by dataset
