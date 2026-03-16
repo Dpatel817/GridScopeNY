@@ -129,10 +129,8 @@ async def _cache_refresh_loop() -> None:
 
 @app.on_event("startup")
 async def start_background_jobs():
-    _background_tasks.append(asyncio.create_task(_scraper_loop(), name="scheduled-scraper"))
     logger.info(
-        "Background jobs started (scraper every %ss, cache refresh via mtime checks)",
-        SCRAPER_INTERVAL_SECONDS,
+        "Background jobs started (scraper DISABLED to avoid OOM, using existing parquet/CSV data)",
     )
 
 
