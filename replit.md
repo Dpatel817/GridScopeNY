@@ -60,7 +60,7 @@ frontend/
       Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC analytics section (date range picker, KPI cards, 3 chart tabs: by zone/by type/by MW, single-date raw table), embedded Generator Map
       InterfaceFlows.tsx  # Interface Flows — AI summary, 8 KPI cards (on-peak totals, peak flows, most active, top internal/external, count), side chart controls with class/interface/resolution/date/chart-type, flow chart, interface summary table, TTCF Derates section
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
-      OpportunityExplorer.tsx  # Opportunity Explorer — date range picker, zone rankings, trader + battery takeaways, embedded AI analyst (all context filters by selected date range)
+      OpportunityExplorer.tsx  # Opportunity Explorer — role-based UI (Trader / Battery Strategist toggle), 3-line answer card, collapsible Current Signal & Structural Opportunity sections, role-aware rankings table, More Analysis drawer with tabs (Charts/AI/Data)
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization (standalone or embedded mode)
       InterconnectionQueue.tsx  # Interconnection Queue — Intelligence summary, 9 MW-based KPIs, pipeline viz (Cluster→Active→In Service), fuel/zone bar charts, recent activity, largest projects, sortable/filterable table, collapsible sections
     components/

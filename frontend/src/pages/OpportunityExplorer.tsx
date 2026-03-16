@@ -7,6 +7,7 @@ import { isNyisoZone } from '../data/zones';
 
 type Duration = '1h' | '2h' | '4h';
 type RankMetric = 'revenue' | 'avgSpread' | 'maxSpread';
+type Role = 'trader' | 'battery';
 
 interface AIResponse {
   answer: string;
@@ -26,7 +27,22 @@ const OPP_PROMPTS = [
   { label: 'Operational Signals', prompt: 'What operational signals support this opportunity?' },
 ];
 
+function CollapsibleSection({ title, badge, defaultOpen, children }: { title: string; badge?: string; defaultOpen: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="opp-collapsible">
+      <button className="opp-collapsible-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="opp-collapsible-title">{title}</span>
+        {badge && <span className="opp-collapsible-badge">{badge}</span>}
+        <span className="opp-collapsible-chevron">{open ? '−' : '+'}</span>
+      </button>
+      {open && <div className="opp-collapsible-body">{children}</div>}
+    </div>
+  );
+}
+
 export default function OpportunityExplorer() {
+  const [role, setRole] = useState<Role>('trader');
   const [duration, setDuration] = useState<Duration>('2h');
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [rankMetric, setRankMetric] = useState<RankMetric>('revenue');
@@ -34,6 +50,8 @@ export default function OpportunityExplorer() {
   const [showRawTable, setShowRawTable] = useState(false);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [moreAnalysisTab, setMoreAnalysisTab] = useState<'charts' | 'ai' | 'data'>('charts');
+  const [showMoreAnalysis, setShowMoreAnalysis] = useState(false);
 
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
@@ -362,6 +380,43 @@ export default function OpportunityExplorer() {
     }
   }
 
+  const heroSummary = useMemo(() => {
+    if (!bestZone) return { line1: '', line2: '', line3: '' };
+    const signal = getSignalType(bestZone);
+    if (role === 'trader') {
+      return {
+        line1: `Best opportunity: ${bestZone.zone} — $${bestZone.avgSpread.toFixed(2)}/MWh avg spread, $${bestZone.maxSpread.toFixed(0)} peak`,
+        line2: `Ranks #1 by ${metricLabels[rankMetric].toLowerCase()}: ${signal === 'recurring' ? 'recurring spread pattern with consistent dislocation' : signal === 'event-driven' ? 'event-driven volatility with outsized spread spikes' : 'moderate signal with steady spread behavior'}`,
+        line3: `Action: ${signal === 'recurring' ? 'Systematic DA-RT arb opportunity — consider position sizing across peak hours' : signal === 'event-driven' ? 'Monitor for real-time spikes — set alerts on spread thresholds for quick execution' : 'Steady spread profile supports measured position entry on this zone'}`,
+      };
+    }
+    return {
+      line1: `Best zone: ${bestZone.zone} — $${bestZone.revenue.toFixed(0)}/MW est. ${durationLabel.toLowerCase()} revenue from ${bestZone.events} events`,
+      line2: `Ranks #1 by ${metricLabels[rankMetric].toLowerCase()}: ${signal === 'recurring' ? 'persistent pattern favors long-term storage siting' : signal === 'event-driven' ? 'episodic value — may not persist for multi-year commitment' : 'moderate consistency supports balanced storage deployment'}`,
+      line3: `Decision: ${signal === 'recurring' ? 'Strong structural case for battery deployment — value appears durable' : signal === 'event-driven' ? 'Consider shorter-term or flexible dispatch — value concentration is episodic' : 'Viable for storage but weigh against zones with stronger structural signals'}`,
+    };
+  }, [bestZone, role, rankMetric, durationLabel]);
+
+  const traderRankColumns = useMemo(() => {
+    return opportunities.map(o => ({
+      ...o,
+      signalStrength: o.avgSpread * (o.positiveSpreads / (o.events || 1)),
+      spreadFrequency: o.positiveSpreads,
+      regimeTag: getSignalType(o),
+    }));
+  }, [opportunities]);
+
+  const batteryRankColumns = useMemo(() => {
+    return opportunities.map(o => {
+      const rev1h = o.avgSpread * 1;
+      const rev2h = o.avgSpread * 2;
+      const rev4h = o.avgSpread * 4;
+      const persistence = o.positiveSpreads / (o.events || 1);
+      const structuralScore = persistence * o.avgSpread * (1 / (1 + o.volatility / (o.avgSpread || 1)));
+      return { ...o, rev1h, rev2h, rev4h, persistence, structuralScore };
+    });
+  }, [opportunities]);
+
   return (
     <div className="page">
       <div className="opp-hero-header">
@@ -370,16 +425,30 @@ export default function OpportunityExplorer() {
             Opportunity Explorer
             <span className="opp-lens-badge">Intelligence</span>
           </h1>
-          <p className="page-subtitle" style={{ marginTop: 8, maxWidth: 680 }}>
-            Identify NYISO opportunity by zone and get trader and battery-strategy takeaways.
+          <p className="page-subtitle" style={{ marginTop: 4, maxWidth: 600 }}>
+            NYISO zone opportunity analysis with role-specific insights.
           </p>
+        </div>
+        <div className="opp-role-toggle">
+          <button
+            className={`opp-role-btn${role === 'trader' ? ' active trader' : ''}`}
+            onClick={() => setRole('trader')}
+          >
+            Trader
+          </button>
+          <button
+            className={`opp-role-btn${role === 'battery' ? ' active battery' : ''}`}
+            onClick={() => setRole('battery')}
+          >
+            Battery Strategist
+          </button>
         </div>
       </div>
 
       {loading && (
         <div className="loading">
           <div className="spinner" />
-          Analyzing DA-RT price spreads across all NYISO zones...
+          Analyzing DA-RT spreads across NYISO zones...
         </div>
       )}
 
@@ -398,7 +467,7 @@ export default function OpportunityExplorer() {
         <>
           <div className="opp-controls">
             <div className="opp-control-group">
-              <div className="opp-control-label">Asset Duration</div>
+              <div className="opp-control-label">Duration</div>
               <div className="opp-duration-pills">
                 {(['1h', '2h', '4h'] as const).map(d => (
                   <button
@@ -458,94 +527,124 @@ export default function OpportunityExplorer() {
             </div>
           </div>
 
+          <div className="opp-answer-card">
+            <div className="opp-answer-role-label">{role === 'trader' ? 'Trader View' : 'Battery Strategist View'}</div>
+            <div className="opp-answer-line">{heroSummary.line1}</div>
+            <div className="opp-answer-line">{heroSummary.line2}</div>
+            <div className="opp-answer-line opp-answer-action">{heroSummary.line3}</div>
+          </div>
+
           <div className="opp-kpi-strip">
             <div className="opp-kpi hero-kpi">
               <div className="opp-kpi-label">Top Zone</div>
               <div className="opp-kpi-value">{bestZone.zone}</div>
-              <div className="opp-kpi-sub">Ranked by {metricLabels[rankMetric].toLowerCase()}</div>
+              <div className="opp-kpi-sub">By {metricLabels[rankMetric].toLowerCase()}</div>
             </div>
             <div className="opp-kpi">
               <div className="opp-kpi-label">{durationLabel} Revenue</div>
               <div className="opp-kpi-value">${bestZone.revenue.toFixed(0)}<span className="unit">/MW</span></div>
-              <div className="opp-kpi-sub">Best zone estimate</div>
+              <div className="opp-kpi-sub">Best zone est.</div>
             </div>
             <div className="opp-kpi">
-              <div className="opp-kpi-label">Avg DA-RT Spread</div>
+              <div className="opp-kpi-label">Avg Spread</div>
               <div className="opp-kpi-value">${bestZone.avgSpread.toFixed(2)}<span className="unit">/MWh</span></div>
-              <div className="opp-kpi-sub">Top spreads average</div>
+              <div className="opp-kpi-sub">Top spreads</div>
             </div>
+            {role === 'trader' ? (
+              <div className="opp-kpi">
+                <div className="opp-kpi-label">Peak Spread</div>
+                <div className="opp-kpi-value">${bestZone.maxSpread.toFixed(0)}<span className="unit">/MWh</span></div>
+                <div className="opp-kpi-sub">Max observed</div>
+              </div>
+            ) : (
+              <div className="opp-kpi">
+                <div className="opp-kpi-label">Signal Type</div>
+                <div className="opp-kpi-value" style={{ fontSize: '1.1rem' }}>{signalLabels[getSignalType(bestZone)]}</div>
+                <div className="opp-kpi-sub">Top zone pattern</div>
+              </div>
+            )}
             <div className="opp-kpi">
-              <div className="opp-kpi-label">Peak Spread</div>
-              <div className="opp-kpi-value">${bestZone.maxSpread.toFixed(0)}<span className="unit">/MWh</span></div>
-              <div className="opp-kpi-sub">Maximum observed</div>
-            </div>
-            <div className="opp-kpi">
-              <div className="opp-kpi-label">Most Volatile</div>
-              <div className="opp-kpi-value">{mostVolatile?.zone || '—'}</div>
-              <div className="opp-kpi-sub">Std dev {mostVolatile?.volatility.toFixed(1) || '—'}</div>
+              <div className="opp-kpi-label">{role === 'trader' ? 'Most Volatile' : 'Spread Events'}</div>
+              <div className="opp-kpi-value">{role === 'trader' ? (mostVolatile?.zone || '—') : bestZone.events}</div>
+              <div className="opp-kpi-sub">{role === 'trader' ? `σ ${mostVolatile?.volatility.toFixed(1) || '—'}` : `${durationLabel} window`}</div>
             </div>
           </div>
 
-          <div className="opp-insight-panel">
-            <div className="insight-badge">Opportunity Summary</div>
-            <div className="insight-headline">
-              {bestZone.zone} leads all zones with ${bestZone.revenue.toFixed(2)}/MW estimated {durationLabel.toLowerCase()} battery revenue
+          <CollapsibleSection
+            key={`current-signal-${role}`}
+            title="Current Signal"
+            badge={role === 'trader' ? 'Primary' : undefined}
+            defaultOpen={role === 'trader'}
+          >
+            {traderInsights.length > 0 && (
+              <div className="takeaway-section opp-embedded-section">
+                <div className="takeaway-header">
+                  <span className="takeaway-title">{role === 'trader' ? 'Trader Takeaways' : 'Current Market Signals'}</span>
+                  <span className="takeaway-badge trader">Short-Term</span>
+                </div>
+                <div className="takeaway-list">
+                  {traderInsights.map((insight, i) => (
+                    <div className="takeaway-item trader" key={i}>
+                      <span className="takeaway-num">{i + 1}</span>
+                      <span>{insight}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="chart-card opp-embedded-chart">
+              <div className="chart-card-header">
+                <div className="chart-card-title">DA vs RT Price — {active}</div>
+                <span className="chart-badge">Hourly</span>
+              </div>
+              {chartData.length > 0 ? (
+                <LineChart data={chartData} xKey="Date" yKeys={['DA LMP', 'RT LMP']} height={260} />
+              ) : (
+                <div className="empty-state" style={{ padding: 48 }}>Select a zone to view price detail</div>
+              )}
             </div>
-            <div className="insight-detail">
-              This zone captured <strong>{bestZone.events} spread events</strong> with an average top spread
-              of <strong>${bestZone.avgSpread.toFixed(2)}/MWh</strong>.
-              {bestZone.maxSpread > 100 && <> A peak spread of <strong>${bestZone.maxSpread.toFixed(0)}/MWh</strong> was observed, indicating significant price volatility events. </>}
-              The signal appears <strong>{signalLabels[getSignalType(bestZone)].toLowerCase()}</strong>,
-              {getSignalType(bestZone) === 'recurring'
-                ? ' suggesting consistent spread patterns that may persist.'
-                : getSignalType(bestZone) === 'event-driven'
-                  ? ' suggesting episodic price dislocations—potentially tied to congestion or outage events.'
-                  : ' with moderate spread consistency across the analysis window.'}
-              {mostVolatile && mostVolatile.zone !== bestZone.zone && <> The most volatile zone is <strong>{mostVolatile.zone}</strong> (std dev {mostVolatile.volatility.toFixed(1)}), which may present higher-risk/higher-reward opportunities.</>}
-            </div>
-          </div>
+          </CollapsibleSection>
 
-          {traderInsights.length > 0 && (
-            <div className="takeaway-section">
-              <div className="takeaway-header">
-                <span className="takeaway-icon"></span>
-                <span className="takeaway-title">Trader Takeaways</span>
-                <span className="takeaway-badge trader">Short-Term Trading</span>
+          <CollapsibleSection
+            key={`structural-${role}`}
+            title="Structural Opportunity"
+            badge={role === 'battery' ? 'Primary' : undefined}
+            defaultOpen={role === 'battery'}
+          >
+            {batteryInsights.length > 0 && (
+              <div className="takeaway-section opp-embedded-section">
+                <div className="takeaway-header">
+                  <span className="takeaway-title">{role === 'battery' ? 'Battery Strategist Takeaways' : 'Structural Signals'}</span>
+                  <span className="takeaway-badge battery">Storage</span>
+                </div>
+                <div className="takeaway-list">
+                  {batteryInsights.map((insight, i) => (
+                    <div className="takeaway-item battery" key={i}>
+                      <span className="takeaway-num">{i + 1}</span>
+                      <span>{insight}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="takeaway-list">
-                {traderInsights.map((insight, i) => (
-                  <div className="takeaway-item trader" key={i}>
-                    <span className="takeaway-num">{i + 1}</span>
-                    <span>{insight}</span>
-                  </div>
-                ))}
+            )}
+            <div className="chart-card opp-embedded-chart">
+              <div className="chart-card-header">
+                <div className="chart-card-title">Spread Over Time — {active}</div>
+                <span className="chart-badge">Daily</span>
               </div>
+              {spreadOverTimeData.length > 0 ? (
+                <LineChart data={spreadOverTimeData} xKey="Date" yKeys={['Avg Spread', 'Max Spread']} height={260} />
+              ) : (
+                <div className="empty-state" style={{ padding: 48 }}>Select a zone to view spread trend</div>
+              )}
             </div>
-          )}
-
-          {batteryInsights.length > 0 && (
-            <div className="takeaway-section">
-              <div className="takeaway-header">
-                <span className="takeaway-icon"></span>
-                <span className="takeaway-title">Battery Strategist Takeaways</span>
-                <span className="takeaway-badge battery">Storage Strategy</span>
-              </div>
-              <div className="takeaway-list">
-                {batteryInsights.map((insight, i) => (
-                  <div className="takeaway-item battery" key={i}>
-                    <span className="takeaway-num">{i + 1}</span>
-                    <span>{insight}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          </CollapsibleSection>
 
           <div className="opp-main-grid">
             <div className="chart-card">
               <div className="chart-card-header">
                 <div className="chart-card-title">Zone Rankings — {barChartLabel}</div>
-                <span className="chart-badge">{durationLabel} Battery</span>
+                <span className="chart-badge">{durationLabel}</span>
               </div>
               <BarChart
                 data={barData}
@@ -566,7 +665,7 @@ export default function OpportunityExplorer() {
               </div>
               <div className="opp-zone-stats">
                 <div className="opp-zone-stat">
-                  <div className="stat-label">Avg DA-RT Spread</div>
+                  <div className="stat-label">Avg Spread</div>
                   <div className="stat-value">${activeOpp?.avgSpread.toFixed(2) || '—'}/MWh</div>
                 </div>
                 <div className="opp-zone-stat">
@@ -578,7 +677,7 @@ export default function OpportunityExplorer() {
                   <div className="stat-value accent">${activeOpp?.revenue.toFixed(2) || '—'}/MW</div>
                 </div>
                 <div className="opp-zone-stat">
-                  <div className="stat-label">Spread Events</div>
+                  <div className="stat-label">Events</div>
                   <div className="stat-value">{activeOpp?.events || '—'}</div>
                 </div>
                 <div className="opp-zone-stat">
@@ -586,288 +685,341 @@ export default function OpportunityExplorer() {
                   <div className="stat-value">{activeOpp?.volatility.toFixed(1) || '—'}</div>
                 </div>
                 <div className="opp-zone-stat">
-                  <div className="stat-label">Signal Type</div>
+                  <div className="stat-label">Signal</div>
                   <div className="stat-value">{signalLabels[signalType]}</div>
                 </div>
-              </div>
-              {activeOpp && (
-                <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                  <strong style={{ color: 'var(--text)' }}>{active}</strong> ranks #{activeRank} across all zones.
-                  {signalType === 'recurring'
-                    ? ' Consistent spread patterns suggest this zone may offer reliable arbitrage opportunities for battery storage assets.'
-                    : signalType === 'event-driven'
-                      ? ' Elevated volatility suggests episodic opportunities—potentially tied to congestion, outages, or localized scarcity.'
-                      : ' Moderate spread behavior indicates steady, lower-variance opportunity in this zone.'}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid-2" style={{ marginBottom: 24 }}>
-            <div className="chart-card">
-              <div className="chart-card-header">
-                <div className="chart-card-title">DA vs RT Price — {active}</div>
-                <span className="chart-badge">Hourly</span>
-              </div>
-              {chartData.length > 0 ? (
-                <LineChart data={chartData} xKey="Date" yKeys={['DA LMP', 'RT LMP']} height={280} />
-              ) : (
-                <div className="empty-state" style={{ padding: 60 }}>Select a zone to view price detail</div>
-              )}
-            </div>
-            <div className="chart-card">
-              <div className="chart-card-header">
-                <div className="chart-card-title">Spread Over Time — {active}</div>
-                <span className="chart-badge">Daily</span>
-              </div>
-              {spreadOverTimeData.length > 0 ? (
-                <LineChart data={spreadOverTimeData} xKey="Date" yKeys={['Avg Spread', 'Max Spread']} height={280} />
-              ) : (
-                <div className="empty-state" style={{ padding: 60 }}>Select a zone to view spread trend</div>
-              )}
-            </div>
-          </div>
-
-          {(topConstraints.length > 0 || mostVolatile) && (
-            <>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 4 }}>
-                  Supporting Context
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                  Key factors that may contribute to spread opportunity across zones
-                </div>
-              </div>
-              <div className="opp-driver-grid">
-                {topConstraints.slice(0, 2).map((c, i) => (
-                  <div className="opp-driver-card" key={i}>
-                    <div className="driver-icon"></div>
-                    <div className="driver-label">Active Constraint</div>
-                    <div className="driver-value">{c.name.length > 28 ? c.name.slice(0, 28) + '…' : c.name}</div>
-                    <div className="driver-sub">{c.count} bindings · ${c.totalCost.toFixed(0)} total cost</div>
-                  </div>
-                ))}
-                {demandContext && (
-                  <div className="opp-driver-card">
-                    <div className="driver-icon"></div>
-                    <div className="driver-label">System Load</div>
-                    <div className="driver-value">{demandContext.peak.toLocaleString()} MW peak</div>
-                    <div className="driver-sub">Avg {demandContext.avg.toLocaleString()} MW · ratio {(demandContext.peak / demandContext.avg).toFixed(2)}x</div>
-                  </div>
-                )}
-                <div className="opp-driver-card">
-                  <div className="driver-icon"></div>
-                  <div className="driver-label">Highest Volatility Zone</div>
-                  <div className="driver-value">{mostVolatile?.zone || '—'}</div>
-                  <div className="driver-sub">σ = {mostVolatile?.volatility.toFixed(1) || '—'} · {mostVolatile?.positiveSpreads || 0} spread events</div>
-                </div>
-                <div className="opp-driver-card">
-                  <div className="driver-icon"></div>
-                  <div className="driver-label">Zones Analyzed</div>
-                  <div className="driver-value">{opportunities.length}</div>
-                  <div className="driver-sub">{opportunities.filter(o => o.avgSpread > 5).length} zones with avg spread &gt; $5</div>
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className="ai-embed-section">
-            <div className="ai-embed-header">
-              <div>
-                <div className="ai-embed-title">AI Opportunity Analyst</div>
-                <div className="ai-embed-sub">Ask the AI to explain the current opportunity context for {active}</div>
-              </div>
-              <button
-                className="ai-btn ai-btn-primary"
-                onClick={() => handleAiExplain(`Explain the current opportunity state for ${active}. Why does it rank #${activeRank}? What are the key trader and battery strategy implications?`)}
-                disabled={aiLoading}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                {aiLoading ? 'Analyzing...' : 'Explain Current Opportunity'}
-              </button>
-            </div>
-
-            <div className="ai-embed-body">
-              <div className="ai-embed-prompts">
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 8 }}>
-                  Quick Questions
-                </div>
-                {OPP_PROMPTS.map(sp => (
-                  <button
-                    key={sp.prompt}
-                    className="suggested-prompt"
-                    onClick={() => { setAiPrompt(sp.prompt); handleAiExplain(sp.prompt); }}
-                    disabled={aiLoading}
-                  >
-                    <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--primary)', marginBottom: 2 }}>{sp.label}</div>
-                    {sp.prompt}
-                  </button>
-                ))}
-              </div>
-
-              <div className="ai-embed-main">
-                <div className="ai-embed-input-row">
-                  <textarea
-                    className="ai-page-textarea"
-                    value={aiPrompt}
-                    onChange={e => setAiPrompt(e.target.value)}
-                    placeholder={`Ask about ${active} opportunity, spread behavior, or strategy...`}
-                    rows={3}
-                    onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleAiExplain(); }}
-                  />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button className="ai-btn ai-btn-primary" onClick={() => handleAiExplain()} disabled={aiLoading || !aiPrompt.trim()}>
-                      {aiLoading ? 'Analyzing...' : 'Ask Analyst'}
-                    </button>
-                    <button className="ai-btn ai-btn-secondary" onClick={() => { setAiPrompt(''); setAiResponse(null); }}>
-                      Clear
-                    </button>
-                    {aiLoading && <div className="spinner" style={{ width: 18, height: 18 }} />}
-                  </div>
-                </div>
-
-                {aiResponse?.status === 'unconfigured' && (
-                  <div className="ai-alert ai-alert-warning" style={{ marginTop: 16 }}>
-                    AI Analyst requires an API key. Set the <code>OPENAI_API_KEY</code> environment variable to enable this feature.
-                  </div>
-                )}
-
-                {aiResponse && aiResponse.status !== 'unconfigured' && (
-                  <div className="ai-response-card" style={{ marginTop: 16 }}>
-                    <div className="ai-response-header">
-                      <span className="ai-response-icon"></span>
-                      <span className="ai-response-label">Analyst Note — {active}</span>
-                      {aiResponse.status === 'error' && <span className="badge" style={{ background: 'var(--danger)', color: '#fff', marginLeft: 8 }}>Error</span>}
-                    </div>
-                    <div className="ai-response-body">
-                      {aiResponse.answer.split('\n').map((line, i) => (
-                        <p key={i} style={{ margin: '0 0 8px' }}>{line}</p>
-                      ))}
-                    </div>
-                    {aiResponse.trader_takeaways && aiResponse.trader_takeaways.length > 0 && (
-                      <div className="ai-response-section">
-                        <div className="ai-response-section-title">Trader Takeaways</div>
-                        <ul className="ai-response-list">
-                          {aiResponse.trader_takeaways.map((d, i) => <li key={i}>{d}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {aiResponse.battery_takeaways && aiResponse.battery_takeaways.length > 0 && (
-                      <div className="ai-response-section">
-                        <div className="ai-response-section-title" style={{ color: 'var(--accent)' }}>Battery Strategist Takeaways</div>
-                        <ul className="ai-response-list">
-                          {aiResponse.battery_takeaways.map((d, i) => <li key={i} style={{ borderLeftColor: 'var(--accent)' }}>{d}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {aiResponse.key_signals && aiResponse.key_signals.length > 0 && (
-                      <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                        <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Key Supporting Signals</div>
-                        <ul className="ai-response-list caveat">
-                          {aiResponse.key_signals.map((s, i) => <li key={i}>{s}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {aiResponse.caveats && aiResponse.caveats.length > 0 && (
-                      <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                        <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Caveat</div>
-                        <ul className="ai-response-list caveat">
-                          {aiResponse.caveats.map((c, i) => <li key={i}>{c}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </div>
 
           <div className="opp-ranking-section">
             <div className="opp-ranking-header">
-              <h3>Detailed Zone Rankings — {durationLabel} Battery</h3>
+              <h3>{role === 'trader' ? 'Zone Rankings — Trader' : `Zone Rankings — ${durationLabel} Battery`}</h3>
               <button className="opp-ranking-toggle" onClick={() => setShowAllRanks(!showAllRanks)} aria-expanded={showAllRanks}>
                 {showAllRanks ? 'Show Top 5' : `Show All ${opportunities.length}`}
               </button>
             </div>
-            <div style={{ padding: '8px 24px 4px', borderBottom: '1px solid var(--border-light)' }}>
-              <div className="opp-rank-row" style={{ cursor: 'default', fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.04em', padding: '4px 0' }}>
-                <div>#</div>
-                <div>Zone</div>
-                <div>Avg Spread</div>
-                <div>Max Spread</div>
-                <div>Est. Revenue</div>
-                <div>Vol (σ)</div>
-              </div>
-            </div>
-            {(showAllRanks ? opportunities : opportunities.slice(0, 5)).map((o, i) => (
-              <div
-                key={o.zone}
-                className={`opp-rank-row${o.zone === active ? ' selected' : ''}`}
-                onClick={() => setSelectedZone(o.zone)}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedZone(o.zone); } }}
-                role="button"
-                tabIndex={0}
-                aria-label={`Select zone ${o.zone}, rank ${i + 1}`}
-                data-rank={i + 1}
-              >
-                <div><span className={`rank-badge${i < 3 ? ` rank-${i + 1}` : ''}`}>{i + 1}</span></div>
-                <div>
-                  <div className="rank-zone">{o.zone}</div>
-                  <div className="opp-mini-bar">
-                    <div className="bar-fill" style={{ width: `${(o[rankMetric] / maxMetricVal) * 100}%` }} />
+            {role === 'trader' ? (
+              <>
+                <div style={{ padding: '8px 24px 4px', borderBottom: '1px solid var(--border-light)' }}>
+                  <div className="opp-rank-row" style={{ cursor: 'default', fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.04em', padding: '4px 0' }}>
+                    <div>#</div>
+                    <div>Zone</div>
+                    <div>Signal Strength</div>
+                    <div>Spread Freq</div>
+                    <div>Volatility (σ)</div>
+                    <div>Regime</div>
                   </div>
                 </div>
-                <div className="rank-metric">${o.avgSpread.toFixed(2)}/MWh</div>
-                <div className="rank-metric">${o.maxSpread.toFixed(0)}/MWh</div>
-                <div className="rank-revenue">${o.revenue.toFixed(2)}/MW</div>
-                <div className="rank-metric">{o.volatility.toFixed(1)}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <button
-              className="collapsible-header"
-              onClick={() => setShowRawTable(!showRawTable)}
-              aria-expanded={showRawTable}
-              style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}
-            >
-              <span>Raw Data Table — All Zones ({opportunities.length})</span>
-              <span style={{ fontSize: 18 }}>{showRawTable ? '−' : '+'}</span>
-            </button>
-            {showRawTable && (
-              <div style={{ marginTop: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'auto' }}>
-                <table className="rank-table" style={{ borderSpacing: 0, width: '100%' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 50 }}>#</th>
-                      <th>Zone</th>
-                      <th>Avg Spread ($/MWh)</th>
-                      <th>Max Spread ($/MWh)</th>
-                      <th>Est. Revenue ($/MW)</th>
-                      <th>Events</th>
-                      <th>Volatility</th>
-                      <th>Positive Spreads</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {opportunities.map((o, i) => (
-                      <tr key={o.zone} style={{ cursor: 'pointer', background: o.zone === active ? 'var(--primary-light)' : undefined }} onClick={() => setSelectedZone(o.zone)}>
-                        <td><span className="rank-num">{i + 1}</span></td>
-                        <td style={{ fontWeight: 700 }}>{o.zone}</td>
-                        <td>${o.avgSpread.toFixed(2)}</td>
-                        <td>${o.maxSpread.toFixed(2)}</td>
-                        <td style={{ fontWeight: 700, color: 'var(--accent)' }}>${o.revenue.toFixed(2)}</td>
-                        <td>{o.events}</td>
-                        <td>{o.volatility.toFixed(1)}</td>
-                        <td>{o.positiveSpreads}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                {(showAllRanks ? traderRankColumns : traderRankColumns.slice(0, 5)).map((o, i) => (
+                  <div
+                    key={o.zone}
+                    className={`opp-rank-row${o.zone === active ? ' selected' : ''}`}
+                    onClick={() => setSelectedZone(o.zone)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedZone(o.zone); } }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select zone ${o.zone}, rank ${i + 1}`}
+                    data-rank={i + 1}
+                  >
+                    <div><span className={`rank-badge${i < 3 ? ` rank-${i + 1}` : ''}`}>{i + 1}</span></div>
+                    <div>
+                      <div className="rank-zone">{o.zone}</div>
+                      <div className="opp-mini-bar">
+                        <div className="bar-fill" style={{ width: `${(o[rankMetric] / maxMetricVal) * 100}%` }} />
+                      </div>
+                    </div>
+                    <div className="rank-metric">{o.signalStrength.toFixed(1)}</div>
+                    <div className="rank-metric">{o.spreadFrequency}</div>
+                    <div className="rank-metric">{o.volatility.toFixed(1)}</div>
+                    <div><span className={`opp-regime-tag ${o.regimeTag}`}>{signalLabels[o.regimeTag]}</span></div>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                <div style={{ padding: '8px 24px 4px', borderBottom: '1px solid var(--border-light)' }}>
+                  <div className="opp-rank-row opp-rank-row-battery" style={{ cursor: 'default', fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.04em', padding: '4px 0' }}>
+                    <div>#</div>
+                    <div>Zone</div>
+                    <div>1h Value</div>
+                    <div>2h Value</div>
+                    <div>4h Value</div>
+                    <div>Persistence</div>
+                    <div>Structural</div>
+                  </div>
+                </div>
+                {(showAllRanks ? batteryRankColumns : batteryRankColumns.slice(0, 5)).map((o, i) => (
+                  <div
+                    key={o.zone}
+                    className={`opp-rank-row opp-rank-row-battery${o.zone === active ? ' selected' : ''}`}
+                    onClick={() => setSelectedZone(o.zone)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedZone(o.zone); } }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select zone ${o.zone}, rank ${i + 1}`}
+                    data-rank={i + 1}
+                  >
+                    <div><span className={`rank-badge${i < 3 ? ` rank-${i + 1}` : ''}`}>{i + 1}</span></div>
+                    <div>
+                      <div className="rank-zone">{o.zone}</div>
+                      <div className="opp-mini-bar">
+                        <div className="bar-fill" style={{ width: `${(o[rankMetric] / maxMetricVal) * 100}%` }} />
+                      </div>
+                    </div>
+                    <div className="rank-revenue">${o.rev1h.toFixed(0)}/MW</div>
+                    <div className="rank-revenue">${o.rev2h.toFixed(0)}/MW</div>
+                    <div className="rank-revenue">${o.rev4h.toFixed(0)}/MW</div>
+                    <div className="rank-metric">{(o.persistence * 100).toFixed(0)}%</div>
+                    <div className="rank-metric">{o.structuralScore.toFixed(1)}</div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <button
+              className="opp-more-analysis-toggle"
+              onClick={() => setShowMoreAnalysis(!showMoreAnalysis)}
+              aria-expanded={showMoreAnalysis}
+            >
+              <span>{showMoreAnalysis ? 'Hide' : 'Show'} More Analysis</span>
+              <span style={{ fontSize: 16 }}>{showMoreAnalysis ? '−' : '+'}</span>
+            </button>
+          </div>
+
+          {showMoreAnalysis && (
+            <div className="opp-more-analysis">
+              <div className="opp-tab-bar">
+                <button className={`opp-tab${moreAnalysisTab === 'charts' ? ' active' : ''}`} onClick={() => setMoreAnalysisTab('charts')}>Charts</button>
+                <button className={`opp-tab${moreAnalysisTab === 'ai' ? ' active' : ''}`} onClick={() => setMoreAnalysisTab('ai')}>AI Analyst</button>
+                <button className={`opp-tab${moreAnalysisTab === 'data' ? ' active' : ''}`} onClick={() => setMoreAnalysisTab('data')}>Raw Data</button>
+              </div>
+
+              {moreAnalysisTab === 'charts' && (
+                <div style={{ padding: 20 }}>
+                  {(topConstraints.length > 0 || mostVolatile) && (
+                    <>
+                      <div style={{ marginBottom: 12 }}>
+                        <div className="opp-section-label">
+                          Supporting Context
+                        </div>
+                      </div>
+                      <div className="opp-driver-grid">
+                        {topConstraints.slice(0, 2).map((c, i) => (
+                          <div className="opp-driver-card" key={i}>
+                            <div className="driver-label">Active Constraint</div>
+                            <div className="driver-value">{c.name.length > 28 ? c.name.slice(0, 28) + '...' : c.name}</div>
+                            <div className="driver-sub">{c.count} bindings · ${c.totalCost.toFixed(0)} cost</div>
+                          </div>
+                        ))}
+                        {demandContext && (
+                          <div className="opp-driver-card">
+                            <div className="driver-label">System Load</div>
+                            <div className="driver-value">{demandContext.peak.toLocaleString()} MW peak</div>
+                            <div className="driver-sub">Avg {demandContext.avg.toLocaleString()} MW · ratio {(demandContext.peak / demandContext.avg).toFixed(2)}x</div>
+                          </div>
+                        )}
+                        <div className="opp-driver-card">
+                          <div className="driver-label">Highest Volatility</div>
+                          <div className="driver-value">{mostVolatile?.zone || '—'}</div>
+                          <div className="driver-sub">σ = {mostVolatile?.volatility.toFixed(1) || '—'} · {mostVolatile?.positiveSpreads || 0} events</div>
+                        </div>
+                        <div className="opp-driver-card">
+                          <div className="driver-label">Zones Analyzed</div>
+                          <div className="driver-value">{opportunities.length}</div>
+                          <div className="driver-sub">{opportunities.filter(o => o.avgSpread > 5).length} with avg &gt; $5</div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="grid-2">
+                    <div className="chart-card">
+                      <div className="chart-card-header">
+                        <div className="chart-card-title">{role === 'trader' ? 'Spread Over Time' : 'DA vs RT Price'} — {active}</div>
+                        <span className="chart-badge">{role === 'trader' ? 'Daily' : 'Hourly'}</span>
+                      </div>
+                      {role === 'trader' ? (
+                        spreadOverTimeData.length > 0 ? (
+                          <LineChart data={spreadOverTimeData} xKey="Date" yKeys={['Avg Spread', 'Max Spread']} height={260} />
+                        ) : (
+                          <div className="empty-state" style={{ padding: 48 }}>No spread data</div>
+                        )
+                      ) : (
+                        chartData.length > 0 ? (
+                          <LineChart data={chartData} xKey="Date" yKeys={['DA LMP', 'RT LMP']} height={260} />
+                        ) : (
+                          <div className="empty-state" style={{ padding: 48 }}>No price data</div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {moreAnalysisTab === 'ai' && (
+                <div className="ai-embed-section opp-embedded-section">
+                  <div className="ai-embed-header">
+                    <div>
+                      <div className="ai-embed-title">AI Opportunity Analyst</div>
+                      <div className="ai-embed-sub">Ask about {active} opportunity context</div>
+                    </div>
+                    <button
+                      className="ai-btn ai-btn-primary"
+                      onClick={() => handleAiExplain(`Explain the current opportunity state for ${active}. Why does it rank #${activeRank}? What are the key ${role === 'trader' ? 'trader' : 'battery strategy'} implications?`)}
+                      disabled={aiLoading}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      {aiLoading ? 'Analyzing...' : 'Explain Opportunity'}
+                    </button>
+                  </div>
+
+                  <div className="ai-embed-body">
+                    <div className="ai-embed-prompts">
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 8 }}>
+                        Quick Questions
+                      </div>
+                      {OPP_PROMPTS.map(sp => (
+                        <button
+                          key={sp.prompt}
+                          className="suggested-prompt"
+                          onClick={() => { setAiPrompt(sp.prompt); handleAiExplain(sp.prompt); }}
+                          disabled={aiLoading}
+                        >
+                          <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--primary)', marginBottom: 2 }}>{sp.label}</div>
+                          {sp.prompt}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="ai-embed-main">
+                      <div className="ai-embed-input-row">
+                        <textarea
+                          className="ai-page-textarea"
+                          value={aiPrompt}
+                          onChange={e => setAiPrompt(e.target.value)}
+                          placeholder={`Ask about ${active} opportunity or strategy...`}
+                          rows={3}
+                          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleAiExplain(); }}
+                        />
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button className="ai-btn ai-btn-primary" onClick={() => handleAiExplain()} disabled={aiLoading || !aiPrompt.trim()}>
+                            {aiLoading ? 'Analyzing...' : 'Ask Analyst'}
+                          </button>
+                          <button className="ai-btn ai-btn-secondary" onClick={() => { setAiPrompt(''); setAiResponse(null); }}>
+                            Clear
+                          </button>
+                          {aiLoading && <div className="spinner" style={{ width: 18, height: 18 }} />}
+                        </div>
+                      </div>
+
+                      {aiResponse?.status === 'unconfigured' && (
+                        <div className="ai-alert ai-alert-warning" style={{ marginTop: 16 }}>
+                          AI Analyst requires an API key. Set <code>OPENAI_API_KEY</code> to enable.
+                        </div>
+                      )}
+
+                      {aiResponse && aiResponse.status !== 'unconfigured' && (
+                        <div className="ai-response-card" style={{ marginTop: 16 }}>
+                          <div className="ai-response-header">
+                            <span className="ai-response-label">Analyst — {active}</span>
+                            {aiResponse.status === 'error' && <span className="badge" style={{ background: 'var(--danger)', color: '#fff', marginLeft: 8 }}>Error</span>}
+                          </div>
+                          <div className="ai-response-body">
+                            {aiResponse.answer.split('\n').map((line, i) => (
+                              <p key={i} style={{ margin: '0 0 8px' }}>{line}</p>
+                            ))}
+                          </div>
+                          {aiResponse.trader_takeaways && aiResponse.trader_takeaways.length > 0 && (
+                            <div className="ai-response-section">
+                              <div className="ai-response-section-title">Trader Takeaways</div>
+                              <ul className="ai-response-list">
+                                {aiResponse.trader_takeaways.map((d, i) => <li key={i}>{d}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {aiResponse.battery_takeaways && aiResponse.battery_takeaways.length > 0 && (
+                            <div className="ai-response-section">
+                              <div className="ai-response-section-title" style={{ color: 'var(--accent)' }}>Battery Takeaways</div>
+                              <ul className="ai-response-list">
+                                {aiResponse.battery_takeaways.map((d, i) => <li key={i} style={{ borderLeftColor: 'var(--accent)' }}>{d}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {aiResponse.key_signals && aiResponse.key_signals.length > 0 && (
+                            <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                              <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Key Signals</div>
+                              <ul className="ai-response-list caveat">
+                                {aiResponse.key_signals.map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {aiResponse.caveats && aiResponse.caveats.length > 0 && (
+                            <div className="ai-response-section" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                              <div className="ai-response-section-title" style={{ color: 'var(--text-muted)' }}>Caveats</div>
+                              <ul className="ai-response-list caveat">
+                                {aiResponse.caveats.map((c, i) => <li key={i}>{c}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {moreAnalysisTab === 'data' && (
+                <div style={{ padding: 20 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <button
+                      className="collapsible-header"
+                      onClick={() => setShowRawTable(!showRawTable)}
+                      aria-expanded={showRawTable}
+                      style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}
+                    >
+                      <span>All Zones ({opportunities.length})</span>
+                      <span style={{ fontSize: 18 }}>{showRawTable ? '−' : '+'}</span>
+                    </button>
+                    {showRawTable && (
+                      <div style={{ marginTop: 8, overflow: 'auto' }}>
+                        <table className="rank-table" style={{ borderSpacing: 0, width: '100%' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ width: 50 }}>#</th>
+                              <th>Zone</th>
+                              <th>Avg Spread</th>
+                              <th>Max Spread</th>
+                              <th>Revenue</th>
+                              <th>Events</th>
+                              <th>Vol</th>
+                              <th>Pos. Spreads</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {opportunities.map((o, i) => (
+                              <tr key={o.zone} style={{ cursor: 'pointer', background: o.zone === active ? 'var(--primary-light)' : undefined }} onClick={() => setSelectedZone(o.zone)}>
+                                <td><span className="rank-num">{i + 1}</span></td>
+                                <td style={{ fontWeight: 700 }}>{o.zone}</td>
+                                <td>${o.avgSpread.toFixed(2)}</td>
+                                <td>${o.maxSpread.toFixed(2)}</td>
+                                <td style={{ fontWeight: 700, color: 'var(--accent)' }}>${o.revenue.toFixed(2)}</td>
+                                <td>{o.events}</td>
+                                <td>{o.volatility.toFixed(1)}</td>
+                                <td>{o.positiveSpreads}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
