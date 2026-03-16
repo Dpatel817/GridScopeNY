@@ -185,8 +185,8 @@ export default function MarketAnalystWidget({ currentPage }: { currentPage: stri
     if (congestionData?.data?.length) {
       const constraints: Record<string, { totalCost: number; count: number; facilities: Set<string> }> = {};
       for (const r of congestionData.data) {
-        const name = String(r['Limiting Facility'] || r['Constraint Name'] || '');
-        const cost = Math.abs(Number(r['Constraint Cost'] || r['Shadow Price'] || 0));
+        const name = String(r['Limiting Facility'] || '');
+        const cost = Math.abs(Number(r['Constraint Cost'] || 0));
         if (name && cost) {
           if (!constraints[name]) constraints[name] = { totalCost: 0, count: 0, facilities: new Set() };
           constraints[name].totalCost += cost;

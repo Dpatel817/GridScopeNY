@@ -39,8 +39,8 @@ export default function OpportunityExplorer() {
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
-  const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
-  const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
+  const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 250000, 730);
+  const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 250000, 730);
   const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 20000, 730);
   const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 20000, 730);
 
@@ -174,9 +174,9 @@ export default function OpportunityExplorer() {
       const d = String(r.Date || '');
       if (effStart && d < effStart) continue;
       if (effEnd && d > effEnd) continue;
-      const name = String(r['Constraint Name'] || r['Name'] || r['constraint_name'] || '');
+      const name = String(r['Limiting Facility'] || '');
       if (!name) continue;
-      const cost = Math.abs(Number(r['Marginal Cost'] || r['Shadow Price'] || r['marginal_cost'] || 0));
+      const cost = Math.abs(Number(r['Constraint Cost'] || 0));
       if (!costByName[name]) costByName[name] = { count: 0, totalCost: 0 };
       costByName[name].count++;
       costByName[name].totalCost += cost;
