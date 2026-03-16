@@ -11,6 +11,7 @@ import {
   buildAlignedData, pivotForChart,
   computeScarcityMetrics, buildScarcitySignalSummary,
 } from '../data/priceResponseTransforms';
+import { makeTickFormatter, tooltipLabelFormatter } from '../utils/dateFormat';
 
 const RESOLUTIONS: { key: Resolution; label: string }[] = [
   { key: 'hourly', label: 'Hourly' },
@@ -34,25 +35,11 @@ const COMPARE_MODES: { key: CompareMode; label: string }[] = [
 const LMP_COLORS = { da: '#2563eb', rt: '#ef4444' };
 const ASP_COLORS = { da: '#8b5cf6', rt: '#f59e0b' };
 
-function fmtX(v: unknown): string {
-  const s = String(v ?? '');
-  if (/^\d{4}-\d{2}-\d{2} HE\d+$/.test(s)) {
-    const parts = s.split(' ');
-    const dp = parts[0].split('-');
-    return `${parseInt(dp[1])}/${parseInt(dp[2])} ${parts[1]}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const parts = s.split('-');
-    return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
-  }
-  return s.length > 16 ? s.slice(0, 16) : s;
-}
-
 function DualTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
     <div className="price-tooltip">
-      <div className="price-tooltip-label">{fmtX(label)}</div>
+      <div className="price-tooltip-label">{tooltipLabelFormatter(label)}</div>
       {payload.map((entry: any, i: number) => {
         const val = typeof entry.value === 'number'
           ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
@@ -70,10 +57,10 @@ function DualTooltip({ active, payload, label }: any) {
 }
 
 export default function ScarcitySignalSection() {
-  const { data: daLmpData } = useDataset('da_lbmp_zone', 'raw');
-  const { data: rtLmpData } = useDataset('rt_lbmp_zone', 'raw');
-  const { data: damaspData, loading: damaspLoading } = useDataset('damasp', 'raw');
-  const { data: rtaspData, loading: rtaspLoading } = useDataset('rtasp', 'raw');
+  const { data: daLmpData } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
+  const { data: rtLmpData } = useDataset('rt_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
+  const { data: damaspData, loading: damaspLoading } = useDataset('damasp', 'daily', undefined, undefined, 20000, 730);
+  const { data: rtaspData, loading: rtaspLoading } = useDataset('rtasp', 'daily', undefined, undefined, 20000, 730);
 
   const [resolution, setResolution] = useState<Resolution>('hourly');
   const [dateRange, setDateRange] = useState<DateRange>('today');
@@ -133,6 +120,7 @@ export default function ScarcitySignalSection() {
 
   const loading = damaspLoading || rtaspLoading;
   const interval = lmpData.length > 100 ? Math.floor(lmpData.length / 40) : lmpData.length > 50 ? 2 : 'preserveStartEnd';
+  const fmtTick = useMemo(() => makeTickFormatter(lmpData, 'Date'), [lmpData]);
 
   const lmpColors = compareMode === 'spread' ? ['#2563eb'] : [LMP_COLORS.da, LMP_COLORS.rt];
   const aspColorsArr = compareMode === 'spread' ? ['#8b5cf6'] : [ASP_COLORS.da, ASP_COLORS.rt];
@@ -260,7 +248,7 @@ export default function ScarcitySignalSection() {
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={lmpData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="Date" tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
+                    <XAxis dataKey="Date" tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip content={<DualTooltip />} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -286,7 +274,7 @@ export default function ScarcitySignalSection() {
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={aspData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="Date" tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
+                    <XAxis dataKey="Date" tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip content={<DualTooltip />} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />

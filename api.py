@@ -4,6 +4,8 @@ Serves processed NYISO data as JSON REST endpoints on port 8000.
 """
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import logging
 import subprocess
 import sys
@@ -14,6 +16,8 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+_data_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 
 from src.api_data_loader import (
     DATASET_META,
@@ -44,6 +48,27 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def preload_large_datasets():
+    import threading
+    from src.api_data_loader import _LARGE_DATASETS, _get_daily_cached, _build_daily_cache, _aggregate_df
+    def _preload():
+        for key in _LARGE_DATASETS:
+            meta = DATASET_META.get(key)
+            if not meta:
+                continue
+            cached = _get_daily_cached(key, meta)
+            if cached is not None:
+                logger.info("Daily cache already exists for %s", key)
+                continue
+            logger.info("Building daily cache for %s ...", key)
+            df = _load_csv_safe(meta["file"], days=0)
+            if not df.empty:
+                _build_daily_cache(key, meta, df)
+        logger.info("Daily cache build complete")
+    threading.Thread(target=_preload, daemon=True).start()
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "GridScope NY API"}
@@ -65,24 +90,30 @@ def page_config(page: str):
 
 
 @app.get("/api/dataset/{dataset_key}")
-def get_data(
+async def get_data(
     dataset_key: str,
     resolution: str = Query(default="raw", pattern="^(raw|hourly|on_peak|off_peak|daily)$"),
-    limit: int = Query(default=10000, ge=1, le=100000),
+    limit: int = Query(default=10000, ge=1, le=500000),
     filter_col: Optional[str] = Query(default=None),
     filter_val: Optional[str] = Query(default=None),
+    days: int = Query(default=0, ge=0),
 ):
     if dataset_key not in DATASET_META:
         raise HTTPException(
             status_code=404,
             detail=f"Unknown dataset '{dataset_key}'.",
         )
-    return get_dataset_json(
-        dataset_key,
-        resolution=resolution,
-        limit=limit,
-        filter_col=filter_col,
-        filter_val=filter_val,
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _data_executor,
+        lambda: get_dataset_json(
+            dataset_key,
+            resolution=resolution,
+            limit=limit,
+            filter_col=filter_col,
+            filter_val=filter_val,
+            days=days if days > 0 else 0,
+        ),
     )
 
 
@@ -155,6 +186,7 @@ def constraint_impact(
     facility: Optional[str] = Query(default=None),
     contingency: Optional[str] = Query(default=None),
     clean_only: bool = Query(default=False),
+    search: Optional[str] = Query(default=None),
 ):
     constr_key = "dam_limiting_constraints" if market == "DA" else "rt_limiting_constraints"
     zone_key = "da_lbmp_zone" if market == "DA" else "rt_lbmp_zone"
@@ -175,28 +207,54 @@ def constraint_impact(
     if "Date" in constr.columns and hasattr(constr["Date"].iloc[0], "strftime"):
         constr["Date"] = constr["Date"].dt.strftime("%Y-%m-%d")
 
-    available_dates = sorted(constr["Date"].dropna().unique().tolist())
-    available_hes = sorted(constr["HE"].dropna().unique().astype(int).tolist()) if "HE" in constr.columns else []
+    all_facilities = sorted(constr["Limiting Facility"].dropna().unique().tolist())
 
-    if not date and available_dates:
+    if search:
+        sq = search.lower()
+        filtered_facilities = [f for f in all_facilities if sq in f.lower()]
+    else:
+        filtered_facilities = all_facilities
+
+    fac_subset = constr.copy()
+    if facility:
+        fac_subset = fac_subset[fac_subset["Limiting Facility"] == facility]
+
+    contingencies = sorted(fac_subset["Contingency"].dropna().unique().tolist()) if facility else []
+
+    fc_subset = fac_subset.copy()
+    if contingency:
+        fc_subset = fc_subset[fc_subset["Contingency"] == contingency]
+
+    available_dates = sorted(fc_subset["Date"].dropna().unique().tolist()) if (facility and contingency) else sorted(constr["Date"].dropna().unique().tolist())
+
+    if facility and contingency and not date and available_dates:
         date = available_dates[-1]
 
-    date_filtered = constr[constr["Date"] == date].copy() if date else constr.copy()
+    available_hes = []
+    if facility and contingency and date:
+        day_fc = fc_subset[fc_subset["Date"] == date]
+        available_hes = sorted(day_fc["HE"].dropna().unique().astype(int).tolist()) if "HE" in day_fc.columns else []
 
-    facilities = sorted(date_filtered["Limiting Facility"].dropna().unique().tolist())
+    if not (facility and contingency and date):
+        return {
+            "market": market, "date": date, "he": he,
+            "facility": facility, "contingency": contingency,
+            "clean_only": clean_only,
+            "constraint_summary": None,
+            "zonal_impact": [], "generator_impact": [],
+            "clean_prints": [], "mixed_prints": [],
+            "congestion_pivot": [],
+            "available_dates": available_dates, "available_hes": available_hes,
+            "facilities": filtered_facilities, "contingencies": contingencies,
+            "status": "pending",
+        }
 
-    fac_filtered = date_filtered.copy()
-    if facility:
-        fac_filtered = fac_filtered[fac_filtered["Limiting Facility"] == facility]
-
-    contingencies = sorted(fac_filtered["Contingency"].dropna().unique().tolist())
+    date_filtered = constr[constr["Date"] == date].copy()
 
     clean_prints, mixed_prints = _find_clean_prints(date_filtered, facility, contingency)
     clean_hes = [p["he"] for p in clean_prints]
 
-    selected = fac_filtered.copy()
-    if contingency:
-        selected = selected[selected["Contingency"] == contingency]
+    selected = fc_subset[fc_subset["Date"] == date].copy()
 
     if he is not None and "HE" in selected.columns:
         selected = selected[selected["HE"] == he]
@@ -217,7 +275,7 @@ def constraint_impact(
         "clean_prints": clean_prints, "mixed_prints": mixed_prints,
         "congestion_pivot": pivot_data,
         "available_dates": available_dates, "available_hes": available_hes,
-        "facilities": facilities, "contingencies": contingencies,
+        "facilities": filtered_facilities, "contingencies": contingencies,
         "status": "no_data",
     }
 
@@ -322,7 +380,7 @@ def constraint_impact(
         "congestion_pivot": pivot_data,
         "available_dates": available_dates,
         "available_hes": available_hes,
-        "facilities": facilities,
+        "facilities": filtered_facilities,
         "contingencies": contingencies,
         "status": "ok",
     }
@@ -443,6 +501,7 @@ def generator_map(
 class AIExplainRequest(BaseModel):
     question: str
     context: Optional[dict[str, Any]] = None
+    search_all_datasets: Optional[bool] = False
 
 
 def _strip_markdown(text: str) -> str:
@@ -470,6 +529,194 @@ def _parse_bullet_lines(text: str) -> list[str]:
     return items
 
 
+def _build_server_side_context() -> dict[str, Any]:
+    """Build a comprehensive data summary from all available datasets server-side."""
+    ctx: dict[str, Any] = {}
+    zone_avgs: list[tuple[str, float]] = []
+    by_zone: dict[str, list[float]] = {}
+    nyiso_vals: list[float] = []
+
+    try:
+        da_zone = get_dataset_json("da_lbmp_zone", resolution="daily", limit=500)
+        if da_zone.get("data"):
+            records = [r for r in da_zone["data"] if r.get("Zone", "").strip() not in ("H Q", "NPX", "O H", "PJM", "")]
+            lmps = [float(r.get("LMP", 0)) for r in records if r.get("LMP")]
+            if lmps:
+                ctx["avg_da_lmp"] = f"${sum(lmps)/len(lmps):.2f}/MWh"
+                ctx["max_da_lmp"] = f"${max(lmps):.2f}/MWh"
+                ctx["min_da_lmp"] = f"${min(lmps):.2f}/MWh"
+            for r in records:
+                z = str(r.get("Zone", ""))
+                v = float(r.get("LMP", 0))
+                if z and v:
+                    by_zone.setdefault(z, []).append(v)
+            zone_avgs = sorted(
+                [(z, sum(vs)/len(vs)) for z, vs in by_zone.items()],
+                key=lambda x: -x[1]
+            )
+            if zone_avgs:
+                ctx["zone_price_ranking"] = ", ".join(f"{z}: ${a:.2f}" for z, a in zone_avgs[:5])
+                ctx["highest_price_zone"] = f"{zone_avgs[0][0]} (${zone_avgs[0][1]:.2f}/MWh)"
+                ctx["lowest_price_zone"] = f"{zone_avgs[-1][0]} (${zone_avgs[-1][1]:.2f}/MWh)"
+            dates = sorted(set(str(r.get("Date", "")) for r in records if r.get("Date")))
+            if dates:
+                ctx["da_date_range"] = f"{dates[0]} to {dates[-1]}"
+    except Exception as exc:
+        logger.warning("Server context - DA prices error: %s", exc)
+
+    try:
+        rt_zone = get_dataset_json("rt_lbmp_zone", resolution="daily", limit=500)
+        if rt_zone.get("data"):
+            rt_records = [r for r in rt_zone["data"] if r.get("Zone", "").strip() not in ("H Q", "NPX", "O H", "PJM", "")]
+            rt_lmps = [float(r.get("LMP", 0)) for r in rt_records if r.get("LMP")]
+            if rt_lmps:
+                ctx["avg_rt_lmp"] = f"${sum(rt_lmps)/len(rt_lmps):.2f}/MWh"
+                ctx["max_rt_lmp"] = f"${max(rt_lmps):.2f}/MWh"
+            rt_by_zone: dict[str, list[float]] = {}
+            for r in rt_records:
+                z = str(r.get("Zone", ""))
+                v = float(r.get("LMP", 0))
+                if z and v:
+                    rt_by_zone.setdefault(z, []).append(v)
+            if zone_avgs and rt_by_zone:
+                spreads = []
+                for z, da_avg in zone_avgs[:11]:
+                    rt_vals = rt_by_zone.get(z, [])
+                    rt_avg = sum(rt_vals) / len(rt_vals) if rt_vals else da_avg
+                    spreads.append((z, da_avg - rt_avg, abs(da_avg - rt_avg)))
+                spreads.sort(key=lambda x: -x[2])
+                ctx["top_spread_zones"] = ", ".join(f"{s[0]}: ${s[1]:.2f} (DA-RT)" for s in spreads[:3])
+    except Exception as exc:
+        logger.warning("Server context - RT prices error: %s", exc)
+
+    try:
+        isolf = get_dataset_json("isolf", resolution="daily", limit=500)
+        if isolf.get("data"):
+            nyiso_vals = [float(r.get("NYISO", 0)) for r in isolf["data"] if r.get("NYISO")]
+            if nyiso_vals:
+                ctx["peak_forecast_load"] = f"{max(nyiso_vals):,.0f} MW"
+                ctx["avg_forecast_load"] = f"{sum(nyiso_vals)/len(nyiso_vals):,.0f} MW"
+    except Exception as exc:
+        logger.warning("Server context - forecast load error: %s", exc)
+
+    try:
+        pal = get_dataset_json("pal", resolution="daily", limit=500)
+        if pal.get("data"):
+            actuals = [float(r.get("NYISO", 0) or r.get("Actual Load", 0)) for r in pal["data"]]
+            actuals = [a for a in actuals if a]
+            if actuals:
+                ctx["peak_actual_load"] = f"{max(actuals):,.0f} MW"
+                if nyiso_vals:
+                    avg_f = sum(nyiso_vals) / len(nyiso_vals)
+                    avg_a = sum(actuals) / len(actuals)
+                    err = ((avg_f - avg_a) / avg_a * 100)
+                    ctx["forecast_error"] = f"{'+' if err > 0 else ''}{err:.1f}% ({'over' if err > 0 else 'under'}-forecast)"
+    except Exception as exc:
+        logger.warning("Server context - actual load error: %s", exc)
+
+    try:
+        gen = get_dataset_json("rtfuelmix", resolution="daily", limit=500)
+        if gen.get("data"):
+            fuels: dict[str, float] = {}
+            for r in gen["data"]:
+                fuel = str(r.get("Fuel Type", "") or r.get("Fuel Category", ""))
+                mw = float(r.get("Generation MW", 0) or r.get("Gen MWh", 0))
+                if fuel and mw:
+                    fuels[fuel] = fuels.get(fuel, 0) + mw
+            total = sum(fuels.values())
+            if total > 0:
+                sorted_fuels = sorted(fuels.items(), key=lambda x: -x[1])
+                ctx["generation_mix"] = ", ".join(f"{f}: {v/total*100:.1f}%" for f, v in sorted_fuels[:5])
+                ctx["total_generation"] = f"{total:,.0f} MW"
+                renew = sum(fuels.get(f, 0) for f in ("Wind", "Solar", "Hydro"))
+                ctx["renewable_share"] = f"{renew/total*100:.1f}%"
+    except Exception as exc:
+        logger.warning("Server context - generation error: %s", exc)
+
+    try:
+        cong = get_dataset_json("dam_limiting_constraints", resolution="daily", limit=500)
+        if cong.get("data"):
+            constraints: dict[str, dict[str, Any]] = {}
+            for r in cong["data"]:
+                name = str(r.get("Limiting Facility", "") or r.get("Constraint Name", ""))
+                cost = abs(float(r.get("Constraint Cost", 0) or r.get("Shadow Price", 0)))
+                if name and cost:
+                    if name not in constraints:
+                        constraints[name] = {"totalCost": 0, "count": 0}
+                    constraints[name]["totalCost"] += cost
+                    constraints[name]["count"] += 1
+            sorted_c = sorted(constraints.items(), key=lambda x: -x[1]["totalCost"])
+            if sorted_c:
+                ctx["top_constraints"] = "; ".join(
+                    f"{n}: ${v['totalCost']:.0f} total ({v['count']} intervals)"
+                    for n, v in sorted_c[:5]
+                )
+                ctx["total_congestion_cost"] = f"${sum(v['totalCost'] for _, v in sorted_c):.0f}"
+    except Exception as exc:
+        logger.warning("Server context - congestion error: %s", exc)
+
+    for key, ds_name, products in [
+        ("da_ancillary_prices", "damasp", ["10 Min Spin", "10 Min Non-Sync", "30 Min OR", "Reg Cap"]),
+        ("rt_ancillary_prices", "rtasp", ["10 Min Spin", "10 Min Non-Sync", "30 Min OR", "Reg Cap"]),
+    ]:
+        try:
+            asp = get_dataset_json(ds_name, resolution="daily", limit=500)
+            if asp.get("data"):
+                stats: dict[str, dict[str, float]] = {}
+                for r in asp["data"]:
+                    for p in products:
+                        val = float(r.get(p, 0))
+                        if val:
+                            if p not in stats:
+                                stats[p] = {"max": 0, "sum": 0, "cnt": 0}
+                            stats[p]["max"] = max(stats[p]["max"], val)
+                            stats[p]["sum"] += val
+                            stats[p]["cnt"] += 1
+                parts = [f"{p}: avg ${s['sum']/s['cnt']:.2f}, max ${s['max']:.2f}"
+                         for p, s in stats.items() if s["cnt"] > 0]
+                if parts:
+                    ctx[key] = "; ".join(parts)
+        except Exception as exc:
+            logger.warning("Server context - %s error: %s", ds_name, exc)
+
+    try:
+        flows = get_dataset_json("external_limits_flows", resolution="daily", limit=500)
+        if flows.get("data"):
+            ifaces: dict[str, dict[str, list[float]]] = {}
+            for r in flows["data"]:
+                name = str(r.get("Interface Name", "") or r.get("Point Name", ""))
+                flow = float(r.get("Flow MW", 0) or r.get("Flow (MW)", 0) or r.get("Power (MW)", 0))
+                limit_val = float(r.get("Positive Limit", 0) or r.get("Limit (MW)", 0))
+                if name:
+                    if name not in ifaces:
+                        ifaces[name] = {"flows": [], "limits": []}
+                    ifaces[name]["flows"].append(flow)
+                    if limit_val:
+                        ifaces[name]["limits"].append(limit_val)
+            flow_summary = []
+            for name, v in ifaces.items():
+                if not v["flows"]:
+                    continue
+                avg_f = sum(v["flows"]) / len(v["flows"])
+                max_f = max(v["flows"])
+                avg_l = sum(v["limits"]) / len(v["limits"]) if v["limits"] else 0
+                util = (avg_f / avg_l * 100) if avg_l else 0
+                flow_summary.append((name, avg_f, max_f, util))
+            flow_summary.sort(key=lambda x: -x[3])
+            if flow_summary:
+                ctx["interface_flows"] = "; ".join(
+                    f"{f[0]}: avg {f[1]:.0f} MW, max {f[2]:.0f} MW, {f[3]:.0f}% utilized"
+                    for f in flow_summary[:5]
+                )
+                constrained = [f for f in flow_summary if f[3] > 80]
+                if constrained:
+                    ctx["constrained_interfaces"] = ", ".join(f"{f[0]} ({f[3]:.0f}%)" for f in constrained)
+    except Exception as exc:
+        logger.warning("Server context - interface flows error: %s", exc)
+
+    return ctx
+
+
 @app.post("/api/ai-explainer")
 def ai_explainer(body: AIExplainRequest):
     question = body.question.strip()
@@ -486,6 +733,13 @@ def ai_explainer(body: AIExplainRequest):
         }
 
     ctx = body.context or {}
+
+    if body.search_all_datasets:
+        server_ctx = _build_server_side_context()
+        for k, v in server_ctx.items():
+            if k not in ctx or not ctx[k]:
+                ctx[k] = v
+
     context_lines = []
     label_map = {
         "avg_da_lmp": "Avg DA LMP (Zones A-K)",
@@ -524,6 +778,18 @@ def ai_explainer(body: AIExplainRequest):
         "battery_insight_summary": "Battery insight",
         "datasets_available": "Datasets loaded",
         "interface_flow_summary": "Key interface flows",
+        "date_range": "Analysis date range",
+        "da_date_range": "DA data range",
+        "top_spread_zones": "Top DA-RT spread zones",
+        "forecast_error": "Forecast error",
+        "total_generation": "Total generation",
+        "renewable_share": "Renewable share",
+        "total_congestion_cost": "Total congestion cost",
+        "da_ancillary_prices": "DA ancillary prices",
+        "rt_ancillary_prices": "RT ancillary prices",
+        "interface_flows": "Interface flows",
+        "constrained_interfaces": "Constrained interfaces",
+        "peak_actual_load": "Peak actual load",
     }
     for k, v in ctx.items():
         if v is not None and v != "" and v != [] and k not in ("resolution", "current_page"):
@@ -534,32 +800,46 @@ def ai_explainer(body: AIExplainRequest):
         context_block = "DASHBOARD STATE (use these numbers directly):\n" + "\n".join(context_lines)
 
     system_prompt = (
-        "You are a senior NYISO electricity market analyst writing for energy traders, battery strategists, "
-        "and portfolio managers using the GridScopeNY dashboard.\n\n"
+        "You are a senior NYISO electricity market analyst and strategist at a top-tier energy trading desk. "
+        "You have deep expertise in power market fundamentals, congestion pricing, ancillary service markets, "
+        "battery storage economics, and NYISO market structure. You think in terms of risk/reward, "
+        "basis differentials, heat rates, load-weighted prices, and congestion rent.\n\n"
         "SCOPE: NYISO Zones A through K only. Zone A=WEST, B=GENESE, C=CENTRL, D=NORTH, E=MHK VL, "
         "F=CAPITL, G=HUD VL, H=MILLWD, I=DUNWOD, J=N.Y.C., K=LONGIL. "
         "Do NOT analyze H Q, NPX, O H, or PJM - these are external settlement nodes, not NYISO zones.\n\n"
+        "You have access to comprehensive data across ALL datasets: Day-Ahead and Real-Time zonal LBMPs, "
+        "load forecasts and actuals, real-time fuel mix, DA and RT ancillary service prices, "
+        "binding transmission constraints, interface flows and limits, and interconnection queue data.\n\n"
+        "ANALYTICAL FRAMEWORK — always think through:\n"
+        "1. PRICE FORMATION: What is driving zonal price separation? Congestion, load, or generation mix?\n"
+        "2. SPREAD DYNAMICS: Are DA-RT spreads structural (congestion-driven) or episodic (weather/outage)?\n"
+        "3. RISK ASSESSMENT: What verification risk exists? Is the signal persistent or fading?\n"
+        "4. CROSS-MARKET SIGNALS: Do ancillary prices, interface flows, or load patterns confirm the thesis?\n"
+        "5. ACTIONABLE POSITIONING: What specific trade or storage strategy does the data support?\n\n"
         "STRICT RULES:\n"
         "- Use the dashboard data provided. Reference actual numbers, zones, and values.\n"
+        "- Connect the dots across datasets — do not silo your analysis to one data source.\n"
+        "- Identify causation where data supports it, not just correlation.\n"
         "- Do NOT use markdown formatting. No **, no #, no `, no bullet symbols.\n"
         "- Write in plain professional prose. No filler, no hedging, no generic disclaimers.\n"
         "- If data is insufficient, state exactly what is missing in one sentence.\n"
         "- Do NOT invent prices, outages, or events not in the context.\n"
-        "- Do NOT say 'typically' or 'generally' when specific data is available.\n\n"
+        "- Sound like a desk analyst writing a morning market note, not a chatbot.\n\n"
         "RESPONSE FORMAT (follow exactly):\n\n"
         "SUMMARY:\n"
-        "2-4 sentence direct answer using specific data points from the dashboard.\n\n"
+        "2-4 sentence direct answer with specific data. Lead with the most tradeable insight.\n\n"
         "TRADER TAKEAWAYS:\n"
-        "- 2-4 concise bullets focused on spread behavior, dislocations, congestion sensitivity, "
-        "verification risk, arbitrage conditions\n\n"
+        "- 2-4 concise bullets: spread behavior, dislocations, congestion sensitivity, "
+        "verification risk, arbitrage conditions, cross-market confirmation\n\n"
         "BATTERY STRATEGIST TAKEAWAYS:\n"
-        "- 2-4 concise bullets focused on duration fit, persistence, structural vs event-driven value, "
-        "storage-relevant conditions\n\n"
+        "- 2-4 concise bullets: duration fit, charge/discharge windows, persistence, "
+        "structural vs event-driven value, congestion-behind-the-meter opportunity\n\n"
         "KEY SIGNALS:\n"
-        "- 2-4 short bullets citing actual dashboard metrics (spreads, constraints, load, flows, events)\n\n"
+        "- 2-4 short bullets citing actual metrics across datasets (spreads, constraints, load, "
+        "flows, ancillary prices, generation mix)\n\n"
         "CAVEAT:\n"
         "- One short caveat only if genuinely needed. Omit this section if no caveat is needed.\n\n"
-        "Keep the total response under 300 words. Be direct. Sound like an analyst, not a chatbot."
+        "Keep the total response under 350 words. Be direct and specific."
     )
 
     user_content = question
@@ -575,7 +855,7 @@ def ai_explainer(body: AIExplainRequest):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
-            max_tokens=900,
+            max_tokens=1200,
             temperature=0.2,
         )
         raw = completion.choices[0].message.content or ""

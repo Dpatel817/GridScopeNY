@@ -59,13 +59,15 @@ export function pivotZonalDemand(
   zones: string[],
   resolution: Resolution
 ): PivotedRow[] {
+  const hasHE = rows.some(r => r.HE != null && Number(r.HE) > 0);
   const filtered = rows.filter(r => {
+    if (!hasHE) return true;
     if (resolution === 'on_peak') return isOnPeak(Number(r.HE));
     if (resolution === 'off_peak') return !isOnPeak(Number(r.HE));
     return true;
   });
 
-  if (resolution === 'hourly') {
+  if (resolution === 'hourly' && hasHE) {
     return filtered.map(r => {
       const row: PivotedRow = { Date: `${r.Date} HE${r.HE}` };
       for (const z of zones) {
@@ -112,12 +114,13 @@ export function alignForecastActual(
   forecastRows: DemandRow[],
   actualRows: DemandRow[]
 ): AlignedRow[] {
+  const hasHE = forecastRows.some(r => r.HE != null) && actualRows.some(r => r.HE != null);
   const zoneMap: Record<string, number> = {};
   for (const r of actualRows) {
     const v = Number(r.Load || 0);
     if (v > 0) {
       const zone = String(r.Zone || r.PTID || '');
-      const zoneKey = `${r.Date}_${r.HE}_${zone}`;
+      const zoneKey = hasHE ? `${r.Date}_${r.HE}_${zone}` : `${r.Date}_${zone}`;
       zoneMap[zoneKey] = v;
     }
   }
@@ -125,7 +128,7 @@ export function alignForecastActual(
   const actualMap: Record<string, number> = {};
   for (const [zk, v] of Object.entries(zoneMap)) {
     const parts = zk.split('_');
-    const intervalKey = `${parts[0]}_${parts[1]}`;
+    const intervalKey = hasHE ? `${parts[0]}_${parts[1]}` : parts[0];
     actualMap[intervalKey] = (actualMap[intervalKey] || 0) + v;
   }
 
@@ -133,12 +136,12 @@ export function alignForecastActual(
   for (const f of forecastRows) {
     const fVal = Number(f.NYISO || 0);
     if (!fVal) continue;
-    const key = `${f.Date}_${f.HE}`;
+    const key = hasHE ? `${f.Date}_${f.HE}` : f.Date;
     const aVal = actualMap[key];
     if (aVal) {
       aligned.push({
         Date: f.Date,
-        HE: Number(f.HE),
+        HE: hasHE ? Number(f.HE) : 0,
         Forecast: fVal,
         Actual: aVal,
         Error: fVal - aVal,
@@ -152,13 +155,15 @@ export function pivotForecastActual(
   aligned: AlignedRow[],
   resolution: Resolution
 ): PivotedRow[] {
+  const hasHE = aligned.some(r => r.HE != null && r.HE > 0);
   const filtered = aligned.filter(r => {
+    if (!hasHE) return true;
     if (resolution === 'on_peak') return isOnPeak(r.HE);
     if (resolution === 'off_peak') return !isOnPeak(r.HE);
     return true;
   });
 
-  if (resolution === 'hourly') {
+  if (resolution === 'hourly' && hasHE) {
     return filtered.map(r => ({
       Date: `${r.Date} HE${r.HE}`,
       Forecast: Math.round(r.Forecast),
@@ -187,13 +192,15 @@ export function pivotForecastError(
   aligned: AlignedRow[],
   resolution: Resolution
 ): PivotedRow[] {
+  const hasHE = aligned.some(r => r.HE != null && r.HE > 0);
   const filtered = aligned.filter(r => {
+    if (!hasHE) return true;
     if (resolution === 'on_peak') return isOnPeak(r.HE);
     if (resolution === 'off_peak') return !isOnPeak(r.HE);
     return true;
   });
 
-  if (resolution === 'hourly') {
+  if (resolution === 'hourly' && hasHE) {
     return filtered.map(r => ({
       Date: `${r.Date} HE${r.HE}`,
       Error: Math.round(r.Error),

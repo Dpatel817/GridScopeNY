@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import {
   LineChart as ReLineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
+import { makeTickFormatter, tooltipLabelFormatter } from '../utils/dateFormat'
 
 const COLORS = [
   '#2563eb','#10b981','#ef4444','#f59e0b','#8b5cf6','#06b6d4','#ec4899','#14b8a6',
@@ -16,25 +18,9 @@ interface Props {
   height?: number
 }
 
-function fmtX(v: unknown): string {
-  if (v === null || v === undefined || v === '') return ''
-  const s = String(v)
-  if (s === 'undefined' || s === 'null' || s === 'NaN') return ''
-  if (s.includes('T')) {
-    try {
-      const d = new Date(s)
-      if (isNaN(d.getTime())) return s.length > 14 ? s.slice(0, 14) : s
-      return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
-    } catch { return s }
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const parts = s.split('-')
-    return `${parseInt(parts[1])}/${parseInt(parts[2])}`
-  }
-  return s.length > 16 ? s.slice(0, 16) : s
-}
-
 export default function LineChart({ data, xKey, yKeys, title, height = 300 }: Props) {
+  const fmtTick = useMemo(() => makeTickFormatter(data, xKey), [data, xKey])
+
   if (!data.length) return <div className="empty-state" style={{ padding: 24 }}>No chart data</div>
   return (
     <div>
@@ -42,11 +28,11 @@ export default function LineChart({ data, xKey, yKeys, title, height = 300 }: Pr
       <ResponsiveContainer width="100%" height={height}>
         <ReLineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey={xKey} tickFormatter={fmtX} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+          <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip
             formatter={(v: number | string) => typeof v === 'number' ? v.toFixed(2) : v}
-            labelFormatter={fmtX}
+            labelFormatter={tooltipLabelFormatter}
           />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
           {yKeys.map((k, i) => (

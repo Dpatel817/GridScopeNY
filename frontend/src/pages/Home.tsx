@@ -167,8 +167,8 @@ export default function Home() {
   const { inventory, loading } = useInventory();
   const [refOpen, setRefOpen] = useState(false);
 
-  const { data: priceData } = useDataset('da_lbmp_zone', 'hourly');
-  const { data: demandData } = useDataset('isolf', 'hourly');
+  const { data: priceData } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 10000, 30);
+  const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 10000, 30);
 
   const totalDatasets = inventory
     ? Object.values(inventory).reduce((sum: number, page: any) => sum + Object.keys(page).length, 0) : 0;

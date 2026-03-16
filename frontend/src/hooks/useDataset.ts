@@ -30,7 +30,8 @@ export function useDataset(
   resolution: string = 'raw',
   filterCol?: string,
   filterVal?: string,
-  limit: number = 10000
+  limit: number = 10000,
+  days: number = 90,
 ) {
   const [data, setData] = useState<DatasetResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,7 +42,7 @@ export function useDataset(
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ resolution, limit: String(limit) });
+      const params = new URLSearchParams({ resolution, limit: String(limit), days: String(days) });
       if (filterCol && filterVal) {
         params.set('filter_col', filterCol);
         params.set('filter_val', filterVal);
@@ -55,7 +56,7 @@ export function useDataset(
     } finally {
       setLoading(false);
     }
-  }, [datasetKey, resolution, filterCol, filterVal, limit]);
+  }, [datasetKey, resolution, filterCol, filterVal, limit, days]);
 
   useEffect(() => {
     fetchData();

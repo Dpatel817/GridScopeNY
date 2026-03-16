@@ -61,14 +61,15 @@ export function pivotByZone(
   resolution: Resolution
 ): PivotedRow[] {
   const filtered = filterByZones(filterNyisoOnly(rows), zones);
+  const hasHE = filtered.some(r => r.HE != null && Number(r.HE) > 0);
 
-  if (resolution === 'hourly') {
+  if (resolution === 'hourly' && hasHE) {
     return pivotHourly(filtered, zones);
   }
-  if (resolution === 'on_peak') {
+  if (hasHE && resolution === 'on_peak') {
     return pivotAggregated(filtered.filter(r => isOnPeak(r.HE)), zones, 'date');
   }
-  if (resolution === 'off_peak') {
+  if (hasHE && resolution === 'off_peak') {
     return pivotAggregated(filtered.filter(r => !isOnPeak(r.HE)), zones, 'date');
   }
   return pivotAggregated(filtered, zones, 'date');
@@ -128,27 +129,29 @@ export function computeDartSpread(
   const daFiltered = filterByDateRange(filterByZones(filterNyisoOnly(daRows), zones), dateRange, startDate, endDate);
   const rtFiltered = filterByDateRange(filterByZones(filterNyisoOnly(rtRows), zones), dateRange, startDate, endDate);
 
+  const hasHE = daFiltered.some(r => r.HE != null);
   const rtMap: Record<string, number> = {};
   for (const r of rtFiltered) {
-    rtMap[`${r.Date}_${r.HE}_${r.Zone}`] = Number(r.LMP);
+    const k = hasHE ? `${r.Date}_${r.HE}_${r.Zone}` : `${r.Date}_${r.Zone}`;
+    rtMap[k] = Number(r.LMP);
   }
 
   interface DartRow { Date: string; HE: number; Zone: string; DART: number }
   const dartRows: DartRow[] = [];
   for (const r of daFiltered) {
-    const key = `${r.Date}_${r.HE}_${r.Zone}`;
+    const key = hasHE ? `${r.Date}_${r.HE}_${String(r.Zone)}` : `${r.Date}_${String(r.Zone)}`;
     const rtLmp = rtMap[key];
     if (rtLmp !== undefined) {
       dartRows.push({
         Date: r.Date,
-        HE: r.HE,
+        HE: r.HE ?? 0,
         Zone: String(r.Zone),
         DART: Number(r.LMP) - rtLmp,
       });
     }
   }
 
-  if (resolution === 'hourly') {
+  if (resolution === 'hourly' && hasHE) {
     const map: Record<string, PivotedRow> = {};
     for (const r of dartRows) {
       const key = `${r.Date}_${r.HE}`;
@@ -160,8 +163,10 @@ export function computeDartSpread(
   }
 
   let filtered = dartRows;
-  if (resolution === 'on_peak') filtered = dartRows.filter(r => isOnPeak(r.HE));
-  if (resolution === 'off_peak') filtered = dartRows.filter(r => !isOnPeak(r.HE));
+  if (hasHE) {
+    if (resolution === 'on_peak') filtered = dartRows.filter(r => isOnPeak(r.HE));
+    if (resolution === 'off_peak') filtered = dartRows.filter(r => !isOnPeak(r.HE));
+  }
 
   const accum: Record<string, Record<string, { sum: number; count: number }>> = {};
   for (const r of filtered) {

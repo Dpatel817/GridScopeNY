@@ -344,7 +344,7 @@ export default function InterfaceFlows() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: flowData, loading, error } = useDataset('external_limits_flows', 'raw');
+  const { data: flowData, loading, error } = useDataset('external_limits_flows', 'daily', undefined, undefined, 20000, 730);
 
   const rows: FlowRow[] = useMemo(
     () => (flowData?.data || []) as FlowRow[],
@@ -389,10 +389,16 @@ export default function InterfaceFlows() {
     setSelectedInterfaces(visibleDisplayNames.slice(0, 8));
   }, [classFilter]);
 
-  const kpis: FlowKPIs = useMemo(
-    () => computeFlowKPIs(rows),
-    [rows]
-  );
+  const latestDate = useMemo(() => {
+    const dates = getAvailableDates(rows);
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [rows]);
+
+  const kpis: FlowKPIs = useMemo(() => {
+    if (!latestDate) return computeFlowKPIs(rows);
+    const latest = rows.filter(r => r.Date === latestDate);
+    return computeFlowKPIs(latest);
+  }, [rows, latestDate]);
 
   const fallbackSummary = useMemo(() => deterministicFlowSummary(kpis), [kpis]);
 

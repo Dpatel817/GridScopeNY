@@ -23,10 +23,11 @@ export function computeGenerationKPIs(
 ): GenerationKPIs {
   const { genCol, fuelCol } = detectColumns(rows);
 
+  const hasHE = rows.some(r => r.HE != null);
   const fuelSnap: Record<string, number> = {};
   for (const r of rows) {
     const fuel = String(r[fuelCol] || '');
-    const snapKey = `${r.Date}_${r.HE}_${fuel}`;
+    const snapKey = hasHE ? `${r.Date}_${r.HE}_${fuel}` : `${r.Date}_0_${fuel}`;
     fuelSnap[snapKey] = Number(r[genCol] || 0);
   }
 
@@ -40,7 +41,7 @@ export function computeGenerationKPIs(
 
   const intervals = Object.values(intervalTotals);
 
-  const onPeakIntervals = intervals.filter(i => isOnPeak(i.he));
+  const onPeakIntervals = hasHE ? intervals.filter(i => isOnPeak(i.he)) : intervals;
   const onPeakAvgTotal = onPeakIntervals.length > 0
     ? onPeakIntervals.reduce((s, i) => s + i.total, 0) / onPeakIntervals.length
     : null;

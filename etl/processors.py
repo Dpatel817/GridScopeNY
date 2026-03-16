@@ -54,6 +54,10 @@ def process_raw_file(path, meta):
     string_cols.extend([c for c in pk if c != ts_col])
     df = coerce_numerics(df, exclude_cols=string_cols)
 
+    for col in df.columns:
+        if df[col].dtype == "object":
+            df[col] = df[col].apply(lambda x: str(x) if x is not None and not (isinstance(x, float) and pd.isna(x)) else None)
+
     return df
 
 

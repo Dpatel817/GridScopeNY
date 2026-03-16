@@ -8,7 +8,7 @@ import { filterNyisoZones } from '../data/zones';
 import type { PriceRow, Resolution, DateRange, ChartType } from '../data/priceTransforms';
 import {
   filterByDateRange, filterNyisoOnly, pivotByZone,
-  computeDartSpread, getAvailableDates,
+  computeDartSpread, getAvailableDates, isOnPeak,
 } from '../data/priceTransforms';
 import type { PriceKPIs } from '../data/priceMetrics';
 import { computePriceKPIs } from '../data/priceMetrics';
@@ -36,8 +36,8 @@ export default function Prices() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'raw');
-  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'raw');
+  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
+  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
 
   const loading = daLoading || rtLoading;
 
@@ -64,7 +64,25 @@ export default function Prices() {
     }
   }, [availableDates]);
 
-  const kpis: PriceKPIs = useMemo(() => computePriceKPIs(daRows, rtRows), [daRows, rtRows]);
+  const latestDate = useMemo(() => {
+    const dates = getAvailableDates(filterNyisoOnly(daRows));
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [daRows]);
+
+  const latestRTDate = useMemo(() => {
+    const filtered = filterNyisoOnly(rtRows);
+    const dates = getAvailableDates(filtered);
+    for (let i = dates.length - 1; i >= 0; i--) {
+      if (filtered.some(r => r.Date === dates[i] && isOnPeak(r.HE))) return dates[i];
+    }
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [rtRows]);
+
+  const kpis: PriceKPIs = useMemo(() => {
+    const daLatest = latestDate ? daRows.filter(r => r.Date === latestDate) : daRows;
+    const rtLatest = (latestRTDate ? rtRows.filter(r => r.Date === latestRTDate) : rtRows);
+    return computePriceKPIs(daLatest, rtLatest);
+  }, [daRows, rtRows, latestDate, latestRTDate]);
 
   const fallbackSummary = useMemo(() => deterministicSummary(kpis), [kpis]);
 

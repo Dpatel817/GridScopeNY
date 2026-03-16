@@ -6,7 +6,7 @@ A premium NYISO market intelligence dashboard with a React + Vite frontend and P
 
 - **Frontend**: React + Vite (TypeScript), port 5000 — premium dark sidebar, Inter font, insight-driven pages
 - **Backend**: FastAPI (Python), port 8000 — serves processed NYISO data as JSON REST API with resolution aggregation
-- **Data Layer**: Pandas-based ETL that fetches and processes CSV data from NYISO MIS
+- **Data Layer**: ETL pipeline with 39 NYISO datasets, 2+ years historical backfill (2024-01 to present), Parquet storage with monthly partitioning for large datasets
 - **Entry point**: `start.sh` — starts FastAPI backend then React frontend
 
 ## Design System
@@ -39,7 +39,7 @@ frontend/
     index.css             # Full design system (CSS variables, all component styles)
     components/
       Layout.tsx          # Dark sidebar with branding, sectioned nav, mounts MarketAnalystWidget
-      MarketAnalystWidget.tsx  # Persistent bottom-right AI chat widget (global cross-market context, all datasets)
+      MarketAnalystWidget.tsx  # Persistent bottom-right AI chat widget (global cross-market context, all datasets, server-side search_all_datasets for comprehensive analysis)
       LineChart.tsx       # Recharts line chart wrapper (multi-line, wide-format, robust fmtX for dates)
       StackedBarChart.tsx # Recharts stacked bar chart (multi-series, uses same color palette)
       SeriesSelector.tsx  # Multi-select dropdown for filtering chart series (zones, fuels, etc.)
@@ -59,7 +59,7 @@ frontend/
       Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC section, embedded Generator Map
       InterfaceFlows.tsx  # Interface Flows — AI summary, 8 KPI cards (on-peak totals, peak flows, most active, top internal/external, count), side chart controls with class/interface/resolution/date/chart-type, flow chart, interface summary table, TTCF Derates section
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
-      OpportunityExplorer.tsx  # Opportunity Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
+      OpportunityExplorer.tsx  # Opportunity Explorer — date range picker, zone rankings, trader + battery takeaways, embedded AI analyst (all context filters by selected date range)
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization (standalone or embedded mode)
       InterconnectionQueue.tsx  # Interconnection Queue — Intelligence summary, 9 MW-based KPIs, pipeline viz (Cluster→Active→In Service), fuel/zone bar charts, recent activity, largest projects, sortable/filterable table, collapsible sections
     components/
@@ -143,7 +143,7 @@ CSS classes: `.series-selector-*` in `index.css`
 - `GET /api/page/{page}` — list datasets for a page
 - `GET /api/filters/{key}/{col}` — filter options for a column
 - `GET /api/generator-map?market=DA|RT&date=YYYY-MM-DD&he=0-23` — generator geographic price data (561 mapped generators)
-- `GET /api/constraint-impact?market=DA|RT&date=&he=&facility=&contingency=&clean_only=true` — constraint impact analysis with clean print detection, congestion pivot, zonal/generator MCC impact
+- `GET /api/constraint-impact?market=DA|RT&facility=&contingency=&date=&he=&clean_only=true&search=` — constraint impact analysis: drill-down flow (Market→Search Constraint→Contingency→Timestamp), returns status "pending" until facility+contingency+date selected, search param filters facility list, clean print detection, congestion pivot, zonal/generator MCC impact
 - `GET /api/congestion-stacked?market=DA|RT&date=YYYY-MM-DD` — stacked bar data: constraint costs by hour, pivoted by constraint name
 - `GET /api/ttcf-derates?date=YYYY-MM-DD` — TTCF derate data from NYISO MIS (with fallback to previous day), path names normalized via path_map
 - `GET /api/oic?date=YYYY-MM-DD` — Operating In Commitment data from NYISO MIS
@@ -167,6 +167,12 @@ CSS classes: `.series-selector-*` in `index.css`
 - **Daily**: Full day average
 - DataFrame cache with mtime-based invalidation for performance
 - Parquet format preferred over CSV for faster loading (pyarrow)
+- Large datasets (>500K rows) auto-filtered to last 90 days on load to prevent OOM
+- Column normalization on load: NYISO raw names → standardized names (LBMP→LMP, Name→Zone/Generator, ASP columns→short names, etc.)
+- Date/HE/Month/Year columns derived from Time Stamp when missing
+- **Daily cache system**: Pre-aggregated daily parquet files in `data/processed/_daily_cache/` for large datasets (`da_lbmp_zone`, `rt_lbmp_zone`, `damasp`, `rtasp`, `rtfuelmix`, `pal`, `external_limits_flows`); built at startup, served from in-memory cache for sub-200ms response times; mtime-based invalidation
+- **ThreadPoolExecutor**: 8 workers for concurrent API requests
+- Frontend `useDataset` calls use `days=730` for 2-year historical views, `limit=20000` for page data, `limit=10000` for MarketAnalystWidget
 
 ## Running
 

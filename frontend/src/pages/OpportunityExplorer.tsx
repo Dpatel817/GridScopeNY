@@ -32,40 +32,67 @@ export default function OpportunityExplorer() {
   const [rankMetric, setRankMetric] = useState<RankMetric>('revenue');
   const [showAllRanks, setShowAllRanks] = useState(false);
   const [showRawTable, setShowRawTable] = useState(false);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
-  const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'hourly');
-  const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'hourly');
-  const { data: congestionData } = useDataset('dam_limiting_constraints', 'hourly');
-  const { data: demandData } = useDataset('isolf', 'hourly');
+  const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
+  const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
+  const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 20000, 730);
+  const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 20000, 730);
 
   const loading = daLoading || rtLoading;
   const dataError = daError || rtError;
   const durationHours = duration === '1h' ? 1 : duration === '2h' ? 2 : 4;
   const durationLabel = duration === '1h' ? '1-Hour' : duration === '2h' ? '2-Hour' : '4-Hour';
 
+  const availableDates = useMemo(() => {
+    if (!rtData?.data?.length) return [];
+    const s = new Set<string>();
+    for (const r of rtData.data) s.add(String(r.Date));
+    return [...s].sort();
+  }, [rtData]);
+
+  const dateRangeLabel = useMemo(() => {
+    const s = startDate || availableDates[0] || '';
+    const e = endDate || availableDates[availableDates.length - 1] || '';
+    if (!s || !e) return '';
+    return `${s} to ${e}`;
+  }, [startDate, endDate, availableDates]);
+
   const { opportunities, hourlyByZone } = useMemo(() => {
     if (!daData?.data?.length || !rtData?.data?.length) return { opportunities: [], hourlyByZone: {} as Record<string, any[]> };
 
+    const effStart = startDate || availableDates[0] || '';
+    const effEnd = endDate || availableDates[availableDates.length - 1] || '';
+
+    const hasHE = daData.data.some((r: any) => r.HE != null);
     const daByKey: Record<string, number> = {};
     for (const r of daData.data) {
-      daByKey[`${r.Date}_${r.HE}_${r.Zone}`] = Number(r.LMP) || 0;
+      const d = String(r.Date);
+      if (effStart && d < effStart) continue;
+      if (effEnd && d > effEnd) continue;
+      const k = hasHE ? `${r.Date}_${r.HE}_${r.Zone}` : `${r.Date}_${r.Zone}`;
+      daByKey[k] = Number(r.LMP) || 0;
     }
 
     const zoneData: Record<string, { spreads: number[]; hourly: { Date: string; HE: number; spread: number; daLmp: number; rtLmp: number }[]; zone: string }> = {};
     for (const r of rtData.data) {
+      const d = String(r.Date);
+      if (effStart && d < effStart) continue;
+      if (effEnd && d > effEnd) continue;
       const zone = String(r.Zone);
       if (!isNyisoZone(zone)) continue;
-      const key = `${r.Date}_${r.HE}_${r.Zone}`;
+      const key = hasHE ? `${r.Date}_${r.HE}_${r.Zone}` : `${r.Date}_${r.Zone}`;
       const rtLmp = Number(r.LMP) || 0;
       const daLmp = daByKey[key] || 0;
       const spread = Math.abs(rtLmp - daLmp);
       if (!zoneData[zone]) zoneData[zone] = { spreads: [], hourly: [], zone };
       zoneData[zone].spreads.push(spread);
-      zoneData[zone].hourly.push({ Date: String(r.Date), HE: Number(r.HE), spread, daLmp, rtLmp });
+      zoneData[zone].hourly.push({ Date: String(r.Date), HE: Number(r.HE || 0), spread, daLmp, rtLmp });
     }
 
     const hourlyByZone: Record<string, any[]> = {};
@@ -87,7 +114,7 @@ export default function OpportunityExplorer() {
 
     results.sort((a, b) => b[rankMetric] - a[rankMetric]);
     return { opportunities: results, hourlyByZone };
-  }, [daData, rtData, durationHours, rankMetric]);
+  }, [daData, rtData, durationHours, rankMetric, startDate, endDate, availableDates]);
 
   const bestZone = opportunities[0];
   const mostVolatile = useMemo(() => {
@@ -140,8 +167,13 @@ export default function OpportunityExplorer() {
 
   const topConstraints = useMemo(() => {
     if (!congestionData?.data?.length) return [];
+    const effStart = startDate || availableDates[0] || '';
+    const effEnd = endDate || availableDates[availableDates.length - 1] || '';
     const costByName: Record<string, { count: number; totalCost: number }> = {};
     for (const r of congestionData.data) {
+      const d = String(r.Date || '');
+      if (effStart && d < effStart) continue;
+      if (effEnd && d > effEnd) continue;
       const name = String(r['Constraint Name'] || r['Name'] || r['constraint_name'] || '');
       if (!name) continue;
       const cost = Math.abs(Number(r['Marginal Cost'] || r['Shadow Price'] || r['marginal_cost'] || 0));
@@ -153,7 +185,7 @@ export default function OpportunityExplorer() {
       .map(([name, v]) => ({ name, ...v }))
       .sort((a, b) => b.totalCost - a.totalCost)
       .slice(0, 4);
-  }, [congestionData]);
+  }, [congestionData, startDate, endDate, availableDates]);
 
   const getSignalType = (opp: typeof bestZone) => {
     if (!opp) return 'moderate';
@@ -171,12 +203,20 @@ export default function OpportunityExplorer() {
 
   const demandContext = useMemo(() => {
     if (!demandData?.data?.length) return null;
-    const vals = demandData.data.map((r: any) => Number(r.NYISO || 0)).filter(Boolean);
+    const effStart = startDate || availableDates[0] || '';
+    const effEnd = endDate || availableDates[availableDates.length - 1] || '';
+    const filtered = demandData.data.filter((r: any) => {
+      const d = String(r.Date || '');
+      if (effStart && d < effStart) return false;
+      if (effEnd && d > effEnd) return false;
+      return true;
+    });
+    const vals = filtered.map((r: any) => Number(r.NYISO || 0)).filter(Boolean);
     if (!vals.length) return null;
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     const peak = Math.max(...vals);
     return { avg: Math.round(avg), peak: Math.round(peak) };
-  }, [demandData]);
+  }, [demandData, startDate, endDate, availableDates]);
 
   const traderInsights = useMemo(() => {
     if (!opportunities.length) return [];
@@ -280,6 +320,7 @@ export default function OpportunityExplorer() {
       ctx.top_zone = `${bestZone.zone} ($${bestZone.revenue.toFixed(2)}/MW)`;
     }
     ctx.battery_duration = durationLabel;
+    ctx.date_range = dateRangeLabel;
     ctx.zones_analyzed = opportunities.length;
     if (topConstraints.length > 0) {
       ctx.top_constraints = topConstraints.slice(0, 3).map(c => `${c.name} (${c.count} bindings, $${c.totalCost.toFixed(0)})`).join('; ');
@@ -382,6 +423,37 @@ export default function OpportunityExplorer() {
                     {label}
                   </button>
                 ))}
+              </div>
+            </div>
+            <div className="opp-control-group">
+              <div className="opp-control-label">Date Range</div>
+              <div className="opp-date-range">
+                <input
+                  type="date"
+                  className="opp-date-input"
+                  value={startDate || availableDates[0] || ''}
+                  min={availableDates[0] || ''}
+                  max={endDate || availableDates[availableDates.length - 1] || ''}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+                <span className="opp-date-sep">to</span>
+                <input
+                  type="date"
+                  className="opp-date-input"
+                  value={endDate || availableDates[availableDates.length - 1] || ''}
+                  min={startDate || availableDates[0] || ''}
+                  max={availableDates[availableDates.length - 1] || ''}
+                  onChange={e => setEndDate(e.target.value)}
+                />
+                {(startDate || endDate) && (
+                  <button
+                    className="opp-date-reset"
+                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    title="Reset to full range"
+                  >
+                    Reset
+                  </button>
+                )}
               </div>
             </div>
           </div>

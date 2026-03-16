@@ -171,7 +171,7 @@ export default function Generation() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'raw');
+  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'daily', undefined, undefined, 20000, 730);
 
   const rows: GenRow[] = useMemo(() => (fuelData?.data || []) as GenRow[], [fuelData]);
   const { genCol, fuelCol } = useMemo(() => detectColumns(rows), [rows]);
@@ -185,14 +185,24 @@ export default function Generation() {
     }
   }, [allFuels]);
 
+  const latestDate = useMemo(() => {
+    const dates = getAvailableDates(rows);
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [rows]);
+
+  const latestRows = useMemo(() => {
+    if (!latestDate) return rows;
+    return rows.filter((r: any) => r.Date === latestDate);
+  }, [rows, latestDate]);
+
   const breakdown: FuelBreakdown[] = useMemo(
-    () => computeFuelBreakdown(rows, fuelCol, genCol),
-    [rows, fuelCol, genCol]
+    () => computeFuelBreakdown(latestRows, fuelCol, genCol),
+    [latestRows, fuelCol, genCol]
   );
 
   const kpis: GenerationKPIs = useMemo(
-    () => computeGenerationKPIs(rows, breakdown),
-    [rows, breakdown]
+    () => computeGenerationKPIs(latestRows, breakdown),
+    [latestRows, breakdown]
   );
 
   const fallbackSummary = useMemo(

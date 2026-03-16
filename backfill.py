@@ -14,6 +14,7 @@ Usage:
     python backfill.py --list
 """
 import argparse
+import gc
 import logging
 import sys
 from datetime import date, timedelta
@@ -27,7 +28,7 @@ from etl.fetchers import (
     fetch_snapshot, get_month_range, get_date_range, read_raw_file
 )
 from etl.processors import process_raw_files, process_raw_file, save_processed_csv
-from etl.storage import upsert_parquet, sync_to_legacy
+from etl.storage import upsert_parquet, sync_to_legacy, merge_partitions
 from etl.manifests import (
     is_month_processed, mark_month_processed, mark_snapshot_fetched
 )
@@ -55,10 +56,12 @@ def backfill_dated_dataset(session, dataset_name, meta, start_month, end_month):
         if extracted:
             df = process_raw_files(extracted, meta, dataset_name)
             if not df.empty:
-                upsert_parquet(df, dataset_name, meta)
+                upsert_parquet(df, dataset_name, meta, year_month=ym)
                 total_rows += len(df)
+                del df
+                gc.collect()
                 mark_month_processed(dataset_name, ym)
-                logger.info(f"  [{dataset_name}] {ym} archive: {len(df)} rows")
+                logger.info(f"  [{dataset_name}] {ym} archive: done")
                 continue
 
         logger.info(f"  [{dataset_name}] No archive for {ym}, trying daily files...")
@@ -82,8 +85,10 @@ def backfill_dated_dataset(session, dataset_name, meta, start_month, end_month):
         if raw_paths:
             df = process_raw_files(raw_paths, meta, dataset_name)
             if not df.empty:
-                upsert_parquet(df, dataset_name, meta)
+                upsert_parquet(df, dataset_name, meta, year_month=ym)
                 total_rows += len(df)
+                del df
+                gc.collect()
 
         mark_month_processed(dataset_name, ym)
 

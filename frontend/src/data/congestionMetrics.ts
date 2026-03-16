@@ -23,6 +23,7 @@ export function computeCongestionKPIs(rows: CongestionRow[]): CongestionKPIs {
   const byConstraint: Record<string, { totalAbs: number; count: number }> = {};
   let grandTotalAbs = 0;
 
+  const hasHE = rows.some(r => r.HE != null);
   for (const r of rows) {
     const name = String(r[nameCol] || '');
     if (!name) continue;
@@ -31,7 +32,7 @@ export function computeCongestionKPIs(rows: CongestionRow[]): CongestionKPIs {
     const he = Number(r.HE || 0);
     const absCost = Math.abs(cost);
 
-    if (isOnPeak(he)) {
+    if (!hasHE || isOnPeak(he)) {
       onPeakTotalCost += absCost;
       onPeakCount++;
     }

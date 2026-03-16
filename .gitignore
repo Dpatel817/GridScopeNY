@@ -4,33 +4,30 @@ __pycache__/
 .env
 .venv/
 venv/
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-data/raw/
-
-# raw data
-ETL/GridScopeNY\data/raw/
-ETL/GridScopeNY\data/loaded_files.csv
-ETL/GridScopeNY/data/raw/
-ETL/GridScopeNY/data/loaded_files.csv
-data/raw/
-
-# generated raw data
-data/raw/
-ETL/GridScopeNY\\data/
-ETL/GridScopeNY\\data/raw/
-ETL/GridScopeNY\\data\\raw\\
-ETL/GridScopeNY\\data/loaded_files.csv
-ETL/GridScopeNY\\data/loaded_zip_members.csv
-
-# generated raw data
-data/raw/
-ETL/GridScopeNY\\data/
-ETL/GridScopeNY\\data/raw/
-ETL/GridScopeNY\\data\\raw\\
-ETL/GridScopeNY\\data/loaded_files.csv
-ETL/GridScopeNY\\data/loaded_zip_members.csv
 node_modules/
 frontend/dist/
+
+# Raw and generated data
+raw_data/
+parquet_data/
+processed_csv/
+logs/
+manifests/
+data/raw/
+data/rawsnapshots/
+data/processed/*
+!data/processed/.gitkeep
+
+# ETL generated data
+ETL/GridScopeNY/data/
+ETL/GridScopeNY/data/raw/
+ETL/GridScopeNY/data/loaded_files.csv
+ETL/GridScopeNY/data/loaded_zip_members.csv
+
+# IDE
+.idea/
+
+# Replit
+.cache/
+.config/
+attached_assets/

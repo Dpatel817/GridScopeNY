@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   LineChart as ReLineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -5,6 +6,7 @@ import {
   BarChart as ReBarChart, Bar,
 } from 'recharts';
 import type { ChartType } from '../data/priceTransforms';
+import { makeTickFormatter, tooltipLabelFormatter } from '../utils/dateFormat';
 
 const COLORS = [
   '#2563eb','#10b981','#ef4444','#f59e0b','#8b5cf6','#06b6d4','#ec4899','#14b8a6',
@@ -21,34 +23,12 @@ interface Props {
   valueSuffix?: string;
 }
 
-function fmtX(v: unknown): string {
-  if (v === null || v === undefined || v === '') return '';
-  const s = String(v);
-  if (s.includes('T')) {
-    try {
-      const d = new Date(s);
-      if (isNaN(d.getTime())) return s.length > 14 ? s.slice(0, 14) : s;
-      return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-    } catch { return s; }
-  }
-  if (/^\d{4}-\d{2}-\d{2} HE\d+$/.test(s)) {
-    const parts = s.split(' ');
-    const dp = parts[0].split('-');
-    return `${parseInt(dp[1])}/${parseInt(dp[2])} ${parts[1]}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const parts = s.split('-');
-    return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
-  }
-  return s.length > 16 ? s.slice(0, 16) : s;
-}
-
 function makeTooltip(prefix: string, suffix: string) {
   return function ChartTooltip({ active, payload, label }: any) {
     if (!active || !payload?.length) return null;
     return (
       <div className="price-tooltip">
-        <div className="price-tooltip-label">{fmtX(label)}</div>
+        <div className="price-tooltip-label">{tooltipLabelFormatter(label)}</div>
         {payload.map((entry: any, i: number) => {
           const val = typeof entry.value === 'number'
             ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
@@ -69,6 +49,8 @@ function makeTooltip(prefix: string, suffix: string) {
 }
 
 export default function PriceChart({ data, xKey, yKeys, chartType, height = 340, valuePrefix = '$', valueSuffix = '' }: Props) {
+  const fmtTick = useMemo(() => makeTickFormatter(data, xKey), [data, xKey]);
+
   if (!data.length || !yKeys.length) return <div className="iq-empty">No chart data available</div>;
 
   const showDots = chartType === 'line-markers';
@@ -80,7 +62,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey={xKey} tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
+          <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip content={<TooltipContent />} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
@@ -98,7 +80,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
       <ResponsiveContainer width="100%" height={height}>
         <ReBarChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey={xKey} tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
+          <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip content={<TooltipContent />} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
@@ -114,7 +96,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
     <ResponsiveContainer width="100%" height={height}>
       <ReLineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-        <XAxis dataKey={xKey} tickFormatter={fmtX} tick={{ fontSize: 11 }} interval={interval} />
+        <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
         <YAxis tick={{ fontSize: 11 }} />
         <Tooltip content={<TooltipContent />} />
         {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}

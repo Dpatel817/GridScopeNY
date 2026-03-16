@@ -8,7 +8,7 @@ import type { DemandRow, AlignedRow } from '../data/demandTransforms';
 import {
   extractZones, getAvailableDates, filterByDateRange,
   pivotZonalDemand, alignForecastActual,
-  pivotForecastActual, pivotForecastError,
+  pivotForecastActual, pivotForecastError, isOnPeak,
 } from '../data/demandTransforms';
 import { computeDemandKPIs } from '../data/demandMetrics';
 import type { DemandKPIs } from '../data/demandMetrics';
@@ -34,8 +34,8 @@ export default function Demand() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'raw');
-  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'raw');
+  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'daily', undefined, undefined, 20000, 730);
+  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'daily', undefined, undefined, 20000, 730);
 
   const loading = fLoading || aLoading;
 
@@ -62,10 +62,22 @@ export default function Demand() {
     [forecastRows, actualRows]
   );
 
-  const kpis: DemandKPIs = useMemo(
-    () => computeDemandKPIs(forecastRows, aligned),
-    [forecastRows, aligned]
-  );
+  const latestDate = useMemo(() => {
+    const actualDates = getAvailableDates(actualRows);
+    for (let i = actualDates.length - 1; i >= 0; i--) {
+      if (actualRows.some(r => r.Date === actualDates[i] && isOnPeak(Number(r.HE)))) return actualDates[i];
+    }
+    if (actualDates.length) return actualDates[actualDates.length - 1];
+    const dates = getAvailableDates(forecastRows);
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [forecastRows, actualRows]);
+
+  const kpis: DemandKPIs = useMemo(() => {
+    if (!latestDate) return computeDemandKPIs(forecastRows, aligned);
+    const fLatest = forecastRows.filter(r => r.Date === latestDate);
+    const aLatest = aligned.filter(r => r.Date === latestDate);
+    return computeDemandKPIs(fLatest, aLatest);
+  }, [forecastRows, aligned, latestDate]);
 
   const fallbackSummary = useMemo(() => deterministicDemandSummary(kpis), [kpis]);
 

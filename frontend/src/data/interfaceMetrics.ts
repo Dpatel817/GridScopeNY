@@ -25,6 +25,7 @@ export function computeFlowKPIs(rows: FlowRow[]): FlowKPIs {
   const byIface: Record<string, { absSum: number; count: number; classification: string }> = {};
   const activeSet = new Set<string>();
 
+  const hasHE = rows.some(r => r.HE != null);
   for (const r of rows) {
     const raw = String(r[nameCol] || '');
     if (!raw) continue;
@@ -36,8 +37,8 @@ export function computeFlowKPIs(rows: FlowRow[]): FlowKPIs {
 
     activeSet.add(raw);
 
-    if (isOnPeak(he)) {
-      const intervalKey = `${r.Date}_${r.HE}`;
+    if (!hasHE || isOnPeak(he)) {
+      const intervalKey = hasHE ? `${r.Date}_${r.HE}` : `${r.Date}`;
       if (meta.classification === 'Internal') {
         intervalInternal[intervalKey] = (intervalInternal[intervalKey] || 0) + flow;
       } else {

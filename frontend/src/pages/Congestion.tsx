@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
@@ -89,54 +89,113 @@ function ConstraintImpactAnalysis() {
   const [facility, setFacility] = useState('');
   const [contingency, setContingency] = useState('');
   const [cleanOnly, setCleanOnly] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [data, setData] = useState<ConstraintImpactData | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPivot, setShowPivot] = useState(false);
   const [showZonal, setShowZonal] = useState(false);
   const [showGens, setShowGens] = useState(false);
+  const [showFacilityDropdown, setShowFacilityDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   const fetchIdRef = useRef(0);
 
-  const fetchImpact = useCallback(async (overrides?: { resetDate?: boolean }) => {
+  const fetchImpact = useCallback(async (params: {
+    market: string; facility?: string; contingency?: string;
+    date?: string; he?: number | ''; cleanOnly?: boolean; search?: string;
+  }) => {
     const id = ++fetchIdRef.current;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ market });
-      const d = overrides?.resetDate ? '' : date;
-      if (d) params.set('date', d);
-      if (he !== '') params.set('he', String(he));
-      if (facility) params.set('facility', facility);
-      if (contingency) params.set('contingency', contingency);
-      if (cleanOnly) params.set('clean_only', 'true');
-      const res = await fetch(`/api/constraint-impact?${params}`);
+      const qs = new URLSearchParams({ market: params.market });
+      if (params.facility) qs.set('facility', params.facility);
+      if (params.contingency) qs.set('contingency', params.contingency);
+      if (params.date) qs.set('date', params.date);
+      if (params.he !== undefined && params.he !== '') qs.set('he', String(params.he));
+      if (params.cleanOnly) qs.set('clean_only', 'true');
+      if (params.search) qs.set('search', params.search);
+      const res = await fetch(`/api/constraint-impact?${qs}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (id !== fetchIdRef.current) return;
       setData(json);
-      if (json.date && !d) setDate(json.date);
+      if (json.date && !params.date) setDate(json.date);
     } catch {
       if (id === fetchIdRef.current) setData(null);
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, [market, date, he, facility, contingency, cleanOnly]);
-
-  const [initialized, setInitialized] = useState(false);
+  }, []);
 
   useEffect(() => {
-    if (!initialized) { setInitialized(true); fetchImpact(); }
-  }, [initialized]);
+    fetchImpact({ market });
+  }, [market]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowFacilityDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   function handleMarketChange(m: 'DA' | 'RT') {
     if (m === market) return;
-    setDate(''); setHe(''); setFacility(''); setContingency('');
-    setCleanOnly(false); setData(null); setMarket(m);
+    setMarket(m);
+    setFacility(''); setContingency(''); setDate(''); setHe('');
+    setCleanOnly(false); setData(null); setSearchTerm('');
   }
-  function handleDateChange(d: string) { setDate(d); setHe(''); setFacility(''); setContingency(''); setCleanOnly(false); }
-  function handleFacilityChange(f: string) { setFacility(f); setContingency(''); setCleanOnly(false); setHe(''); }
 
-  useEffect(() => { if (initialized) fetchImpact({ resetDate: true }); }, [market]);
-  useEffect(() => { if (initialized && date) fetchImpact(); }, [date, he, facility, contingency, cleanOnly]);
+  function handleFacilitySelect(f: string) {
+    setFacility(f);
+    setContingency(''); setDate(''); setHe(''); setCleanOnly(false);
+    setShowFacilityDropdown(false);
+    setSearchTerm(f);
+    fetchImpact({ market, facility: f });
+  }
+
+  function handleContingencySelect(c: string) {
+    setContingency(c);
+    setDate(''); setHe(''); setCleanOnly(false);
+    fetchImpact({ market, facility, contingency: c });
+  }
+
+  function handleDateChange(d: string) {
+    setDate(d); setHe(''); setCleanOnly(false);
+    fetchImpact({ market, facility, contingency, date: d });
+  }
+
+  function handleHeChange(h: number | '') {
+    setHe(h); setCleanOnly(false);
+    fetchImpact({ market, facility, contingency, date, he: h });
+  }
+
+  function handleCleanOnlyChange(v: boolean) {
+    setCleanOnly(v);
+    fetchImpact({ market, facility, contingency, date, he, cleanOnly: v });
+  }
+
+  function handleSearchChange(val: string) {
+    setSearchTerm(val);
+    setShowFacilityDropdown(true);
+    if (facility) {
+      setFacility(''); setContingency(''); setDate(''); setHe(''); setCleanOnly(false);
+    }
+    fetchImpact({ market, search: val });
+  }
+
+  function clearSelections() {
+    setFacility(''); setContingency(''); setDate(''); setHe('');
+    setCleanOnly(false); setSearchTerm('');
+    fetchImpact({ market });
+  }
+
+  const filteredFacilities = data?.facilities || [];
+  const contingencies = data?.contingencies || [];
+  const availableDates = data?.available_dates || [];
+  const availableHes = data?.available_hes || [];
 
   const summary = data?.constraint_summary;
   const zonal = data?.zonal_impact || [];
@@ -144,8 +203,10 @@ function ConstraintImpactAnalysis() {
   const cleanPrints = data?.clean_prints || [];
   const mixedPrints = data?.mixed_prints || [];
   const pivot = data?.congestion_pivot || [];
-  const hasConstraintSelected = facility !== '' && contingency !== '';
   const hasCleanPrintData = cleanPrints.length > 0 || mixedPrints.length > 0;
+  const hasFullSelection = facility !== '' && contingency !== '' && date !== '';
+
+  const stepNumber = !facility ? 1 : !contingency ? 2 : !date ? 3 : 4;
 
   const pivotHours = useMemo(() => {
     if (!pivot.length) return [];
@@ -158,81 +219,170 @@ function ConstraintImpactAnalysis() {
         Constraint Impact Analysis
       </div>
       <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
-        Isolate a specific constraint print and analyze its zonal and generator-level market impact.
-        Select a monitored element and contingency to identify clean prints.
+        Drill down into a specific constraint to analyze its zonal and generator-level market impact.
       </p>
 
-      <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div className="pill-group">
-          <span className="pill-label">MARKET:</span>
-          {(['DA', 'RT'] as const).map(m => (
-            <button key={m} className={`pill${market === m ? ' active' : ''}`} onClick={() => handleMarketChange(m)}>
-              {m === 'DA' ? 'Day Ahead' : 'Real Time'}
-            </button>
-          ))}
+      <div className="chart-card" style={{ padding: '20px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+
+          <div style={{ flex: '0 0 auto' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Step 1 · Market
+            </div>
+            <div className="pill-group" style={{ margin: 0 }}>
+              {(['DA', 'RT'] as const).map(m => (
+                <button key={m} className={`pill${market === m ? ' active' : ''}`} onClick={() => handleMarketChange(m)}>
+                  {m === 'DA' ? 'Day Ahead' : 'Real Time'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ flex: '1 1 260px', minWidth: 200 }} ref={searchRef}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: stepNumber >= 1 ? 'var(--text-muted)' : 'var(--border)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Step 2 · Search Constraint
+            </div>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                className="pcc-date"
+                placeholder="Type to search constraints..."
+                value={searchTerm}
+                onChange={e => handleSearchChange(e.target.value)}
+                onFocus={() => setShowFacilityDropdown(true)}
+                style={{ width: '100%', fontSize: 13, padding: '8px 12px' }}
+              />
+              {facility && (
+                <button
+                  onClick={clearSelections}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)', padding: '2px 4px' }}
+                >
+                  ✕
+                </button>
+              )}
+              {showFacilityDropdown && !facility && filteredFacilities.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: 240,
+                  overflowY: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100,
+                }}>
+                  {filteredFacilities.slice(0, 50).map(f => (
+                    <div
+                      key={f}
+                      onClick={() => handleFacilitySelect(f)}
+                      style={{
+                        padding: '8px 14px', cursor: 'pointer', fontSize: 12,
+                        borderBottom: '1px solid var(--border)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {f}
+                    </div>
+                  ))}
+                  {filteredFacilities.length > 50 && (
+                    <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
+                      {filteredFacilities.length - 50} more — refine search
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {facility && (
+            <div style={{ flex: '0 0 auto', minWidth: 200 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Step 3 · Contingency
+              </div>
+              {contingencies.length > 0 ? (
+                <select className="gen-map-select" value={contingency} onChange={e => handleContingencySelect(e.target.value)} style={{ maxWidth: 280, fontSize: 13 }}>
+                  <option value="">Select contingency...</option>
+                  {contingencies.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              ) : (
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading...</span>
+              )}
+            </div>
+          )}
+
+          {facility && contingency && (
+            <div style={{ flex: '0 0 auto', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Step 4 · Timestamp
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {availableDates.length > 0 ? (
+                    <select className="gen-map-select" value={date} onChange={e => handleDateChange(e.target.value)} style={{ fontSize: 13 }}>
+                      {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No dates</span>
+                  )}
+                  {date && availableHes.length > 0 && (
+                    <select className="gen-map-select" value={he} onChange={e => handleHeChange(e.target.value === '' ? '' : Number(e.target.value))} style={{ fontSize: 13 }}>
+                      <option value="">All Hours</option>
+                      {availableHes.map(h => (
+                        <option key={h} value={h}>
+                          HE {h}{cleanPrints.some(p => p.he === h) ? ' ★' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        {data && data.available_dates.length > 0 && (
-          <select className="gen-map-select" value={date} onChange={e => handleDateChange(e.target.value)}>
-            {data.available_dates.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
+
+        {facility && contingency && date && hasCleanPrintData && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <label className="cia-toggle-label" style={{ margin: 0 }}>
+              <input type="checkbox" checked={cleanOnly} onChange={e => handleCleanOnlyChange(e.target.checked)} />
+              <span>Clean prints only</span>
+              <span className="cia-tag cia-clean" style={{ marginLeft: 4 }}>{cleanPrints.length}</span>
+            </label>
+          </div>
         )}
-        {data && data.facilities.length > 0 && (
-          <select className="gen-map-select" value={facility} onChange={e => handleFacilityChange(e.target.value)} style={{ maxWidth: 260 }}>
-            <option value="">Select Monitored Element</option>
-            {data.facilities.map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
+
+        {!facility && (
+          <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+            Search and select a constraint above to begin analysis. {filteredFacilities.length > 0 && <>{filteredFacilities.length} constraints available.</>}
+          </div>
         )}
-        {data && data.contingencies.length > 0 && (
-          <select className="gen-map-select" value={contingency} onChange={e => setContingency(e.target.value)} style={{ maxWidth: 260 }}>
-            <option value="">Select Contingency</option>
-            {data.contingencies.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        )}
-        {data && data.available_hes.length > 0 && (
-          <select className="gen-map-select" value={he} onChange={e => setHe(e.target.value === '' ? '' : Number(e.target.value))}>
-            <option value="">All Hours</option>
-            {data.available_hes.map(h => (
-              <option key={h} value={h}>
-                HE {h}{hasConstraintSelected && cleanPrints.some(p => p.he === h) ? ' ★' : ''}
-              </option>
-            ))}
-          </select>
-        )}
-        {hasConstraintSelected && hasCleanPrintData && (
-          <label className="cia-toggle-label">
-            <input type="checkbox" checked={cleanOnly} onChange={e => setCleanOnly(e.target.checked)} />
-            <span>Clean prints only</span>
-            <span className="cia-tag cia-clean" style={{ marginLeft: 4 }}>{cleanPrints.length}</span>
-          </label>
+        {facility && !contingency && (
+          <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+            Select a contingency for <strong>{facility}</strong> to continue. {contingencies.length} contingencies available.
+          </div>
         )}
       </div>
 
       {loading && <div className="loading"><div className="spinner" /> Analyzing constraint impact...</div>}
 
-      {!loading && summary && (
+      {!loading && hasFullSelection && summary && (
         <>
-          {hasConstraintSelected && (
-            <div className="insight-card" style={{ marginBottom: 16, borderLeftColor: summary.is_clean_print ? 'var(--accent)' : 'var(--primary)' }}>
-              <div className="insight-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                Selected Print
-                {summary.is_clean_print && <span className="cia-tag cia-clean">Clean Print</span>}
-                {summary.he !== null && !summary.is_clean_print && hasCleanPrintData && <span className="cia-tag cia-mixed">Mixed Print</span>}
-              </div>
-              <div className="insight-body">
-                <strong>Monitored Element:</strong> {summary.facility}
-                {summary.contingency !== 'All' && <> | <strong>Contingency:</strong> {summary.contingency}</>}
-                {' '}| <strong>Market:</strong> {market === 'DA' ? 'Day Ahead' : 'Real Time'}
-                {' '}| <strong>Date:</strong> {summary.date}
-                {summary.he !== null ? <> | <strong>HE:</strong> {summary.he}</> : <> | <strong>Hours:</strong> {summary.unique_hours}</>}
-                {' '}| <strong>Cost range:</strong> ${summary.min_cost.toFixed(2)} – ${summary.max_cost.toFixed(2)}
-                {hasCleanPrintData && (
-                  <> | <strong>Print analysis:</strong> {summary.clean_print_count} clean / {summary.mixed_print_count} mixed of {summary.clean_print_count + summary.mixed_print_count} total prints</>
-                )}
-              </div>
+          <div className="insight-card" style={{ marginBottom: 16, borderLeftColor: summary.is_clean_print ? 'var(--accent)' : 'var(--primary)' }}>
+            <div className="insight-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              Selected Print
+              {summary.is_clean_print && <span className="cia-tag cia-clean">Clean Print</span>}
+              {summary.he !== null && !summary.is_clean_print && hasCleanPrintData && <span className="cia-tag cia-mixed">Mixed Print</span>}
             </div>
-          )}
+            <div className="insight-body">
+              <strong>Monitored Element:</strong> {summary.facility}
+              {summary.contingency !== 'All' && <> | <strong>Contingency:</strong> {summary.contingency}</>}
+              {' '}| <strong>Market:</strong> {market === 'DA' ? 'Day Ahead' : 'Real Time'}
+              {' '}| <strong>Date:</strong> {summary.date}
+              {summary.he !== null ? <> | <strong>HE:</strong> {summary.he}</> : <> | <strong>Hours:</strong> {summary.unique_hours}</>}
+              {' '}| <strong>Cost range:</strong> ${summary.min_cost.toFixed(2)} – ${summary.max_cost.toFixed(2)}
+              {hasCleanPrintData && (
+                <> | <strong>Print analysis:</strong> {summary.clean_print_count} clean / {summary.mixed_print_count} mixed of {summary.clean_print_count + summary.mixed_print_count} total prints</>
+              )}
+            </div>
+          </div>
 
-          <div className="kpi-grid" style={{ gridTemplateColumns: hasConstraintSelected ? 'repeat(6, 1fr)' : 'repeat(5, 1fr)', marginBottom: 16 }}>
+          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 16 }}>
             <div className="kpi-card accent">
               <div className="kpi-label">Total Constraint Cost</div>
               <div className="kpi-value">${summary.total_cost.toLocaleString()}</div>
@@ -255,17 +405,15 @@ function ConstraintImpactAnalysis() {
               <div className="kpi-label">Hours Active</div>
               <div className="kpi-value">{summary.unique_hours}</div>
             </div>
-            {hasConstraintSelected && (
-              <div className="kpi-card">
-                <div className="kpi-label">Clean Prints</div>
-                <div className="kpi-value" style={{ color: summary.clean_print_count > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
-                  {summary.clean_print_count} <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/ {summary.clean_print_count + summary.mixed_print_count}</span>
-                </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Clean Prints</div>
+              <div className="kpi-value" style={{ color: summary.clean_print_count > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
+                {summary.clean_print_count} <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/ {summary.clean_print_count + summary.mixed_print_count}</span>
               </div>
-            )}
+            </div>
           </div>
 
-          {hasConstraintSelected && cleanPrints.length > 0 && (
+          {cleanPrints.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="chart-card-header" style={{ padding: '14px 20px' }}>
@@ -277,7 +425,7 @@ function ConstraintImpactAnalysis() {
                     <button
                       key={`${p.date}-${p.he}`}
                       className={`cia-print-btn${he === p.he ? ' active' : ''}`}
-                      onClick={() => setHe(p.he)}
+                      onClick={() => handleHeChange(p.he)}
                     >
                       HE {p.he}
                     </button>
@@ -287,7 +435,7 @@ function ConstraintImpactAnalysis() {
             </div>
           )}
 
-          {pivot.length > 0 && hasConstraintSelected && (
+          {pivot.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="chart-card-header" style={{ padding: '14px 20px', cursor: 'pointer' }} onClick={() => setShowPivot(!showPivot)}>
@@ -327,7 +475,7 @@ function ConstraintImpactAnalysis() {
                                     background: isClean ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent',
                                     cursor: 'pointer',
                                   }}
-                                  onClick={() => { if (val !== 0) setHe(Number(h)); }}
+                                  onClick={() => { if (val !== 0) handleHeChange(Number(h)); }}
                                 >
                                   {val === 0 ? '·' : val.toFixed(1)}
                                 </td>
@@ -475,14 +623,267 @@ function ConstraintImpactAnalysis() {
         </>
       )}
 
-      {!loading && data?.status === 'no_data' && (
+      {!loading && data?.status === 'no_data' && hasFullSelection && (
         <div className="insight-card">
           <div className="insight-title">No Data</div>
           <div className="insight-body">
             No constraint bindings found for the selected filters.
             {cleanOnly && <> Try disabling the "Clean prints only" filter. </>}
-            {data.available_dates.length > 0 && <> Available dates: {data.available_dates[0]} to {data.available_dates[data.available_dates.length - 1]}.</>}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface OutageRow {
+  PTID?: number;
+  'Outage ID'?: string;
+  'Equipment Name'?: string;
+  'Equipment Type'?: string;
+  'Date Out'?: string;
+  'Time Out'?: string;
+  'Date In'?: string;
+  'Time In'?: string;
+  'Called In'?: string;
+  Status?: string;
+  'Status Date'?: string;
+  Message?: string;
+  [key: string]: any;
+}
+
+function parseOutageDate(val: string | undefined): Date | null {
+  if (!val) return null;
+  const parts = val.split('/');
+  if (parts.length === 3) {
+    const [m, d, y] = parts;
+    const dt = new Date(Number(y), Number(m) - 1, Number(d));
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  return null;
+}
+
+function fmtDate(val: string | undefined): string {
+  if (!val) return '—';
+  const d = parseOutageDate(val);
+  if (!d) return val;
+  return d.toISOString().slice(0, 10);
+}
+
+function OutageScheduleSection() {
+  const { data: outageData, loading } = useDataset('outage_schedule', 'daily', undefined, undefined, 20000, 730);
+  const [expanded, setExpanded] = useState(true);
+  const [dateOutBefore, setDateOutBefore] = useState('');
+  const [dateInAfter, setDateInAfter] = useState('');
+  const [equipFilter, setEquipFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 25;
+
+  const allRows: OutageRow[] = useMemo(
+    () => (outageData?.data || []) as OutageRow[],
+    [outageData]
+  );
+
+  useEffect(() => {
+    if (!dateInAfter) {
+      const today = new Date().toISOString().slice(0, 10);
+      setDateInAfter(today);
+    }
+  }, []);
+
+  const statuses = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of allRows) {
+      if (r.Status) s.add(r.Status);
+    }
+    return [...s].sort();
+  }, [allRows]);
+
+  const filtered = useMemo(() => {
+    let result = allRows;
+
+    if (dateOutBefore) {
+      const cutoff = new Date(dateOutBefore);
+      result = result.filter(r => {
+        const d = parseOutageDate(r['Date Out']);
+        return d ? d <= cutoff : false;
+      });
+    }
+
+    if (dateInAfter) {
+      const cutoff = new Date(dateInAfter);
+      result = result.filter(r => {
+        const d = parseOutageDate(r['Date In']);
+        return d ? d >= cutoff : false;
+      });
+    }
+
+    if (equipFilter) {
+      const q = equipFilter.toLowerCase();
+      result = result.filter(r =>
+        (r['Equipment Name'] || '').toLowerCase().includes(q) ||
+        (r['Equipment Type'] || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (statusFilter) {
+      result = result.filter(r => r.Status === statusFilter);
+    }
+
+    return result;
+  }, [allRows, dateOutBefore, dateInAfter, equipFilter, statusFilter]);
+
+  useEffect(() => { setPage(0); }, [filtered.length]);
+
+  const paged = useMemo(() =>
+    filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtered, page]
+  );
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+
+  return (
+    <div className="section-container" style={{ marginTop: 24 }}>
+      <div className="collapsible-header" onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>
+        <span className="chevron">{expanded ? '▾' : '▸'}</span>
+        Outage Schedule
+        <span className="badge badge-primary" style={{ marginLeft: 8 }}>{filtered.length} outages</span>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 12 }}>
+          {loading && (
+            <div className="loading"><div className="spinner" /> Loading outage data...</div>
+          )}
+
+          {!loading && allRows.length === 0 && (
+            <div className="insight-card">
+              <div className="insight-body">No outage schedule data available.</div>
+            </div>
+          )}
+
+          {!loading && allRows.length > 0 && (
+            <>
+              <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
+                <div className="filter-group">
+                  <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                    Date Out Before
+                  </label>
+                  <input
+                    type="date"
+                    className="pcc-date"
+                    value={dateOutBefore}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setDateOutBefore(e.target.value)}
+                  />
+                </div>
+                <div className="filter-group">
+                  <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                    Date In After
+                  </label>
+                  <input
+                    type="date"
+                    className="pcc-date"
+                    value={dateInAfter}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setDateInAfter(e.target.value)}
+                  />
+                </div>
+                <div className="filter-group">
+                  <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                    Equipment
+                  </label>
+                  <input
+                    type="text"
+                    className="pcc-date"
+                    placeholder="Search equipment..."
+                    value={equipFilter}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setEquipFilter(e.target.value)}
+                    style={{ minWidth: 180 }}
+                  />
+                </div>
+                <div className="filter-group">
+                  <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                    Status
+                  </label>
+                  <select
+                    className="pcc-date"
+                    value={statusFilter}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="">All Statuses</option>
+                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {(dateOutBefore || dateInAfter || equipFilter || statusFilter) && (
+                  <button
+                    className="pcc-btn"
+                    onClick={() => { setDateOutBefore(''); setDateInAfter(''); setEquipFilter(''); setStatusFilter(''); }}
+                    style={{ fontSize: 12, padding: '6px 12px' }}
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+
+              <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="rank-table" style={{ width: '100%', fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th>Equipment Name</th>
+                        <th>Type</th>
+                        <th>Date Out</th>
+                        <th>Date In</th>
+                        <th>Status</th>
+                        <th>Called In</th>
+                        <th>Outage ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paged.map((r, i) => (
+                        <tr key={r['Outage ID'] || i}>
+                          <td style={{ fontWeight: 600, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r['Equipment Name'] || '—'}
+                          </td>
+                          <td>{r['Equipment Type'] || '—'}</td>
+                          <td>{fmtDate(r['Date Out'])}</td>
+                          <td>{fmtDate(r['Date In'])}</td>
+                          <td>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              background: (r.Status || '').includes('FORCED') ? 'var(--danger-bg, #fef2f2)' : 'var(--bg-secondary)',
+                              color: (r.Status || '').includes('FORCED') ? 'var(--danger, #ef4444)' : 'var(--text-secondary)',
+                            }}>
+                              {r.Status || '—'}
+                            </span>
+                          </td>
+                          <td>{r['Called In'] || '—'}</td>
+                          <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r['Outage ID'] || '—'}</td>
+                        </tr>
+                      ))}
+                      {paged.length === 0 && (
+                        <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No outages match filters</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="pcc-btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                      <button className="pcc-btn" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -607,7 +1008,7 @@ export default function Congestion() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', 'raw');
+  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 20000, 730);
 
   const rows: CongestionRow[] = useMemo(
     () => (daConstraints?.data || []) as CongestionRow[],
@@ -635,10 +1036,16 @@ export default function Congestion() {
     }
   }, [availableDates]);
 
-  const kpis: CongestionKPIs = useMemo(
-    () => computeCongestionKPIs(rows),
-    [rows]
-  );
+  const latestDate = useMemo(() => {
+    const dates = getAvailableDates(rows);
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [rows]);
+
+  const kpis: CongestionKPIs = useMemo(() => {
+    if (!latestDate) return computeCongestionKPIs(rows);
+    const latest = rows.filter((r: any) => r.Date === latestDate);
+    return computeCongestionKPIs(latest);
+  }, [rows, latestDate]);
 
   const fallbackSummary = useMemo(() => deterministicCongestionSummary(kpis), [kpis]);
 
@@ -857,6 +1264,8 @@ export default function Congestion() {
       )}
 
       <ConstraintImpactAnalysis />
+
+      <OutageScheduleSection />
 
       <div className="section-container">
         <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>

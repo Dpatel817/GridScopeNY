@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -39,7 +40,151 @@ def _clean_df_for_json(df: pd.DataFrame) -> list[dict]:
     return records
 
 
-def _load_csv_safe(filename: str) -> pd.DataFrame:
+_COLUMN_RENAMES = {
+    "LBMP ($/MWHr)": "LMP",
+    "Marginal Cost Losses ($/MWHr)": "MLC",
+    "Marginal Cost Congestion ($/MWHr)": "MCC",
+    "Interface Name": "Interface",
+    "Point ID": "PTID",
+    "Flow (MWH)": "Flow",
+    "Positive Limit (MWH)": "Positive Limit",
+    "Negative Limit (MWH)": "Negative Limit",
+    "Fuel Category": "Fuel Type",
+    "Gen MW": "Generation MW",
+    "Constraint Cost($)": "Constraint Cost",
+    "Generator Name": "Generator",
+    "Generator PTID": "PTID",
+    "10 Min Spinning Reserve ($/MWHr)": "10 Min Spin",
+    "10 Min Non-Synchronous Reserve ($/MWHr)": "10 Min Non-Sync",
+    "30 Min Operating Reserve ($/MWHr)": "30 Min OR",
+    "NYCA Regulation Capacity ($/MWHr)": "Reg Cap",
+    "NYCA Regulation Movement ($/MW)": "Reg Move",
+}
+
+_ZONE_DATASETS = {
+    "da_lbmp_zone", "rt_lbmp_zone", "integrated_rt_lbmp_zone",
+}
+_GEN_DATASETS = {
+    "da_lbmp_gen", "rt_lbmp_gen", "integrated_rt_lbmp_gen",
+    "reference_bus_lbmp", "ext_rto_cts_price",
+}
+
+
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    df = df.rename(columns=_COLUMN_RENAMES)
+
+    if "Name" in df.columns:
+        fname = df.attrs.get("_source_file", "")
+        if "Zone" not in df.columns:
+            df["Zone"] = df["Name"]
+        if "Generator" not in df.columns:
+            df["Generator"] = df["Name"]
+
+    if "Time Stamp" in df.columns and "Date" not in df.columns:
+        ts = pd.to_datetime(df["Time Stamp"], errors="coerce")
+        df["Date"] = ts.dt.strftime("%Y-%m-%d")
+        df["HE"] = ts.dt.hour
+        df["Month"] = ts.dt.strftime("%Y-%m")
+        df["Year"] = ts.dt.year
+
+    _ISOLF_RENAMES = {
+        "Capitl": "CAPITL", "Centrl": "CENTRL", "Dunwod": "DUNWOD",
+        "Genese": "GENESE", "Hud Vl": "HUD VL", "Longil": "LONGIL",
+        "Mhk Vl": "MHK VL", "Millwd": "MILLWD", "North": "NORTH", "West": "WEST",
+    }
+    df = df.rename(columns=_ISOLF_RENAMES)
+
+    if "Timestamp" in df.columns and "Time Stamp" not in df.columns:
+        df.rename(columns={"Timestamp": "Time Stamp"}, inplace=True)
+        if "Date" not in df.columns:
+            ts = pd.to_datetime(df["Time Stamp"], errors="coerce")
+            df["Date"] = ts.dt.strftime("%Y-%m-%d")
+            df["HE"] = ts.dt.hour
+            df["Month"] = ts.dt.strftime("%Y-%m")
+            df["Year"] = ts.dt.year
+
+    for tc in ["RTC Execution Time", "RTC End Time Stamp", "Insert Time",
+               "Event Start Time", "Forecast Date"]:
+        if tc in df.columns and "Date" not in df.columns:
+            ts = pd.to_datetime(df[tc], errors="coerce")
+            df["Date"] = ts.dt.strftime("%Y-%m-%d")
+            df["HE"] = ts.dt.hour
+            break
+
+    return df
+
+
+MAX_ROWS_FOR_CACHE = 5_000_000
+DEFAULT_RECENT_DAYS = 90
+
+_TIME_COL_HINTS = [
+    "Time Stamp", "Timestamp", "RTC Execution Time", "RTC End Time Stamp",
+    "Event Start Time", "Event End Time", "Forecast Date", "Vintage Date",
+    "Date", "source_date", "Out Start", "Out End", "Insert Time",
+    "Scheduled Out", "Scheduled In", "Status Time", "Date Out", "Date In",
+]
+
+
+_DAILY_CACHE_DIR = PROCESSED_DIR / "_daily_cache"
+
+_daily_mem_cache: dict[str, tuple[float, pd.DataFrame]] = {}
+_daily_cache_lock = threading.Lock()
+
+
+def _get_daily_cached(dataset_key: str, meta: dict) -> pd.DataFrame | None:
+    _DAILY_CACHE_DIR.mkdir(exist_ok=True)
+    daily_path = _DAILY_CACHE_DIR / f"{dataset_key}_daily.parquet"
+    source_file = meta["file"]
+    source_path = (PROCESSED_DIR / source_file).with_suffix(".parquet")
+    if not source_path.exists():
+        source_path = PROCESSED_DIR / source_file
+    if not source_path.exists():
+        return None
+    src_mtime = os.path.getmtime(source_path)
+    if daily_path.exists():
+        cache_mtime = os.path.getmtime(daily_path)
+        if cache_mtime >= src_mtime:
+            with _daily_cache_lock:
+                if dataset_key in _daily_mem_cache:
+                    mem_mtime, mem_df = _daily_mem_cache[dataset_key]
+                    if mem_mtime >= cache_mtime:
+                        return mem_df.copy()
+            try:
+                df = pd.read_parquet(daily_path)
+                logger.info("Loaded daily cache %s: %d rows", daily_path.name, len(df))
+                with _daily_cache_lock:
+                    _daily_mem_cache[dataset_key] = (cache_mtime, df)
+                return df.copy()
+            except Exception:
+                pass
+    return None
+
+
+def _build_daily_cache(dataset_key: str, meta: dict, df: pd.DataFrame) -> None:
+    _DAILY_CACHE_DIR.mkdir(exist_ok=True)
+    daily_path = _DAILY_CACHE_DIR / f"{dataset_key}_daily.parquet"
+    tmp_path = daily_path.with_suffix(".parquet.tmp")
+    try:
+        agg = _aggregate_df(df, meta, "daily")
+        agg.to_parquet(tmp_path, index=False)
+        tmp_path.rename(daily_path)
+        mtime = os.path.getmtime(daily_path)
+        with _daily_cache_lock:
+            _daily_mem_cache[dataset_key] = (mtime, agg.copy())
+        logger.info("Built daily cache %s: %d rows", daily_path.name, len(agg))
+    except Exception as exc:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        logger.warning("Failed to build daily cache for %s: %s", dataset_key, exc)
+
+
+_LARGE_DATASETS = {"da_lbmp_zone", "rt_lbmp_zone", "damasp", "rtasp", "rtfuelmix", "pal", "external_limits_flows"}
+
+
+def _load_csv_safe(filename: str, days: int | None = None) -> pd.DataFrame:
     csv_path: Path = PROCESSED_DIR / filename
     parquet_path = csv_path.with_suffix(".parquet")
 
@@ -54,15 +199,39 @@ def _load_csv_safe(filename: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     mtime = os.path.getmtime(path)
-    cache_key = str(path)
+    cache_key = f"{path}:{days}"
     cached = _df_cache.get(cache_key)
     if cached and cached[0] == mtime:
         return cached[1].copy()
 
     try:
         if use_parquet:
-            df = pd.read_parquet(path)
-            logger.info("Loaded parquet %s: %d rows", path.name, len(df))
+            import pyarrow.parquet as pq
+            pf = pq.ParquetFile(path)
+            schema_names = [f.name.strip() for f in pf.schema_arrow]
+            time_col = None
+            for col in _TIME_COL_HINTS:
+                if col in schema_names:
+                    time_col = col
+                    break
+
+            total_rows = pf.metadata.num_rows
+            if time_col and total_rows > MAX_ROWS_FOR_CACHE and days != 0:
+                filter_days = days or DEFAULT_RECENT_DAYS
+                cutoff = pd.Timestamp.now() - pd.Timedelta(days=filter_days)
+                tc_field = pf.schema_arrow.field(time_col)
+                tc_type = str(tc_field.type)
+
+                if "timestamp" in tc_type:
+                    df = pd.read_parquet(path, filters=[(time_col, ">=", cutoff)])
+                else:
+                    cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+                    df = pd.read_parquet(path, filters=[(time_col, ">=", cutoff_str)])
+
+                logger.info("Loaded+filtered parquet %s: %d/%d rows (last %d days)", path.name, len(df), total_rows, filter_days)
+            else:
+                df = pd.read_parquet(path)
+                logger.info("Loaded parquet %s: %d rows", path.name, len(df))
         else:
             df = pd.read_csv(path, low_memory=False)
             logger.info("Loaded CSV %s: %d rows", path.name, len(df))
@@ -75,17 +244,15 @@ def _load_csv_safe(filename: str) -> pd.DataFrame:
     df.columns = df.columns.str.strip()
 
     if not use_parquet:
-        DATETIME_HINTS = [
-            "Time Stamp", "Timestamp", "RTC Execution Time", "RTC End Time Stamp",
-            "Event Start Time", "Event End Time", "Forecast Date", "Vintage Date",
-            "Date", "source_date", "Out Start", "Out End", "Insert Time",
-            "Scheduled Out", "Scheduled In", "Status Time", "Date Out", "Date In",
-        ]
-        for col in DATETIME_HINTS:
+        for col in _TIME_COL_HINTS:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
+                if df[col].dtype == "object":
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
 
-    _df_cache[cache_key] = (mtime, df)
+    df = _normalize_columns(df)
+
+    if len(df) <= MAX_ROWS_FOR_CACHE:
+        _df_cache[cache_key] = (mtime, df)
     return df.copy()
 
 
@@ -636,12 +803,46 @@ def get_dataset_json(
     limit: int = 10000,
     filter_col: str | None = None,
     filter_val: str | None = None,
+    days: int | None = None,
 ) -> dict:
     meta = DATASET_META.get(dataset_key)
     if not meta:
         return {"dataset": dataset_key, "status": "unknown", "rows": 0, "data": []}
 
-    df = _load_csv_safe(meta["file"])
+    use_daily_cache = (
+        resolution == "daily"
+        and dataset_key in _LARGE_DATASETS
+        and not filter_col
+    )
+
+    if use_daily_cache:
+        cached = _get_daily_cached(dataset_key, meta)
+        if cached is not None:
+            df = cached
+            if days and days > 0:
+                date_col = meta.get("date_col", "Date")
+                if date_col in df.columns:
+                    cutoff = (pd.Timestamp.now() - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
+                    df = df[df[date_col] >= cutoff]
+            total_raw = len(df)
+            total_after_agg = total_raw
+            if limit and len(df) > limit:
+                df = df.tail(limit)
+            records = _clean_df_for_json(df)
+            return {
+                "dataset": dataset_key,
+                "label": meta.get("label", dataset_key),
+                "status": "ok",
+                "rows": total_raw,
+                "aggregated_rows": total_after_agg,
+                "returned_rows": len(records),
+                "resolution": resolution,
+                "columns": list(df.columns),
+                "data": records,
+                "meta": _safe_meta(meta),
+            }
+
+    df = _load_csv_safe(meta["file"], days=days)
     if df.empty:
         return {
             "dataset": dataset_key,
@@ -653,10 +854,19 @@ def get_dataset_json(
             "meta": _safe_meta(meta),
         }
 
+    if days and days > 0:
+        date_col = meta.get("date_col", "Date")
+        if date_col in df.columns:
+            cutoff = (pd.Timestamp.now() - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
+            df = df[df[date_col] >= cutoff]
+
     total_raw = len(df)
 
     if filter_col and filter_val and filter_col in df.columns:
         df = df[df[filter_col].astype(str) == filter_val].copy()
+
+    if use_daily_cache and not filter_col:
+        _build_daily_cache(dataset_key, meta, df)
 
     df = _aggregate_df(df, meta, resolution)
     total_after_agg = len(df)

@@ -15,8 +15,9 @@ export function computePriceKPIs(daRows: PriceRow[], rtRows: PriceRow[]): PriceK
   const daFiltered = filterNyisoOnly(daRows);
   const rtFiltered = filterNyisoOnly(rtRows);
 
-  const onPeakDA = daFiltered.filter(r => isOnPeak(r.HE));
-  const onPeakRT = rtFiltered.filter(r => isOnPeak(r.HE));
+  const hasHE = daFiltered.some(r => r.HE != null);
+  const onPeakDA = hasHE ? daFiltered.filter(r => isOnPeak(r.HE)) : daFiltered;
+  const onPeakRT = hasHE ? rtFiltered.filter(r => isOnPeak(r.HE)) : rtFiltered;
 
   const onPeakAvgDA = avg(onPeakDA.map(r => Number(r.LMP)));
   const onPeakAvgRT = avg(onPeakRT.map(r => Number(r.LMP)));
@@ -68,13 +69,14 @@ function computeTopDartZone(
 ): { zone: string; avgSpread: number; maxSpread: number } | null {
   const rtMap: Record<string, number> = {};
   for (const r of rtRows) {
-    rtMap[`${r.Date}_${r.HE}_${r.Zone}`] = Number(r.LMP);
+    const k = r.HE != null ? `${r.Date}_${r.HE}_${r.Zone}` : `${r.Date}_${r.Zone}`;
+    rtMap[k] = Number(r.LMP);
   }
 
   const spreadByZone: Record<string, { total: number; count: number; max: number }> = {};
   for (const r of daRows) {
     const zone = String(r.Zone);
-    const key = `${r.Date}_${r.HE}_${zone}`;
+    const key = r.HE != null ? `${r.Date}_${r.HE}_${zone}` : `${r.Date}_${zone}`;
     const rtLmp = rtMap[key];
     if (rtLmp !== undefined) {
       const spread = Math.abs(Number(r.LMP) - rtLmp);
