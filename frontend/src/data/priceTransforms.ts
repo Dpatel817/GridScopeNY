@@ -1,4 +1,5 @@
 import { isNyisoZone } from './zones';
+import { makeUniqueHourlyKey } from '../utils/dateFormat';
 
 export interface PriceRow {
   'Time Stamp': string;
@@ -15,7 +16,7 @@ export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
 export type DateRange = 'today' | 'all' | 'custom';
 
-export const ON_PEAK_START = 7;
+export const ON_PEAK_START = 8;
 export const ON_PEAK_END = 22;
 
 export function isOnPeak(he: number): boolean {
@@ -73,7 +74,7 @@ export function pivotByZone(
   field: LmpField = 'LMP'
 ): PivotedRow[] {
   const filtered = filterByZones(filterNyisoOnly(rows), zones);
-  const hasHE = filtered.some(r => r.HE != null);
+  const hasHE = filtered.some(r => r.HE != null && Number.isFinite(Number(r.HE)));
 
   if (resolution === 'hourly' && hasHE) {
     return pivotHourly(filtered, zones, field);
@@ -89,11 +90,13 @@ export function pivotByZone(
 
 function pivotHourly(rows: PriceRow[], zones: string[], field: LmpField = 'LMP'): PivotedRow[] {
   const map: Record<string, PivotedRow> = {};
+  const seen = new Set<string>();
   for (const r of rows) {
     const zone = String(r.Zone);
     if (!zones.includes(zone)) continue;
-    const key = `${r.Date}_${r.HE ?? ''}`;
-    const label = r.HE != null ? `${r.Date} HE${r.HE}` : r.Date;
+    const { key, label } = r.HE != null
+      ? makeUniqueHourlyKey(r.Date, r.HE, seen, zone)
+      : { key: r.Date, label: r.Date };
     if (!map[key]) map[key] = { Date: label };
     map[key][zone] = Number(r[field]);
   }
@@ -143,17 +146,23 @@ export function computeDartSpread(
   const daFiltered = filterByDateRange(filterByZones(filterNyisoOnly(daRows), zones), dateRange, startDate, endDate);
   const rtFiltered = filterByDateRange(filterByZones(filterNyisoOnly(rtRows), zones), dateRange, startDate, endDate);
 
-  const hasHE = daFiltered.some(r => r.HE != null);
+  const hasHE = daFiltered.some(r => r.HE != null && Number.isFinite(Number(r.HE)));
   const rtMap: Record<string, number> = {};
+  const rtCounts: Record<string, number> = {};
   for (const r of rtFiltered) {
-    const k = hasHE ? `${r.Date}_${r.HE}_${r.Zone}` : `${r.Date}_${r.Zone}`;
+    const baseKey = hasHE ? `${r.Date}_${r.HE}_${r.Zone}` : `${r.Date}_${r.Zone}`;
+    rtCounts[baseKey] = (rtCounts[baseKey] || 0) + 1;
+    const k = rtCounts[baseKey] > 1 ? `${baseKey}_dup${rtCounts[baseKey]}` : baseKey;
     rtMap[k] = Number(r[field]);
   }
 
   interface DartRow { Date: string; HE: number; Zone: string; DART: number }
   const dartRows: DartRow[] = [];
+  const daCounts: Record<string, number> = {};
   for (const r of daFiltered) {
-    const key = hasHE ? `${r.Date}_${r.HE}_${String(r.Zone)}` : `${r.Date}_${String(r.Zone)}`;
+    const baseKey = hasHE ? `${r.Date}_${r.HE}_${String(r.Zone)}` : `${r.Date}_${String(r.Zone)}`;
+    daCounts[baseKey] = (daCounts[baseKey] || 0) + 1;
+    const key = daCounts[baseKey] > 1 ? `${baseKey}_dup${daCounts[baseKey]}` : baseKey;
     const rtVal = rtMap[key];
     if (rtVal !== undefined) {
       dartRows.push({
@@ -167,9 +176,9 @@ export function computeDartSpread(
 
   if (resolution === 'hourly' && hasHE) {
     const map: Record<string, PivotedRow> = {};
+    const seen = new Set<string>();
     for (const r of dartRows) {
-      const key = `${r.Date}_${r.HE}`;
-      const label = `${r.Date} HE${r.HE}`;
+      const { key, label } = makeUniqueHourlyKey(r.Date, r.HE, seen, r.Zone);
       if (!map[key]) map[key] = { Date: label };
       map[key][r.Zone] = Number(r.DART.toFixed(2));
     }

@@ -1,8 +1,10 @@
+import { makeUniqueHourlyKey } from '../utils/dateFormat';
+
 export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
 export type DateRange = 'today' | 'all' | 'custom';
 
-export const ON_PEAK_START = 7;
+export const ON_PEAK_START = 8;
 export const ON_PEAK_END = 22;
 
 export interface CongestionRow {
@@ -125,11 +127,13 @@ export function pivotCongestion(
 
   if (resolution === 'hourly') {
     const map: Record<string, PivotedRow & { _sortDate: string; _sortHE: number; _counts: Record<string, number> }> = {};
+    const seen = new Set<string>();
     for (const r of filtered) {
       const name = String(r[nameCol] || '');
       const he = Number(r.HE ?? 0);
-      const key = `${r.Date}_${he}`;
-      const label = r.HE != null ? `${r.Date} HE${r.HE}` : r.Date;
+      const { key, label } = r.HE != null
+        ? makeUniqueHourlyKey(r.Date, r.HE, seen, name)
+        : { key: r.Date, label: r.Date };
       if (!map[key]) map[key] = { Date: label, _sortDate: r.Date, _sortHE: he, _counts: {} };
       const v = Number(r[costCol] || 0);
       if (!map[key]._counts[name]) {

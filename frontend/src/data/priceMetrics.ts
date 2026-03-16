@@ -16,7 +16,7 @@ export function computePriceKPIs(daRows: PriceRow[], rtRows: PriceRow[]): PriceK
   const daFiltered = filterNyisoOnly(daRows);
   const rtFiltered = filterNyisoOnly(rtRows);
 
-  const hasHE = daFiltered.some(r => r.HE != null);
+  const hasHE = daFiltered.some(r => r.HE != null && Number.isFinite(Number(r.HE)));
   const onPeakDA = hasHE ? daFiltered.filter(r => isOnPeak(r.HE)) : daFiltered;
   const onPeakRT = hasHE ? rtFiltered.filter(r => isOnPeak(r.HE)) : rtFiltered;
 

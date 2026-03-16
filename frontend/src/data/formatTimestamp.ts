@@ -21,10 +21,10 @@ export function formatTimestamp(date: string, he: number): string {
     return `${mm}/${dd}/${yy} 00:00`;
   }
 
-  const safeHe = Math.max(0, Math.floor(he));
+  const displayHour = Math.max(1, Math.floor(he));
   const mm = String(month).padStart(2, '0');
   const dd = String(day).padStart(2, '0');
   const yy = String(year).slice(-2);
-  const hh = String(safeHe).padStart(2, '0');
+  const hh = String(displayHour).padStart(2, '0');
   return `${mm}/${dd}/${yy} ${hh}:00`;
 }

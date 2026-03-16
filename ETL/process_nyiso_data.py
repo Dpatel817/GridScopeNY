@@ -16,7 +16,7 @@ def strip_whitespace(file_path):
 def add_time_cols(df, ts_col):
     df[ts_col] = pd.to_datetime(df[ts_col], errors="coerce")
     df["Date"] = df[ts_col].dt.date
-    df["HE"] = df[ts_col].dt.hour
+    df["HE"] = df[ts_col].dt.hour + 1
     df["Month"] = df[ts_col].dt.month
     df["Year"] = df[ts_col].dt.year
     return df
@@ -313,7 +313,7 @@ def process_ext_rto_cts_price(df):
     df["RTC Execution Time"] = pd.to_datetime(df["RTC Execution Time"], errors="coerce")
     df["RTC End Time Stamp"] = pd.to_datetime(df["RTC End Time Stamp"], errors="coerce")
     df["Date"] = df["RTC Execution Time"].dt.date
-    df["HE"] = df["RTC Execution Time"].dt.hour
+    df["HE"] = df["RTC Execution Time"].dt.hour + 1
     df["Month"] = df["RTC Execution Time"].dt.month
     df["Year"] = df["RTC Execution Time"].dt.year
 
@@ -546,7 +546,7 @@ def process_op_in_commit(df):
     df["Event End Time"] = pd.to_datetime(df["Event End Time"], format="%d-%b-%Y %H:%M", errors="coerce")
 
     df["Date"] = df["Event Start Time"].dt.date
-    df["HE"] = df["Event Start Time"].dt.hour
+    df["HE"] = df["Event Start Time"].dt.hour + 1
     df["Month"] = df["Event Start Time"].dt.month
     df["Year"] = df["Event Start Time"].dt.year
 
@@ -611,7 +611,7 @@ def process_out_sched(df):
     df["Scheduled In"] = pd.to_datetime(df["Scheduled In"], errors="coerce")
 
     df["Date"] = df["Time Stamp"].dt.date
-    df["HE"] = df["Time Stamp"].dt.hour
+    df["HE"] = df["Time Stamp"].dt.hour + 1
     df["Month"] = df["Time Stamp"].dt.month
     df["Year"] = df["Time Stamp"].dt.year
 

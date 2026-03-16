@@ -8,10 +8,15 @@ function parseToDate(s: string): Date | null {
     return isNaN(d.getTime()) ? null : d;
   }
 
-  const heMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+HE(\d+)$/);
+  const heMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+HE(\d+)(b?)$/);
   if (heMatch) {
-    const hr = Math.max(0, parseInt(heMatch[4]) - 1);
-    return new Date(+heMatch[1], parseInt(heMatch[2]) - 1, +heMatch[3], hr);
+    const he = parseInt(heMatch[4]);
+    if (he === 24) {
+      const d = new Date(+heMatch[1], parseInt(heMatch[2]) - 1, +heMatch[3]);
+      d.setDate(d.getDate() + 1);
+      return d;
+    }
+    return new Date(+heMatch[1], parseInt(heMatch[2]) - 1, +heMatch[3], he);
   }
 
   const dateMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -120,6 +125,54 @@ function fmtMonthTooltip(d: Date): string {
   return `${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+export function getExpectedHourCount(dateStr: string): 23 | 24 | 25 {
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return 24;
+
+  const tz = 'America/New_York';
+  try {
+    const startOfDay = new Date(`${dateStr}T00:00:00`);
+    const nextDate = new Date(startOfDay);
+    nextDate.setDate(nextDate.getDate() + 1);
+    const nextDateStr = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+
+    const startOffset = getTimezoneOffsetMinutes(dateStr, tz);
+    const endOffset = getTimezoneOffsetMinutes(nextDateStr, tz);
+    const diffMinutes = endOffset - startOffset;
+
+    if (diffMinutes < 0) return 23;
+    if (diffMinutes > 0) return 25;
+    return 24;
+  } catch {
+    return 24;
+  }
+}
+
+function getTimezoneOffsetMinutes(dateStr: string, tz: string): number {
+  const dt = new Date(`${dateStr}T00:00:00Z`);
+  const utcStr = dt.toLocaleString('en-US', { timeZone: 'UTC' });
+  const tzStr = dt.toLocaleString('en-US', { timeZone: tz });
+  const utcDate = new Date(utcStr);
+  const tzDate = new Date(tzStr);
+  return (utcDate.getTime() - tzDate.getTime()) / 60000;
+}
+
+export function isDSTTransitionDay(dateStr: string): boolean {
+  return getExpectedHourCount(dateStr) !== 24;
+}
+
+export function makeUniqueHourlyKey(date: string, he: number | string, seen: Set<string>, seriesName?: string): { key: string; label: string } {
+  const heNum = Number(he);
+  const baseKey = `${date}_${heNum}`;
+  const trackKey = seriesName ? `${baseKey}_${seriesName}` : baseKey;
+  const isDup = seen.has(trackKey);
+  seen.add(trackKey);
+  if (isDup) {
+    return { key: `${baseKey}b`, label: `${date} HE${heNum}b` };
+  }
+  return { key: baseKey, label: `${date} HE${heNum}` };
+}
+
 export function tooltipLabelFormatter(spanDaysOrData: number | Record<string, unknown>[], xKey?: string): (v: DateInput) => string {
   let spanDays: number;
   if (typeof spanDaysOrData === 'number') {
@@ -142,6 +195,20 @@ export function tooltipLabelFormatter(spanDaysOrData: number | Record<string, un
     if (v === null || v === undefined || v === '') return '';
     const s = String(v);
     if (s === 'undefined' || s === 'null' || s === 'NaN') return '';
+
+    const heMatch = s.match(/^(\d{4}-\d{2}-\d{2})\s+HE(\d+)(b?)$/);
+    if (heMatch && tier === 'hourly') {
+      const dateStr = heMatch[1];
+      const he = heMatch[2];
+      const isDup = heMatch[3] === 'b';
+      const dstHours = getExpectedHourCount(dateStr);
+      let label = `HE ${he}`;
+      if (isDup) label += ' (DST)';
+      else if (dstHours !== 24) label += dstHours === 23 ? ' (Spring Fwd)' : ' (Fall Back)';
+      const d = parseToDate(s);
+      if (d) label = `${fmtMMMd(d)}, ${label}`;
+      return label;
+    }
 
     const d = parseToDate(s);
     if (!d) return s.length > 16 ? s.slice(0, 16) : s;

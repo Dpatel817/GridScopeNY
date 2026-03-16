@@ -18,8 +18,8 @@ from src.config import PROCESSED_DIR
 
 logger = logging.getLogger(__name__)
 
-ON_PEAK_HOURS = list(range(7, 23))
-OFF_PEAK_HOURS = [h for h in range(24) if h not in ON_PEAK_HOURS]
+ON_PEAK_HOURS = list(range(8, 23))
+OFF_PEAK_HOURS = [h for h in range(1, 25) if h not in ON_PEAK_HOURS]
 
 _df_cache: dict[str, tuple[float, pd.DataFrame]] = {}
 _CACHE_TTL = 300
@@ -89,7 +89,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     if "Time Stamp" in df.columns and "Date" not in df.columns:
         ts = pd.to_datetime(df["Time Stamp"], errors="coerce")
         df["Date"] = ts.dt.strftime("%Y-%m-%d")
-        df["HE"] = ts.dt.hour
+        df["HE"] = ts.dt.hour + 1
         df["Month"] = ts.dt.strftime("%Y-%m")
         df["Year"] = ts.dt.year
 
@@ -105,7 +105,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         if "Date" not in df.columns:
             ts = pd.to_datetime(df["Time Stamp"], errors="coerce")
             df["Date"] = ts.dt.strftime("%Y-%m-%d")
-            df["HE"] = ts.dt.hour
+            df["HE"] = ts.dt.hour + 1
             df["Month"] = ts.dt.strftime("%Y-%m")
             df["Year"] = ts.dt.year
 
@@ -114,7 +114,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         if tc in df.columns and "Date" not in df.columns:
             ts = pd.to_datetime(df[tc], errors="coerce")
             df["Date"] = ts.dt.strftime("%Y-%m-%d")
-            df["HE"] = ts.dt.hour
+            df["HE"] = ts.dt.hour + 1
             break
 
     return df

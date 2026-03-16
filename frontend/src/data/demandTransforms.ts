@@ -1,8 +1,10 @@
+import { makeUniqueHourlyKey } from '../utils/dateFormat';
+
 export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
 export type DateRange = 'today' | 'all' | 'custom';
 
-export const ON_PEAK_START = 7;
+export const ON_PEAK_START = 8;
 export const ON_PEAK_END = 22;
 
 export interface DemandRow {
@@ -68,7 +70,7 @@ export function pivotZonalDemand(
   zones: string[],
   resolution: Resolution
 ): PivotedRow[] {
-  const hasHE = rows.some(r => r.HE != null && Number(r.HE) > 0);
+  const hasHE = rows.some(r => r.HE != null && Number.isFinite(Number(r.HE)));
   const filtered = rows.filter(r => {
     if (!hasHE) return true;
     if (resolution === 'on_peak') return isOnPeak(Number(r.HE));
@@ -77,8 +79,10 @@ export function pivotZonalDemand(
   });
 
   if (resolution === 'hourly' && hasHE) {
+    const seen = new Set<string>();
     return filtered.map(r => {
-      const row: PivotedRow = { Date: `${r.Date} HE${r.HE}` };
+      const { label } = makeUniqueHourlyKey(r.Date, r.HE, seen);
+      const row: PivotedRow = { Date: label };
       for (const z of zones) {
         const v = Number(r[z]);
         if (!isNaN(v)) row[z] = Math.round(v);
@@ -124,29 +128,29 @@ export function alignForecastActual(
   actualRows: DemandRow[]
 ): AlignedRow[] {
   const hasHE = forecastRows.some(r => r.HE != null) && actualRows.some(r => r.HE != null);
-  const zoneMap: Record<string, number> = {};
+  const actualMap: Record<string, number> = {};
+  const zoneDupCounts: Record<string, Record<string, number>> = {};
   for (const r of actualRows) {
     const v = Number(r.Load || 0);
-    if (v > 0) {
-      const zone = String(r.Zone || r.PTID || '');
-      const zoneKey = hasHE ? `${r.Date}_${r.HE}_${zone}` : `${r.Date}_${zone}`;
-      zoneMap[zoneKey] = v;
-    }
-  }
-
-  const actualMap: Record<string, number> = {};
-  for (const [zk, v] of Object.entries(zoneMap)) {
-    const parts = zk.split('_');
-    const intervalKey = hasHE ? `${parts[0]}_${parts[1]}` : parts[0];
+    if (v <= 0) continue;
+    const zone = String(r.Zone || r.PTID || '');
+    const intervalBase = hasHE ? `${r.Date}_${r.HE}` : r.Date;
+    if (!zoneDupCounts[intervalBase]) zoneDupCounts[intervalBase] = {};
+    zoneDupCounts[intervalBase][zone] = (zoneDupCounts[intervalBase][zone] || 0) + 1;
+    const occurrence = zoneDupCounts[intervalBase][zone];
+    const intervalKey = occurrence > 1 ? `${intervalBase}_dup${occurrence}` : intervalBase;
     actualMap[intervalKey] = (actualMap[intervalKey] || 0) + v;
   }
 
   const aligned: AlignedRow[] = [];
+  const fCounts: Record<string, number> = {};
   for (const f of forecastRows) {
     const fVal = Number(f.NYISO || 0);
     if (!fVal) continue;
-    const key = hasHE ? `${f.Date}_${f.HE}` : f.Date;
-    const aVal = actualMap[key];
+    const baseKey = hasHE ? `${f.Date}_${f.HE}` : f.Date;
+    fCounts[baseKey] = (fCounts[baseKey] || 0) + 1;
+    const key = fCounts[baseKey] > 1 ? `${baseKey}_dup${fCounts[baseKey]}` : baseKey;
+    const aVal = actualMap[key] ?? actualMap[baseKey];
     if (aVal) {
       aligned.push({
         Date: f.Date,
@@ -164,7 +168,7 @@ export function pivotForecastActual(
   aligned: AlignedRow[],
   resolution: Resolution
 ): PivotedRow[] {
-  const hasHE = aligned.some(r => r.HE != null && r.HE > 0);
+  const hasHE = aligned.some(r => r.HE != null && Number.isFinite(r.HE));
   const filtered = aligned.filter(r => {
     if (!hasHE) return true;
     if (resolution === 'on_peak') return isOnPeak(r.HE);
@@ -173,11 +177,15 @@ export function pivotForecastActual(
   });
 
   if (resolution === 'hourly' && hasHE) {
-    return filtered.map(r => ({
-      Date: `${r.Date} HE${r.HE}`,
-      Forecast: Math.round(r.Forecast),
-      Actual: Math.round(r.Actual),
-    }));
+    const seen = new Set<string>();
+    return filtered.map(r => {
+      const { label } = makeUniqueHourlyKey(r.Date, r.HE, seen);
+      return {
+        Date: label,
+        Forecast: Math.round(r.Forecast),
+        Actual: Math.round(r.Actual),
+      };
+    });
   }
 
   const accum: Record<string, { fSum: number; aSum: number; count: number }> = {};
@@ -201,7 +209,7 @@ export function pivotForecastError(
   aligned: AlignedRow[],
   resolution: Resolution
 ): PivotedRow[] {
-  const hasHE = aligned.some(r => r.HE != null && r.HE > 0);
+  const hasHE = aligned.some(r => r.HE != null && Number.isFinite(r.HE));
   const filtered = aligned.filter(r => {
     if (!hasHE) return true;
     if (resolution === 'on_peak') return isOnPeak(r.HE);
@@ -210,10 +218,14 @@ export function pivotForecastError(
   });
 
   if (resolution === 'hourly' && hasHE) {
-    return filtered.map(r => ({
-      Date: `${r.Date} HE${r.HE}`,
-      Error: Math.round(r.Error),
-    }));
+    const seen = new Set<string>();
+    return filtered.map(r => {
+      const { label } = makeUniqueHourlyKey(r.Date, r.HE, seen);
+      return {
+        Date: label,
+        Error: Math.round(r.Error),
+      };
+    });
   }
 
   const accum: Record<string, { sum: number; count: number }> = {};

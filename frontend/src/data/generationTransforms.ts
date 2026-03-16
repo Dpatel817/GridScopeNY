@@ -1,8 +1,10 @@
+import { makeUniqueHourlyKey } from '../utils/dateFormat';
+
 export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
 export type DateRange = 'today' | 'all' | 'custom';
 
-export const ON_PEAK_START = 7;
+export const ON_PEAK_START = 8;
 export const ON_PEAK_END = 22;
 
 export interface GenRow {
@@ -88,10 +90,12 @@ export function pivotByFuel(
 
   if (resolution === 'hourly') {
     const map: Record<string, PivotedRow> = {};
+    const seen = new Set<string>();
     for (const r of filtered) {
       const fuel = String(r[fuelCol]);
-      const key = `${r.Date}_${r.HE ?? ''}`;
-      const label = r.HE != null ? `${r.Date} HE${r.HE}` : r.Date;
+      const { key, label } = r.HE != null
+        ? makeUniqueHourlyKey(r.Date, r.HE, seen, fuel)
+        : { key: r.Date, label: r.Date };
       if (!map[key]) map[key] = { Date: label };
       map[key][fuel] = Number(r[genCol] || 0);
     }

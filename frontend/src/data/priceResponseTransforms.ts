@@ -1,6 +1,7 @@
 import { isNyisoZone } from './zones';
 import type { Resolution, DateRange } from './priceTransforms';
 import { isOnPeak } from './priceTransforms';
+import { makeUniqueHourlyKey } from '../utils/dateFormat';
 
 export interface AspRow {
   'Time Stamp': string;
@@ -95,17 +96,22 @@ export function buildAlignedData(
   const daAsp = filterByDateRange(daAspRows.filter(r => String(r.Zone) === aspZone), dateRange, startDate, endDate);
   const rtAsp = filterByDateRange(rtAspRows.filter(r => String(r.Zone) === aspZone), dateRange, startDate, endDate);
 
-  const daLmpMap: Record<string, number> = {};
-  for (const r of daLmp) daLmpMap[`${r.Date}_${r.HE}`] = Number(r.LMP);
+  function buildMapWithDuplicates<T>(items: T[], keyFn: (r: T) => string, valueFn: (r: T) => number): Record<string, number> {
+    const map: Record<string, number> = {};
+    const counts: Record<string, number> = {};
+    for (const r of items) {
+      const baseKey = keyFn(r);
+      counts[baseKey] = (counts[baseKey] || 0) + 1;
+      const key = counts[baseKey] > 1 ? `${baseKey}_dup${counts[baseKey]}` : baseKey;
+      map[key] = valueFn(r);
+    }
+    return map;
+  }
 
-  const rtLmpMap: Record<string, number> = {};
-  for (const r of rtLmp) rtLmpMap[`${r.Date}_${r.HE}`] = Number(r.LMP);
-
-  const daAspMap: Record<string, number> = {};
-  for (const r of daAsp) daAspMap[`${r.Date}_${r.HE}`] = Number(r[aspProduct] || 0);
-
-  const rtAspMap: Record<string, number> = {};
-  for (const r of rtAsp) rtAspMap[`${r.Date}_${r.HE}`] = Number(r[aspProduct] || 0);
+  const daLmpMap = buildMapWithDuplicates(daLmp, r => `${r.Date}_${r.HE}`, r => Number(r.LMP));
+  const rtLmpMap = buildMapWithDuplicates(rtLmp, r => `${r.Date}_${r.HE}`, r => Number(r.LMP));
+  const daAspMap = buildMapWithDuplicates(daAsp, r => `${r.Date}_${r.HE}`, r => Number(r[aspProduct] || 0));
+  const rtAspMap = buildMapWithDuplicates(rtAsp, r => `${r.Date}_${r.HE}`, r => Number(r[aspProduct] || 0));
 
   const allKeys = new Set([
     ...Object.keys(daLmpMap),
@@ -114,18 +120,22 @@ export function buildAlignedData(
     ...Object.keys(rtAspMap),
   ]);
 
+  const sortedKeys = [...allKeys].sort();
+  const seen = new Set<string>();
   const rows: AlignedRow[] = [];
-  for (const key of allKeys) {
-    const [date, heStr] = key.split('_');
-    const he = Number(heStr);
+  for (const key of sortedKeys) {
+    const parts = key.split('_');
+    const date = parts[0];
+    const he = Number(parts[1]);
     const da = daLmpMap[key] ?? null;
     const rt = rtLmpMap[key] ?? null;
     const daA = daAspMap[key] ?? null;
     const rtA = rtAspMap[key] ?? null;
+    const { label } = makeUniqueHourlyKey(date, he, seen);
     rows.push({
       Date: date,
       HE: he,
-      label: `${date} HE${he}`,
+      label,
       daLmp: da,
       rtLmp: rt,
       daAsp: daA,
