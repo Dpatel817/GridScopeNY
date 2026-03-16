@@ -24,6 +24,9 @@ ETL/GridScopeNY/data/raw/
 ETL/GridScopeNY/data/loaded_files.csv
 ETL/GridScopeNY/data/loaded_zip_members.csv
 
+# GitHub Actions workflows (require workflow scope to push)
+.github/workflows/
+
 # IDE
 .idea/
 
