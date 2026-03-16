@@ -4,6 +4,7 @@ import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import EmptyState from '../components/EmptyState';
 import { isNyisoZone } from '../data/zones';
+import { buildTimestamp } from '../utils/timeSeries';
 
 type Duration = '1h' | '2h' | '4h';
 type RankMetric = 'revenue' | 'avgSpread' | 'maxSpread';
@@ -149,12 +150,12 @@ export default function OpportunityExplorer() {
     const byTime: Record<string, any> = {};
     for (const h of hourly) {
       const key = `${h.Date}_${h.HE}`;
-      if (!byTime[key]) byTime[key] = { Date: h.Date, HE: h.HE };
+      if (!byTime[key]) byTime[key] = { Date: `${h.Date} HE${h.HE}`, _ts: buildTimestamp(h.Date, h.HE), HE: h.HE };
       byTime[key]['DA LMP'] = h.daLmp;
       byTime[key]['RT LMP'] = h.rtLmp;
       byTime[key]['Spread'] = h.spread;
     }
-    return Object.values(byTime).sort((a: any, b: any) => a.Date < b.Date ? -1 : a.Date > b.Date ? 1 : a.HE - b.HE);
+    return Object.values(byTime).sort((a: any, b: any) => a._ts - b._ts);
   }, [hourlyByZone, active]);
 
   const spreadOverTimeData = useMemo(() => {

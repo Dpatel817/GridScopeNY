@@ -2,6 +2,7 @@ import { isNyisoZone } from './zones';
 import type { Resolution, DateRange } from './priceTransforms';
 import { isOnPeak } from './priceTransforms';
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
+import { buildTimestamp } from '../utils/timeSeries';
 
 export interface AspRow {
   'Time Stamp': string;
@@ -166,17 +167,19 @@ export function pivotForChart(
     const lmpData: PivotedSeriesRow[] = [];
     const aspData: PivotedSeriesRow[] = [];
     for (const r of filtered) {
+      const isDup = r.label.endsWith('b');
+      const ts = buildTimestamp(r.Date, r.HE, isDup);
       if (mode === 'spread') {
-        lmpData.push({ Date: r.label, 'DA-RT LMP Spread': r.daRtLmpSpread });
-        aspData.push({ Date: r.label, 'DA-RT ASP Spread': r.daRtAspSpread });
+        lmpData.push({ Date: r.label, _ts: ts, 'DA-RT LMP Spread': r.daRtLmpSpread });
+        aspData.push({ Date: r.label, _ts: ts, 'DA-RT ASP Spread': r.daRtAspSpread });
       } else if (mode === 'normalized' && r.daLmp && r.rtLmp) {
         const baseLmp = r.daLmp || 1;
         const baseAsp = r.daAsp || 1;
-        lmpData.push({ Date: r.label, 'DA LMP (indexed)': 100, 'RT LMP (indexed)': (r.rtLmp / baseLmp) * 100 });
-        aspData.push({ Date: r.label, 'DA ASP (indexed)': 100, 'RT ASP (indexed)': r.rtAsp != null && baseAsp ? (r.rtAsp / baseAsp) * 100 : null });
+        lmpData.push({ Date: r.label, _ts: ts, 'DA LMP (indexed)': 100, 'RT LMP (indexed)': (r.rtLmp / baseLmp) * 100 });
+        aspData.push({ Date: r.label, _ts: ts, 'DA ASP (indexed)': 100, 'RT ASP (indexed)': r.rtAsp != null && baseAsp ? (r.rtAsp / baseAsp) * 100 : null });
       } else {
-        lmpData.push({ Date: r.label, 'DA LMP': r.daLmp, 'RT LMP': r.rtLmp });
-        aspData.push({ Date: r.label, 'DA ASP': r.daAsp, 'RT ASP': r.rtAsp });
+        lmpData.push({ Date: r.label, _ts: ts, 'DA LMP': r.daLmp, 'RT LMP': r.rtLmp });
+        aspData.push({ Date: r.label, _ts: ts, 'DA ASP': r.daAsp, 'RT ASP': r.rtAsp });
       }
     }
     return { lmpData, aspData };

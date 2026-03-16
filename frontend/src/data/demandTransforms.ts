@@ -1,4 +1,5 @@
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
+import { buildTimestamp } from '../utils/timeSeries';
 
 export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
@@ -81,14 +82,15 @@ export function pivotZonalDemand(
   if (resolution === 'hourly' && hasHE) {
     const seen = new Set<string>();
     return filtered.map(r => {
-      const { label } = makeUniqueHourlyKey(r.Date, r.HE, seen);
-      const row: PivotedRow = { Date: label };
+      const { key, label } = makeUniqueHourlyKey(r.Date, r.HE, seen);
+      const isDup = key.endsWith('b');
+      const row: PivotedRow = { Date: label, _ts: buildTimestamp(r.Date, r.HE, isDup) };
       for (const z of zones) {
         const v = Number(r[z]);
         if (!isNaN(v)) row[z] = Math.round(v);
       }
       return row;
-    }).sort((a, b) => (a.Date < b.Date ? -1 : 1));
+    }).sort((a, b) => ((a._ts as number) || 0) - ((b._ts as number) || 0));
   }
 
   const accum: Record<string, Record<string, { sum: number; count: number }>> = {};

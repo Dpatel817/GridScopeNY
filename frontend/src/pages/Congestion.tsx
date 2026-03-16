@@ -218,7 +218,7 @@ function ConstraintImpactAnalysis() {
 
   const pivotHours = useMemo(() => {
     if (!pivot.length) return [];
-    return Object.keys(pivot[0]).filter(k => k !== 'Date').sort((a, b) => Number(a) - Number(b));
+    return Object.keys(pivot[0]).filter(k => k !== 'Date' && k !== '_ts').sort((a, b) => Number(a) - Number(b));
   }, [pivot]);
 
   return (

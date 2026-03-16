@@ -19,9 +19,11 @@ interface Props {
 }
 
 export default function LineChart({ data, xKey, yKeys, title, height = 300 }: Props) {
-  const fmtTick = useMemo(() => makeTickFormatter(data, xKey), [data, xKey])
-  const interval = useMemo(() => getTickInterval(data, xKey), [data, xKey])
-  const fmtTooltipLabel = useMemo(() => tooltipLabelFormatter(data, xKey), [data, xKey])
+  const useTs = xKey === 'Date' && data.length > 0 && '_ts' in (data[0] || {})
+  const effectiveXKey = useTs ? '_ts' : xKey
+  const fmtTick = useMemo(() => makeTickFormatter(data, effectiveXKey), [data, effectiveXKey])
+  const interval = useMemo(() => getTickInterval(data, effectiveXKey), [data, effectiveXKey])
+  const fmtTooltipLabel = useMemo(() => tooltipLabelFormatter(data, effectiveXKey), [data, effectiveXKey])
 
   if (!data.length) return <div className="empty-state" style={{ padding: 24 }}>No chart data</div>
   return (
@@ -30,7 +32,11 @@ export default function LineChart({ data, xKey, yKeys, title, height = 300 }: Pr
       <ResponsiveContainer width="100%" height={height}>
         <ReLineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
+          {useTs ? (
+            <XAxis dataKey="_ts" tickFormatter={fmtTick} tick={{ fontSize: 11 }} type="number" domain={['dataMin', 'dataMax']} scale="time" />
+          ) : (
+            <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
+          )}
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip
             formatter={(v: number | string) => typeof v === 'number' ? v.toFixed(2) : v}

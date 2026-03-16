@@ -1,6 +1,7 @@
 import { getInterfaceMeta, getDisplayName } from './interfaceMetadata';
 import type { InterfaceMeta } from './interfaceMetadata';
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
+import { buildTimestamp } from '../utils/timeSeries';
 
 export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
@@ -128,7 +129,7 @@ export function pivotFlows(
   });
 
   if (resolution === 'hourly') {
-    const map: Record<string, PivotedRow & { _sortDate: string; _sortHE: number }> = {};
+    const map: Record<string, PivotedRow & { _sortTs: number }> = {};
     const seen = new Set<string>();
     for (const r of filtered) {
       const display = getDisplayName(String(r[nameCol] || ''));
@@ -136,12 +137,16 @@ export function pivotFlows(
       const { key, label } = r.HE != null
         ? makeUniqueHourlyKey(r.Date, r.HE, seen, display)
         : { key: r.Date, label: r.Date };
-      if (!map[key]) map[key] = { Date: label, _sortDate: r.Date, _sortHE: he };
+      if (!map[key]) {
+        const isDup = key.endsWith('b');
+        const ts = r.HE != null ? buildTimestamp(r.Date, he, isDup) : new Date(r.Date).getTime();
+        map[key] = { Date: label, _ts: ts, _sortTs: ts };
+      }
       map[key][display] = Number(r[flowCol] || 0);
     }
     return Object.values(map)
-      .sort((a, b) => a._sortDate < b._sortDate ? -1 : a._sortDate > b._sortDate ? 1 : a._sortHE - b._sortHE)
-      .map(({ _sortDate: _d, _sortHE: _h, ...rest }) => rest as PivotedRow);
+      .sort((a, b) => a._sortTs - b._sortTs)
+      .map(({ _sortTs: _s, ...rest }) => rest as PivotedRow);
   }
 
   const accum: Record<string, Record<string, { sum: number; count: number }>> = {};

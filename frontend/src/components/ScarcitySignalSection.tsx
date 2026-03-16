@@ -112,22 +112,26 @@ export default function ScarcitySignalSection() {
 
   const lmpKeys = useMemo(() => {
     if (!lmpData.length) return [];
-    return Object.keys(lmpData[0]).filter(k => k !== 'Date');
+    return Object.keys(lmpData[0]).filter(k => k !== 'Date' && k !== '_ts');
   }, [lmpData]);
 
   const aspKeys = useMemo(() => {
     if (!aspData.length) return [];
-    return Object.keys(aspData[0]).filter(k => k !== 'Date');
+    return Object.keys(aspData[0]).filter(k => k !== 'Date' && k !== '_ts');
   }, [aspData]);
 
   const loading = damaspLoading || rtaspLoading;
-  const lmpInterval = useMemo(() => getTickInterval(lmpData, 'Date'), [lmpData]);
-  const lmpFmtTick = useMemo(() => makeTickFormatter(lmpData, 'Date'), [lmpData]);
-  const lmpFmtTooltipLabel = useMemo(() => tooltipLabelFormatter(lmpData, 'Date'), [lmpData]);
+  const lmpUseTs = lmpData.length > 0 && '_ts' in (lmpData[0] || {});
+  const lmpXKey = lmpUseTs ? '_ts' : 'Date';
+  const lmpInterval = useMemo(() => getTickInterval(lmpData, lmpXKey), [lmpData, lmpXKey]);
+  const lmpFmtTick = useMemo(() => makeTickFormatter(lmpData, lmpXKey), [lmpData, lmpXKey]);
+  const lmpFmtTooltipLabel = useMemo(() => tooltipLabelFormatter(lmpData, lmpXKey), [lmpData, lmpXKey]);
   const LmpTooltip = useMemo(() => makeDualTooltip(lmpFmtTooltipLabel), [lmpFmtTooltipLabel]);
-  const aspInterval = useMemo(() => getTickInterval(aspData, 'Date'), [aspData]);
-  const aspFmtTick = useMemo(() => makeTickFormatter(aspData, 'Date'), [aspData]);
-  const aspFmtTooltipLabel = useMemo(() => tooltipLabelFormatter(aspData, 'Date'), [aspData]);
+  const aspUseTs = aspData.length > 0 && '_ts' in (aspData[0] || {});
+  const aspXKey = aspUseTs ? '_ts' : 'Date';
+  const aspInterval = useMemo(() => getTickInterval(aspData, aspXKey), [aspData, aspXKey]);
+  const aspFmtTick = useMemo(() => makeTickFormatter(aspData, aspXKey), [aspData, aspXKey]);
+  const aspFmtTooltipLabel = useMemo(() => tooltipLabelFormatter(aspData, aspXKey), [aspData, aspXKey]);
   const AspTooltip = useMemo(() => makeDualTooltip(aspFmtTooltipLabel), [aspFmtTooltipLabel]);
 
   const lmpColors = compareMode === 'spread' ? ['#2563eb'] : [LMP_COLORS.da, LMP_COLORS.rt];
@@ -275,7 +279,7 @@ export default function ScarcitySignalSection() {
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={lmpData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="Date" tickFormatter={lmpFmtTick} tick={{ fontSize: 11 }} interval={lmpInterval} />
+                    <XAxis dataKey={lmpXKey} tickFormatter={lmpFmtTick} tick={{ fontSize: 11 }} {...(lmpUseTs ? { type: 'number' as const, domain: ['dataMin', 'dataMax'], scale: 'time' as const } : { interval: lmpInterval })} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip content={<LmpTooltip />} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -301,7 +305,7 @@ export default function ScarcitySignalSection() {
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={aspData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="Date" tickFormatter={aspFmtTick} tick={{ fontSize: 11 }} interval={aspInterval} />
+                    <XAxis dataKey={aspXKey} tickFormatter={aspFmtTick} tick={{ fontSize: 11 }} {...(aspUseTs ? { type: 'number' as const, domain: ['dataMin', 'dataMax'], scale: 'time' as const } : { interval: aspInterval })} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip content={<AspTooltip />} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />

@@ -1,4 +1,5 @@
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
+import { buildTimestamp } from '../utils/timeSeries';
 
 export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
@@ -126,7 +127,7 @@ export function pivotCongestion(
   });
 
   if (resolution === 'hourly') {
-    const map: Record<string, PivotedRow & { _sortDate: string; _sortHE: number; _counts: Record<string, number> }> = {};
+    const map: Record<string, PivotedRow & { _sortTs: number; _counts: Record<string, number> }> = {};
     const seen = new Set<string>();
     for (const r of filtered) {
       const name = String(r[nameCol] || '');
@@ -134,7 +135,11 @@ export function pivotCongestion(
       const { key, label } = r.HE != null
         ? makeUniqueHourlyKey(r.Date, r.HE, seen, name)
         : { key: r.Date, label: r.Date };
-      if (!map[key]) map[key] = { Date: label, _sortDate: r.Date, _sortHE: he, _counts: {} };
+      if (!map[key]) {
+        const isDup = key.endsWith('b');
+        const ts = r.HE != null ? buildTimestamp(r.Date, he, isDup) : new Date(r.Date).getTime();
+        map[key] = { Date: label, _ts: ts, _sortTs: ts, _counts: {} };
+      }
       const v = Number(r[costCol] || 0);
       if (!map[key]._counts[name]) {
         map[key][name] = v;
@@ -145,8 +150,8 @@ export function pivotCongestion(
       }
     }
     const sorted = Object.values(map)
-      .sort((a, b) => a._sortDate < b._sortDate ? -1 : a._sortDate > b._sortDate ? 1 : a._sortHE - b._sortHE)
-      .map(({ _sortDate: _d, _sortHE: _h, _counts: _c, ...rest }) => rest as PivotedRow);
+      .sort((a, b) => a._sortTs - b._sortTs)
+      .map(({ _sortTs: _s, _counts: _c, ...rest }) => rest as PivotedRow);
     for (const row of sorted) {
       for (const c of constraints) {
         if (!(c in row)) row[c] = null;

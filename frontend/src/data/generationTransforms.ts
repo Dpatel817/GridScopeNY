@@ -1,4 +1,5 @@
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
+import { buildTimestamp } from '../utils/timeSeries';
 
 export type ChartType = 'line' | 'line-markers' | 'area' | 'bar';
 export type Resolution = 'hourly' | 'on_peak' | 'off_peak' | 'daily';
@@ -96,10 +97,14 @@ export function pivotByFuel(
       const { key, label } = r.HE != null
         ? makeUniqueHourlyKey(r.Date, r.HE, seen, fuel)
         : { key: r.Date, label: r.Date };
-      if (!map[key]) map[key] = { Date: label };
+      if (!map[key]) {
+        const isDup = key.endsWith('b');
+        const ts = r.HE != null ? buildTimestamp(r.Date, r.HE, isDup) : new Date(r.Date).getTime();
+        map[key] = { Date: label, _ts: ts };
+      }
       map[key][fuel] = Number(r[genCol] || 0);
     }
-    return Object.values(map).sort((a, b) => (a.Date < b.Date ? -1 : 1));
+    return Object.values(map).sort((a, b) => ((a._ts as number) || 0) - ((b._ts as number) || 0));
   }
 
   const snap: Record<string, number> = {};

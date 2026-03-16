@@ -27,6 +27,14 @@ function parseToDate(s: string): Date | null {
   return null;
 }
 
+function toDate(v: DateInput): Date | null {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number' && isFinite(v)) return new Date(v);
+  const s = String(v);
+  if (s === 'undefined' || s === 'null' || s === 'NaN') return null;
+  return parseToDate(s);
+}
+
 function fmtHour(d: Date): string {
   const h = d.getHours();
   const suffix = h >= 12 ? 'PM' : 'AM';
@@ -47,10 +55,16 @@ export type DateTier = 'hourly' | 'daily' | 'monthly' | 'yearly';
 
 export function getDateRangeSpanDays(data: Record<string, unknown>[], xKey: string): number {
   if (data.length < 2) return 0;
-  const first = String(data[0]?.[xKey] ?? '');
-  const last = String(data[data.length - 1]?.[xKey] ?? '');
-  const d1 = parseToDate(first);
-  const d2 = parseToDate(last);
+
+  const firstVal = data[0]?.[xKey];
+  const lastVal = data[data.length - 1]?.[xKey];
+
+  if (typeof firstVal === 'number' && typeof lastVal === 'number') {
+    return Math.abs(lastVal - firstVal) / (1000 * 60 * 60 * 24);
+  }
+
+  const d1 = parseToDate(String(firstVal ?? ''));
+  const d2 = parseToDate(String(lastVal ?? ''));
   if (!d1 || !d2) return 0;
   return Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24);
 }
@@ -80,13 +94,12 @@ export function makeTickFormatter(data: Record<string, unknown>[], xKey: string)
   const fmt = TICK_FN[tier];
 
   return (v: DateInput): string => {
-    if (v === null || v === undefined || v === '') return '';
-    const s = String(v);
-    if (s === 'undefined' || s === 'null' || s === 'NaN') return '';
-
-    const d = parseToDate(s);
-    if (!d) return s.length > 16 ? s.slice(0, 16) : s;
-
+    const d = toDate(v);
+    if (!d) {
+      if (v === null || v === undefined || v === '') return '';
+      const s = String(v);
+      return s.length > 16 ? s.slice(0, 16) : s;
+    }
     return fmt(d);
   };
 }
@@ -175,9 +188,60 @@ export function makeUniqueHourlyKey(date: string, he: number | string, seen: Set
   return { key: baseKey, label: `${date} HE${heNum}` };
 }
 
-export function tooltipLabelFormatter(_spanDaysOrData: number | Record<string, unknown>[], _xKey?: string): (v: DateInput) => string {
+function fmtHourlyTooltipFromTs(d: Date, displayLabel?: string): string {
+  if (displayLabel) {
+    const heMatch = displayLabel.match(/^(\d{4}-\d{2}-\d{2})\s+HE(\d+)(b?)$/);
+    if (heMatch) {
+      const dateStr = heMatch[1];
+      const he = heMatch[2];
+      const isDup = heMatch[3] === 'b';
+      const dstHours = getExpectedHourCount(dateStr);
+      let label = `HE ${he}`;
+      if (isDup) label += ' (DST)';
+      else if (dstHours !== 24) label += dstHours === 23 ? ' (Spring Fwd)' : ' (Fall Back)';
+      label = `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} — ${label}`;
+      return label;
+    }
+  }
+  return fmtFullTooltip(d, true);
+}
+
+export function tooltipLabelFormatter(spanDaysOrData: number | Record<string, unknown>[], xKey?: string): (v: DateInput) => string {
+  let spanDays: number;
+  let dataRef: Record<string, unknown>[] | null = null;
+  if (typeof spanDaysOrData === 'number') {
+    spanDays = spanDaysOrData;
+  } else {
+    dataRef = spanDaysOrData;
+    spanDays = getDateRangeSpanDays(spanDaysOrData, xKey ?? '');
+  }
+  const tier = getTier(spanDays);
+
+  const tsLookup: Map<number, string> | null = (() => {
+    if (xKey !== '_ts' || !dataRef) return null;
+    const map = new Map<number, string>();
+    for (const row of dataRef) {
+      const ts = row._ts;
+      const dateLabel = row.Date;
+      if (typeof ts === 'number' && typeof dateLabel === 'string') {
+        map.set(ts, dateLabel);
+      }
+    }
+    return map.size > 0 ? map : null;
+  })();
+
   return (v: DateInput): string => {
     if (v === null || v === undefined || v === '') return '';
+
+    if (typeof v === 'number' && isFinite(v)) {
+      const d = new Date(v);
+      if (tier === 'hourly' && tsLookup) {
+        const displayLabel = tsLookup.get(v);
+        return fmtHourlyTooltipFromTs(d, displayLabel);
+      }
+      return fmtFullTooltip(d, true);
+    }
+
     const s = String(v);
     if (s === 'undefined' || s === 'null' || s === 'NaN') return '';
 

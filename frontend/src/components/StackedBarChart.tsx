@@ -19,16 +19,22 @@ interface Props {
 }
 
 export default function StackedBarChart({ data, xKey, yKeys, height = 320, labelPrefix = '' }: Props) {
-  const fmtTick = useMemo(() => makeTickFormatter(data, xKey), [data, xKey])
-  const interval = useMemo(() => getTickInterval(data, xKey), [data, xKey])
-  const fmtTooltipLabel = useMemo(() => tooltipLabelFormatter(data, xKey), [data, xKey])
+  const useTs = xKey === 'Date' && data.length > 0 && '_ts' in (data[0] || {})
+  const effectiveXKey = useTs ? '_ts' : xKey
+  const fmtTick = useMemo(() => makeTickFormatter(data, effectiveXKey), [data, effectiveXKey])
+  const interval = useMemo(() => getTickInterval(data, effectiveXKey), [data, effectiveXKey])
+  const fmtTooltipLabel = useMemo(() => tooltipLabelFormatter(data, effectiveXKey), [data, effectiveXKey])
 
   if (!data.length || !yKeys.length) return <div className="empty-state" style={{ padding: 24 }}>No chart data</div>
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ReBarChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-        <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
+        {useTs ? (
+          <XAxis dataKey="_ts" tickFormatter={fmtTick} tick={{ fontSize: 11 }} type="number" domain={['dataMin', 'dataMax']} scale="time" />
+        ) : (
+          <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
+        )}
         <YAxis tick={{ fontSize: 11 }} />
         <Tooltip
           formatter={(v: number | string) => typeof v === 'number' ? `${labelPrefix}${v.toFixed(2)}` : v}

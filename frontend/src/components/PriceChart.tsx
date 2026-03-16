@@ -49,21 +49,27 @@ function makeTooltip(prefix: string, suffix: string, fmtLabel: (v: unknown) => s
 }
 
 export default function PriceChart({ data, xKey, yKeys, chartType, height = 340, valuePrefix = '$', valueSuffix = '' }: Props) {
-  const fmtTick = useMemo(() => makeTickFormatter(data, xKey), [data, xKey]);
-  const interval = useMemo(() => getTickInterval(data, xKey), [data, xKey]);
-  const fmtTooltipLabel = useMemo(() => tooltipLabelFormatter(data, xKey), [data, xKey]);
+  const useTs = xKey === 'Date' && data.length > 0 && '_ts' in (data[0] || {});
+  const effectiveXKey = useTs ? '_ts' : xKey;
+  const fmtTick = useMemo(() => makeTickFormatter(data, effectiveXKey), [data, effectiveXKey]);
+  const interval = useMemo(() => getTickInterval(data, effectiveXKey), [data, effectiveXKey]);
+  const fmtTooltipLabel = useMemo(() => tooltipLabelFormatter(data, effectiveXKey), [data, effectiveXKey]);
 
   if (!data.length || !yKeys.length) return <div className="iq-empty">No chart data available</div>;
 
   const showDots = chartType === 'line-markers';
   const TooltipContent = makeTooltip(valuePrefix, valueSuffix, fmtTooltipLabel);
 
+  const xAxisProps = useTs
+    ? { dataKey: '_ts' as const, tickFormatter: fmtTick, tick: { fontSize: 11 }, type: 'number' as const, domain: ['dataMin', 'dataMax'] as [string, string], scale: 'time' as const }
+    : { dataKey: xKey, tickFormatter: fmtTick, tick: { fontSize: 11 }, interval };
+
   if (chartType === 'area') {
     return (
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
+          <XAxis {...xAxisProps} />
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip content={<TooltipContent />} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
@@ -81,7 +87,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
       <ResponsiveContainer width="100%" height={height}>
         <ReBarChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
+          <XAxis {...xAxisProps} />
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip content={<TooltipContent />} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
@@ -97,7 +103,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
     <ResponsiveContainer width="100%" height={height}>
       <ReLineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-        <XAxis dataKey={xKey} tickFormatter={fmtTick} tick={{ fontSize: 11 }} interval={interval} />
+        <XAxis {...xAxisProps} />
         <YAxis tick={{ fontSize: 11 }} />
         <Tooltip content={<TooltipContent />} />
         {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}

@@ -1,5 +1,6 @@
 import { isNyisoZone } from './zones';
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
+import { buildTimestamp } from '../utils/timeSeries';
 
 export interface PriceRow {
   'Time Stamp': string;
@@ -97,10 +98,14 @@ function pivotHourly(rows: PriceRow[], zones: string[], field: LmpField = 'LMP')
     const { key, label } = r.HE != null
       ? makeUniqueHourlyKey(r.Date, r.HE, seen, zone)
       : { key: r.Date, label: r.Date };
-    if (!map[key]) map[key] = { Date: label };
+    if (!map[key]) {
+      const isDup = key.endsWith('b');
+      const ts = r.HE != null ? buildTimestamp(r.Date, r.HE, isDup) : new Date(r.Date).getTime();
+      map[key] = { Date: label, _ts: ts };
+    }
     map[key][zone] = Number(r[field]);
   }
-  return Object.values(map).sort((a, b) => (a.Date < b.Date ? -1 : a.Date > b.Date ? 1 : 0));
+  return Object.values(map).sort((a, b) => ((a._ts as number) || 0) - ((b._ts as number) || 0));
 }
 
 function pivotAggregated(
@@ -179,10 +184,13 @@ export function computeDartSpread(
     const seen = new Set<string>();
     for (const r of dartRows) {
       const { key, label } = makeUniqueHourlyKey(r.Date, r.HE, seen, r.Zone);
-      if (!map[key]) map[key] = { Date: label };
+      if (!map[key]) {
+        const isDup = key.endsWith('b');
+        map[key] = { Date: label, _ts: buildTimestamp(r.Date, r.HE, isDup) };
+      }
       map[key][r.Zone] = Number(r.DART.toFixed(2));
     }
-    return Object.values(map).sort((a, b) => (a.Date < b.Date ? -1 : 1));
+    return Object.values(map).sort((a, b) => ((a._ts as number) || 0) - ((b._ts as number) || 0));
   }
 
   let filtered = dartRows;
