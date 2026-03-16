@@ -48,10 +48,9 @@ frontend/
       DataTable.tsx       # Paginated data table
       DatasetSection.tsx  # Collapsible dataset card (chart + metrics + table)
       ResolutionSelector.tsx  # Resolution pill toggle buttons
-      EmptyState.tsx      # Empty state with ETL trigger button
+      EmptyState.tsx      # Empty state display (no ETL controls)
     hooks/
-      useDataset.ts       # Data fetching hook with resolution support + auto-refetch on data refresh
-      useDataRefresh.ts   # Data refresh hook: auto-refresh (5 min), manual refresh, cache clear
+      useDataset.ts       # Data fetching hook with resolution support
     pages/
       Home.tsx            # Market Overview — KPIs, Live System Context (RT events + oper announcements), workflow steps, nav tiles
       Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards, side chart controls, 3 view tabs (DA/RT/DART), ScarcitySignalSection (Energy vs Ancillary Price Signals)
@@ -90,7 +89,7 @@ src/
   api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)
 backfill.py               # ONE-TIME historical backfill (2024-01 to present, monthly ZIPs)
-daily_scraper.py           # NIGHTLY incremental updater (rolling 7-day, idempotent)
+scraper.py                # 15-minute incremental updater (rolling 2-day, idempotent)
 etl/
   config.py               # Paths, constants, backfill start date
   datasets.py             # Registry of all 39 NYISO datasets with URLs, primary keys, types
@@ -111,7 +110,7 @@ data/
   processed/              # Legacy processed CSVs + Parquet (synced, consumed by API)
   snapshots/              # Interconnection queue snapshot for change detection
 .github/workflows/
-  nightly_update.yml      # GitHub Actions cron: midnight ET daily_scraper.py --all
+  scraper.yml             # GitHub Actions cron: every 15 min scraper.py (2-day lookback)
 ```
 
 ## Page Architecture
@@ -154,9 +153,6 @@ CSS classes: `.series-selector-*` in `index.css`
 - `POST /api/ai-congestion-summary` — AI-generated congestion analysis commentary (gpt-4o-mini, max 300 tokens)
 - `POST /api/ai-explainer` — structured AI market analysis: Summary, Trader Takeaways, Battery Strategist Takeaways, Key Signals, Caveats (requires OPENAI_API_KEY)
 - `POST /api/explain` — backward-compatible AI explanation wrapper
-- `POST /api/refresh` — full data refresh: ETL fetch + process + cache clear (concurrency-guarded)
-- `POST /api/cache/clear` — clear in-memory DataFrame cache only
-- `POST /api/etl/fetch` / `POST /api/etl/process` — trigger ETL
 
 ## Resolution Aggregation
 

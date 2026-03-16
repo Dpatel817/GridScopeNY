@@ -461,7 +461,7 @@ export default function OpportunityExplorer() {
       )}
 
       {!loading && !dataError && !opportunities.length && (
-        <EmptyState message="No price data available. Run ETL to fetch DA and RT LBMP data from NYISO." />
+        <EmptyState message="No price data available yet. DA and RT LBMP data updates automatically every 15 minutes." />
       )}
 
       {!loading && opportunities.length > 0 && (

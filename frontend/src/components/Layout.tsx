@@ -1,5 +1,4 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { useDataRefresh } from '../hooks/useDataRefresh'
 import MarketAnalystWidget from './MarketAnalystWidget'
 
 const MARKET_NAV = [
@@ -15,13 +14,7 @@ const TOOL_NAV = [
   { path: '/opportunities', label: 'Opportunity Explorer', hero: true },
 ]
 
-function formatTime(date: Date | null) {
-  if (!date) return '';
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 export default function Layout() {
-  const { refreshing, lastRefresh, error, fullRefresh, autoRefreshEnabled, toggleAutoRefresh } = useDataRefresh();
   const location = useLocation();
 
   const currentPage = (() => {
@@ -81,36 +74,9 @@ export default function Layout() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <div className="refresh-controls">
-            <button
-              className={`refresh-btn${refreshing ? ' refreshing' : ''}`}
-              onClick={() => fullRefresh()}
-              disabled={refreshing}
-              title={refreshing ? 'Refreshing data...' : 'Fetch latest data from NYISO'}
-            >
-              <span className={`refresh-icon${refreshing ? ' spin' : ''}`}>↻</span>
-              {refreshing ? 'Refreshing...' : 'Refresh Data'}
-            </button>
-            <div className="refresh-meta">
-              <label className="auto-refresh-toggle" title="Auto-refresh every 5 minutes">
-                <input
-                  type="checkbox"
-                  checked={autoRefreshEnabled}
-                  onChange={toggleAutoRefresh}
-                />
-                <span>Auto</span>
-              </label>
-              {lastRefresh && (
-                <span className="last-refresh">Updated {formatTime(lastRefresh)}</span>
-              )}
-              {error && (
-                <span className="refresh-error" title={error}>!</span>
-              )}
-            </div>
-          </div>
           <div className="sidebar-status">
             <span className="status-dot" />
-            Live data from NYISO MIS
+            NYISO Market Data
           </div>
         </div>
       </aside>
