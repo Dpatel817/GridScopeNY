@@ -69,11 +69,21 @@ h3 { font-size: 1rem; font-weight: 600; }
   height: 100vh;
   overflow-y: auto;
   z-index: 100;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.sidebar-collapsed .sidebar {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+.sidebar-collapsed .main-content {
+  margin-left: 0;
 }
 
 .sidebar-brand {
   padding: 24px 20px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  position: relative;
 }
 .sidebar-brand-name {
   font-size: 18px;
@@ -251,7 +261,43 @@ h3 { font-size: 1rem; font-weight: 600; }
   font-weight: 700;
 }
 
-.main-content { margin-left: var(--sidebar-width); flex: 1; min-height: 100vh; }
+.sidebar-toggle {
+  position: absolute;
+  top: 24px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: var(--text-sidebar);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  padding: 0;
+}
+.sidebar-toggle:hover {
+  background: var(--bg-sidebar-hover);
+  color: #ffffff;
+}
+.sidebar-toggle-floating {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 101;
+  background: var(--bg-sidebar);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.sidebar-toggle-floating:hover {
+  background: var(--bg-sidebar-hover);
+  color: #ffffff;
+}
+
+.main-content { margin-left: var(--sidebar-width); flex: 1; min-height: 100vh; transition: margin-left 0.3s ease; }
 
 .page { padding: 32px 40px; max-width: 1400px; }
 
@@ -2061,9 +2107,13 @@ tr:hover td { background: var(--bg); }
 
 @media (max-width: 900px) {
   .two-col, .grid-2, .grid-3 { grid-template-columns: 1fr; }
-  .sidebar { position: relative; width: 100%; height: auto; }
+  .sidebar { position: relative; width: 100%; height: auto; transform: none; opacity: 1; pointer-events: auto; }
+  .sidebar-collapsed .sidebar { transform: none; opacity: 1; pointer-events: auto; }
   .main-content { margin-left: 0; }
+  .sidebar-collapsed .main-content { margin-left: 0; }
   .layout { flex-direction: column; }
+  .sidebar-toggle { display: none; }
+  .sidebar-toggle-floating { display: none; }
   .resolution-bar { flex-wrap: wrap; }
   .workflow-steps { grid-template-columns: 1fr; }
   .page { padding: 20px 16px; }

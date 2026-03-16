@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import MarketAnalystWidget from './MarketAnalystWidget'
 
@@ -16,6 +17,19 @@ const TOOL_NAV = [
 
 export default function Layout() {
   const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('sidebar-collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed));
+    } catch {}
+  }, [sidebarCollapsed]);
 
   const currentPage = (() => {
     const p = location.pathname;
@@ -31,7 +45,7 @@ export default function Layout() {
   })();
 
   return (
-    <div className="layout">
+    <div className={`layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
           <div className="sidebar-brand-name">
@@ -39,6 +53,18 @@ export default function Layout() {
             GridScopeNY
           </div>
           <div className="sidebar-brand-sub">NYISO Market Intelligence</div>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed(true)}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
         </div>
         <nav className="sidebar-nav">
           <NavLink
@@ -80,6 +106,20 @@ export default function Layout() {
           </div>
         </div>
       </aside>
+      {sidebarCollapsed && (
+        <button
+          className="sidebar-toggle sidebar-toggle-floating"
+          onClick={() => setSidebarCollapsed(false)}
+          aria-label="Expand sidebar"
+          title="Expand sidebar"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      )}
       <main className="main-content">
         <Outlet />
       </main>
