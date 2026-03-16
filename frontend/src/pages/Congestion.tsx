@@ -679,7 +679,7 @@ function fmtDate(val: string | undefined): string {
 }
 
 function OutageScheduleSection() {
-  const { data: outageData, loading } = useDataset('outage_schedule', 'daily', undefined, undefined, 20000, 730);
+  const { data: outageData, loading } = useDataset('outage_schedule', 'daily', undefined, undefined, 20000, 0);
   const [expanded, setExpanded] = useState(true);
   const [dateOutBefore, setDateOutBefore] = useState('');
   const [dateInAfter, setDateInAfter] = useState('');
@@ -1028,7 +1028,7 @@ export default function Congestion() {
   const aiRequestedRef = useRef(false);
 
   const datasetKey = marketType === 'DA' ? 'dam_limiting_constraints' : 'rt_limiting_constraints';
-  const { data: constraintData, loading, error } = useDataset(datasetKey, 'hourly', undefined, undefined, 50000, 90);
+  const { data: constraintData, loading, error } = useDataset(datasetKey, 'hourly', undefined, undefined, 50000, 0);
 
   const rows: CongestionRow[] = useMemo(
     () => (constraintData?.data || []) as CongestionRow[],

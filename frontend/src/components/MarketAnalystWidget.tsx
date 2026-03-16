@@ -68,15 +68,15 @@ export default function MarketAnalystWidget({ currentPage }: { currentPage: stri
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: priceData } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 10000, 730);
-  const { data: rtPriceData } = useDataset('rt_lbmp_zone', 'daily', undefined, undefined, 10000, 730);
-  const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 10000, 730);
-  const { data: genData } = useDataset('rtfuelmix', 'daily', undefined, undefined, 10000, 730);
-  const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 10000, 730);
-  const { data: damaspData } = useDataset('damasp', 'daily', undefined, undefined, 10000, 730);
-  const { data: rtaspData } = useDataset('rtasp', 'daily', undefined, undefined, 10000, 730);
-  const { data: flowData } = useDataset('external_limits_flows', 'daily', undefined, undefined, 10000, 730);
-  const { data: demandActual } = useDataset('pal', 'daily', undefined, undefined, 10000, 730);
+  const { data: priceData } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 10000, 0);
+  const { data: rtPriceData } = useDataset('rt_lbmp_zone', 'daily', undefined, undefined, 10000, 0);
+  const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 10000, 0);
+  const { data: genData } = useDataset('rtfuelmix', 'daily', undefined, undefined, 10000, 0);
+  const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 10000, 0);
+  const { data: damaspData } = useDataset('damasp', 'daily', undefined, undefined, 10000, 0);
+  const { data: rtaspData } = useDataset('rtasp', 'daily', undefined, undefined, 10000, 0);
+  const { data: flowData } = useDataset('external_limits_flows', 'daily', undefined, undefined, 10000, 0);
+  const { data: demandActual } = useDataset('pal', 'daily', undefined, undefined, 10000, 0);
   const { inventory } = useInventory();
 
   useEffect(() => {

@@ -33,8 +33,9 @@ export function useDataset(
   filterCol?: string,
   filterVal?: string,
   limit: number = 10000,
-  days: number = 90,
+  days: number = 0,
   offset: number = 0,
+  refreshMs: number = 15 * 60 * 1000,
 ) {
   const [data, setData] = useState<DatasetResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,7 +64,12 @@ export function useDataset(
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    if (refreshMs <= 0) return;
+    const timer = window.setInterval(() => {
+      fetchData();
+    }, refreshMs);
+    return () => window.clearInterval(timer);
+  }, [fetchData, refreshMs]);
 
   return { data, loading, error, refetch: fetchData };
 }

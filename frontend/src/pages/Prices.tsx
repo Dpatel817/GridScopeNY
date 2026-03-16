@@ -37,8 +37,8 @@ export default function Prices() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 90);
-  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 50000, 90);
+  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 0);
+  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 50000, 0);
 
   const loading = daLoading || rtLoading;
 

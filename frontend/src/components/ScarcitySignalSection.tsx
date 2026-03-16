@@ -59,10 +59,10 @@ function makeDualTooltip(fmtLabel: (v: unknown) => string) {
 }
 
 export default function ScarcitySignalSection() {
-  const { data: daLmpData } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 20000, 730);
-  const { data: rtLmpData } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 20000, 730);
-  const { data: damaspData, loading: damaspLoading } = useDataset('damasp', 'hourly', undefined, undefined, 20000, 730);
-  const { data: rtaspData, loading: rtaspLoading } = useDataset('rtasp', 'hourly', undefined, undefined, 20000, 730);
+  const { data: daLmpData } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 20000, 0);
+  const { data: rtLmpData } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 20000, 0);
+  const { data: damaspData, loading: damaspLoading } = useDataset('damasp', 'hourly', undefined, undefined, 20000, 0);
+  const { data: rtaspData, loading: rtaspLoading } = useDataset('rtasp', 'hourly', undefined, undefined, 20000, 0);
 
   const [resolution, setResolution] = useState<Resolution>('hourly');
   const [dateRange, setDateRange] = useState<DateRange>('today');
