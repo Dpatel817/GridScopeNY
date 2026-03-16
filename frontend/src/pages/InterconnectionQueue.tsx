@@ -1,8 +1,27 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useDataset } from '../hooks/useDataset';
+import {
+  BarChart as ReBarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+} from 'recharts';
 
-interface SummaryData {
-  [key: string]: string | number;
+interface QueueRow {
+  queue_pos: string;
+  project_name: string;
+  developer: string;
+  fuel_type: string;
+  sp_mw: number;
+  wp_mw: number;
+  zone: string;
+  county: string;
+  state: string;
+  status: string;
+  source_sheet: string;
+  date_of_ir: string;
+  proposed_cod: string;
+  point_of_interconnection: string;
+  utility: string;
+  [key: string]: unknown;
 }
 
 interface ChangeRow {
@@ -15,12 +34,125 @@ interface ChangeRow {
   zone: string;
   source_sheet: string;
   changed_fields: string;
-  previous_values: string;
-  current_values: string;
   detected_at: string;
 }
 
-type SheetFilter = 'all' | 'active' | 'cluster' | 'in_service' | 'withdrawn';
+interface SummaryData {
+  [key: string]: string | number;
+}
+
+type SortKey = 'sp_mw' | 'developer' | 'zone' | 'queue_pos' | 'fuel_type' | 'project_name';
+type SortDir = 'asc' | 'desc';
+
+const FUEL_LABELS: Record<string, string> = {
+  S: 'Solar', W: 'Wind', ES: 'Storage', NG: 'Gas', NUC: 'Nuclear',
+  H: 'Hydro', FO: 'Fuel Oil', AC: 'AC Transmission', DC: 'DC Transmission',
+  WND: 'Wind', SOL: 'Solar', STG: 'Storage', HYB: 'Hybrid',
+};
+
+const COLORS = [
+  '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#ec4899', '#14b8a6', '#6366f1', '#84cc16',
+  '#f97316', '#a855f7',
+];
+
+function fuelLabel(code: string): string {
+  if (!code) return 'Unknown';
+  return FUEL_LABELS[code] || code;
+}
+
+function parseSummary(data: any[]): SummaryData {
+  const map: SummaryData = {};
+  for (const row of data) map[row.metric] = row.value;
+  return map;
+}
+
+function parseJsonSafe(s: string): Record<string, number> {
+  try { return JSON.parse(s); } catch { return {}; }
+}
+
+function CollapsibleSection({
+  title, defaultOpen = true, badge, children,
+}: {
+  title: string; defaultOpen?: boolean; badge?: string; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="section-container">
+      <div className="collapsible-header" onClick={() => setOpen(!open)}>
+        <span className="chevron">{open ? '▾' : '▸'}</span>
+        {title}
+        {badge && <span className="badge badge-primary" style={{ marginLeft: 8 }}>{badge}</span>}
+      </div>
+      {open && <div style={{ marginTop: 8 }}>{children}</div>}
+    </div>
+  );
+}
+
+function QueueBarChart({ data, xKey, yKey, layout = 'vertical', height = 280 }: {
+  data: Record<string, unknown>[]; xKey: string; yKey: string;
+  layout?: 'vertical' | 'horizontal'; height?: number;
+}) {
+  if (!data.length) return <div className="iq-empty">No chart data</div>;
+
+  const fmtValue = (v: number) => `${Math.round(v).toLocaleString()} MW`;
+
+  if (layout === 'horizontal') {
+    return (
+      <ResponsiveContainer width="100%" height={height}>
+        <ReBarChart data={data} layout="vertical" margin={{ top: 4, right: 60, left: 90, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+          <YAxis type="category" dataKey={xKey} tick={{ fontSize: 11 }} width={85} />
+          <Tooltip formatter={(v: unknown) => typeof v === 'number' ? fmtValue(v) : String(v)}
+            contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }} />
+          <Bar dataKey={yKey} radius={[0, 4, 4, 0]} maxBarSize={24}>
+            {data.map((_, i) => (
+              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+            ))}
+            <LabelList dataKey={yKey} position="right"
+              formatter={(v: number) => `${Math.round(v).toLocaleString()}`}
+              style={{ fontSize: 10, fontWeight: 600, fill: 'var(--text-muted)' }} />
+          </Bar>
+        </ReBarChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ReBarChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+        <Tooltip formatter={(v: unknown) => typeof v === 'number' ? fmtValue(v) : String(v)}
+          contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }} />
+        <Bar dataKey={yKey} radius={[4, 4, 0, 0]} maxBarSize={36}>
+          {data.map((_, i) => (
+            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          ))}
+          <LabelList dataKey={yKey} position="top"
+            formatter={(v: number) => `${Math.round(v).toLocaleString()}`}
+            style={{ fontSize: 10, fontWeight: 600, fill: 'var(--text-muted)' }} />
+        </Bar>
+      </ReBarChart>
+    </ResponsiveContainer>
+  );
+}
+
+const DISPLAY_COLS = [
+  { key: 'queue_pos', label: 'Queue #', width: 80 },
+  { key: 'project_name', label: 'Project Name', width: 200 },
+  { key: 'developer', label: 'Developer', width: 180 },
+  { key: 'fuel_type', label: 'Fuel/Tech', width: 80 },
+  { key: 'sp_mw', label: 'SP MW', width: 70, numeric: true },
+  { key: 'wp_mw', label: 'WP MW', width: 70, numeric: true },
+  { key: 'zone', label: 'Zone', width: 50 },
+  { key: 'county', label: 'County', width: 100 },
+  { key: 'status', label: 'Status', width: 60 },
+  { key: 'date_of_ir', label: 'IR Date', width: 90 },
+  { key: 'proposed_cod', label: 'COD', width: 90 },
+];
 
 const SHEET_LABELS: Record<string, string> = {
   active: 'Active Queue',
@@ -32,62 +164,187 @@ const SHEET_LABELS: Record<string, string> = {
   affected_system_withdrawn: 'Affected System Withdrawn',
 };
 
-const DISPLAY_COLS = [
-  { key: 'queue_pos', label: 'Queue #', width: 80 },
-  { key: 'project_name', label: 'Project Name', width: 200 },
-  { key: 'developer', label: 'Developer', width: 180 },
-  { key: 'fuel_type', label: 'Fuel/Tech', width: 80 },
-  { key: 'sp_mw', label: 'SP MW', width: 70, numeric: true },
-  { key: 'wp_mw', label: 'WP MW', width: 70, numeric: true },
-  { key: 'zone', label: 'Zone', width: 50 },
-  { key: 'county', label: 'County', width: 100 },
-  { key: 'state', label: 'State', width: 50 },
-  { key: 'status', label: 'Status', width: 60 },
-  { key: 'date_of_ir', label: 'IR Date', width: 90 },
-  { key: 'proposed_cod', label: 'COD', width: 90 },
-];
-
-function parseSummary(data: any[]): SummaryData {
-  const map: SummaryData = {};
-  for (const row of data) {
-    map[row.metric] = row.value;
-  }
-  return map;
-}
-
-function parseJsonSafe(s: string): Record<string, number> {
-  try { return JSON.parse(s); } catch { return {}; }
-}
+type SheetFilter = 'all' | 'active' | 'cluster' | 'in_service' | 'withdrawn';
 
 export default function InterconnectionQueue() {
   const { data: summaryData } = useDataset('iq_summary', 'raw');
   const { data: changesData } = useDataset('iq_changes', 'raw');
   const { data: allData } = useDataset('interconnection_queue', 'raw');
 
-  const [sheetFilter, setSheetFilter] = useState<SheetFilter>('active');
-  const [searchTerm, setSearchTerm] = useState('');
   const [scraping, setScraping] = useState(false);
   const [scrapeMsg, setScrapeMsg] = useState('');
+  const [sheetFilter, setSheetFilter] = useState<SheetFilter>('active');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [fuelFilter, setFuelFilter] = useState('all');
+  const [zoneFilter, setZoneFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<SortKey>('sp_mw');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const summary = summaryData?.data?.length ? parseSummary(summaryData.data) : null;
   const changes: ChangeRow[] = (changesData?.data as ChangeRow[]) || [];
-  const allRows: any[] = allData?.data || [];
+  const allRows: QueueRow[] = (allData?.data || []) as QueueRow[];
 
-  const filteredRows = allRows.filter((r: any) => {
-    if (sheetFilter === 'all') { /* no sheet filter */ }
-    else if (sheetFilter === 'active') { if (r.source_sheet !== 'active') return false; }
-    else if (sheetFilter === 'cluster') { if (r.source_sheet !== 'cluster') return false; }
-    else if (sheetFilter === 'in_service') { if (r.source_sheet !== 'in_service') return false; }
-    else if (sheetFilter === 'withdrawn') { if (!String(r.source_sheet || '').includes('withdrawn')) return false; }
+  const activeRows = useMemo(() => allRows.filter(r => r.source_sheet === 'active'), [allRows]);
+  const clusterRows = useMemo(() => allRows.filter(r => r.source_sheet === 'cluster'), [allRows]);
+  const inServiceRows = useMemo(() => allRows.filter(r => r.source_sheet === 'in_service'), [allRows]);
+  const withdrawnRows = useMemo(() => allRows.filter(r => String(r.source_sheet || '').includes('withdrawn')), [allRows]);
+  const pipelineRows = useMemo(() => allRows.filter(r =>
+    r.source_sheet === 'active' || r.source_sheet === 'cluster' || r.source_sheet === 'in_service'
+  ), [allRows]);
+
+  const sumMw = (rows: QueueRow[]) => rows.reduce((s, r) => s + (Number(r.sp_mw) || 0), 0);
+
+  const kpis = useMemo(() => {
+    const activeMw = sumMw(activeRows);
+    const clusterMw = sumMw(clusterRows);
+    const inServiceMw = sumMw(inServiceRows);
+    const withdrawnMw = sumMw(withdrawnRows);
+
+    const fuelMw: Record<string, number> = {};
+    for (const r of [...activeRows, ...clusterRows]) {
+      const fuel = fuelLabel(r.fuel_type);
+      fuelMw[fuel] = (fuelMw[fuel] || 0) + (Number(r.sp_mw) || 0);
+    }
+    const storageMw = fuelMw['Storage'] || 0;
+    const solarMw = fuelMw['Solar'] || 0;
+    const windMw = fuelMw['Wind'] || 0;
+
+    const allPipeline = [...activeRows, ...clusterRows];
+    const largest = allPipeline.reduce((max, r) =>
+      (Number(r.sp_mw) || 0) > (Number(max?.sp_mw) || 0) ? r : max, allPipeline[0]);
+    const totalMw = activeMw + clusterMw;
+    const avgSize = allPipeline.length > 0 ? totalMw / allPipeline.length : 0;
+
+    return {
+      activeMw, clusterMw, inServiceMw, withdrawnMw,
+      storageMw, solarMw, windMw,
+      largest, avgSize, totalMw,
+      activeCount: activeRows.length, clusterCount: clusterRows.length,
+      inServiceCount: inServiceRows.length, withdrawnCount: withdrawnRows.length,
+    };
+  }, [activeRows, clusterRows, inServiceRows, withdrawnRows]);
+
+  const fuelChartData = useMemo(() => {
+    const fuelMw: Record<string, number> = {};
+    for (const r of [...activeRows, ...clusterRows]) {
+      const fuel = fuelLabel(r.fuel_type);
+      fuelMw[fuel] = (fuelMw[fuel] || 0) + (Number(r.sp_mw) || 0);
+    }
+    return Object.entries(fuelMw)
+      .map(([fuel, mw]) => ({ Fuel: fuel, MW: Math.round(mw) }))
+      .sort((a, b) => b.MW - a.MW)
+      .slice(0, 10);
+  }, [activeRows, clusterRows]);
+
+  const zoneChartData = useMemo(() => {
+    const zoneMw: Record<string, number> = {};
+    for (const r of [...activeRows, ...clusterRows]) {
+      const z = String(r.zone || 'Unknown');
+      zoneMw[z] = (zoneMw[z] || 0) + (Number(r.sp_mw) || 0);
+    }
+    return Object.entries(zoneMw)
+      .map(([zone, mw]) => ({ Zone: zone, MW: Math.round(mw) }))
+      .sort((a, b) => a.Zone < b.Zone ? -1 : 1);
+  }, [activeRows, clusterRows]);
+
+  const largestProjects = useMemo(() => {
+    return [...activeRows, ...clusterRows]
+      .filter(r => Number(r.sp_mw) > 0)
+      .sort((a, b) => (Number(b.sp_mw) || 0) - (Number(a.sp_mw) || 0))
+      .slice(0, 15);
+  }, [activeRows, clusterRows]);
+
+  const intelligenceSummary = useMemo(() => {
+    if (!allRows.length) return '';
+    const parts: string[] = [];
+
+    const totalPipelineMw = kpis.activeMw + kpis.clusterMw;
+    parts.push(
+      `The NYISO interconnection queue contains ${(kpis.activeCount + kpis.clusterCount).toLocaleString()} active and cluster projects totaling ${Math.round(totalPipelineMw).toLocaleString()} MW of proposed capacity.`
+    );
+
+    const topFuels = fuelChartData.slice(0, 3);
+    if (topFuels.length) {
+      parts.push(
+        `Dominant technologies: ${topFuels.map(f => `${f.Fuel} (${f.MW.toLocaleString()} MW)`).join(', ')}.`
+      );
+    }
+
+    const topZones = [...zoneChartData].sort((a, b) => b.MW - a.MW).slice(0, 3);
+    if (topZones.length) {
+      parts.push(
+        `Zones with the most queued capacity: ${topZones.map(z => `Zone ${z.Zone} (${z.MW.toLocaleString()} MW)`).join(', ')}.`
+      );
+    }
+
+    if (kpis.largest) {
+      parts.push(
+        `Largest project: ${kpis.largest.project_name || kpis.largest.queue_pos} at ${Math.round(Number(kpis.largest.sp_mw)).toLocaleString()} MW (${fuelLabel(kpis.largest.fuel_type)}, Zone ${kpis.largest.zone}).`
+      );
+    }
+
+    if (kpis.inServiceMw > 0) {
+      parts.push(
+        `${kpis.inServiceCount.toLocaleString()} projects (${Math.round(kpis.inServiceMw).toLocaleString()} MW) have reached in-service status.`
+      );
+    }
+
+    const newCount = Number(summary?.new_since_last || 0);
+    if (newCount > 0) {
+      parts.push(`${newCount} new project(s) added since the last scrape.`);
+    }
+
+    return parts.join(' ');
+  }, [allRows, kpis, fuelChartData, zoneChartData, summary]);
+
+  const allFuelTypes = useMemo(() => {
+    const fuels = new Set<string>();
+    for (const r of allRows) if (r.fuel_type) fuels.add(r.fuel_type);
+    return [...fuels].sort();
+  }, [allRows]);
+
+  const allZones = useMemo(() => {
+    const zones = new Set<string>();
+    for (const r of allRows) if (r.zone) zones.add(r.zone);
+    return [...zones].sort();
+  }, [allRows]);
+
+  const filteredRows = useMemo(() => {
+    let rows = allRows;
+
+    if (sheetFilter !== 'all') {
+      if (sheetFilter === 'withdrawn') rows = rows.filter(r => String(r.source_sheet || '').includes('withdrawn'));
+      else rows = rows.filter(r => r.source_sheet === sheetFilter);
+    }
+
+    if (fuelFilter !== 'all') rows = rows.filter(r => r.fuel_type === fuelFilter);
+    if (zoneFilter !== 'all') rows = rows.filter(r => r.zone === zoneFilter);
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      const searchable = [r.queue_pos, r.project_name, r.developer, r.fuel_type, r.zone, r.county]
-        .map(v => String(v || '').toLowerCase()).join(' ');
-      if (!searchable.includes(term)) return false;
+      rows = rows.filter(r => {
+        const searchable = [r.queue_pos, r.project_name, r.developer, r.fuel_type, r.zone, r.county]
+          .map(v => String(v || '').toLowerCase()).join(' ');
+        return searchable.includes(term);
+      });
     }
-    return true;
-  });
+
+    rows = [...rows].sort((a, b) => {
+      let aVal: any = a[sortKey];
+      let bVal: any = b[sortKey];
+      if (sortKey === 'sp_mw') { aVal = Number(aVal) || 0; bVal = Number(bVal) || 0; }
+      else { aVal = String(aVal || '').toLowerCase(); bVal = String(bVal || '').toLowerCase(); }
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return rows;
+  }, [allRows, sheetFilter, fuelFilter, zoneFilter, searchTerm, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir(key === 'sp_mw' ? 'desc' : 'asc'); }
+  };
 
   const handleScrape = useCallback(async () => {
     setScraping(true);
@@ -95,86 +352,188 @@ export default function InterconnectionQueue() {
     try {
       const res = await fetch('/api/iq/scrape', { method: 'POST' });
       const data = await res.json();
-      setScrapeMsg(data.status === 'ok' ? 'Scrape complete — refresh to see changes' : `Scrape error: ${data.status}`);
+      setScrapeMsg(data.status === 'ok' ? 'Scrape complete — refresh to see changes' : `Error: ${data.status}`);
     } catch {
       setScrapeMsg('Scrape failed');
     }
     setScraping(false);
   }, []);
 
-  const fuelBreakdown = summary ? parseJsonSafe(String(summary.fuel_breakdown || '{}')) : {};
-  const zoneBreakdown = summary ? parseJsonSafe(String(summary.zone_breakdown || '{}')) : {};
   const newCount = Number(summary?.new_since_last || 0);
   const removedCount = Number(summary?.removed_since_last || 0);
-  const updatedCount = Number(summary?.updated_since_last || 0);
-  const hasChanges = newCount > 0 || removedCount > 0 || updatedCount > 0;
+  const newChanges = changes.filter(c => c.change_type === 'new');
+  const newMwAdded = newChanges.reduce((s, c) => s + (Number(c.sp_mw) || 0), 0);
 
   const sheetTabs: { key: SheetFilter; label: string; count: number }[] = [
-    { key: 'active', label: 'Active', count: Number(summary?.total_active || 0) },
-    { key: 'cluster', label: 'Cluster', count: Number(summary?.total_cluster || 0) },
-    { key: 'in_service', label: 'In Service', count: Number(summary?.total_in_service || 0) },
-    { key: 'withdrawn', label: 'Withdrawn', count: Number(summary?.total_withdrawn || 0) },
-    { key: 'all', label: 'All', count: Number(summary?.total_projects || allRows.length) },
+    { key: 'active', label: 'Active', count: kpis.activeCount },
+    { key: 'cluster', label: 'Cluster', count: kpis.clusterCount },
+    { key: 'in_service', label: 'In Service', count: kpis.inServiceCount },
+    { key: 'withdrawn', label: 'Withdrawn', count: kpis.withdrawnCount },
+    { key: 'all', label: 'All', count: allRows.length },
   ];
 
   return (
     <div className="page">
-      <div className="page-header">
-        <h1>Interconnection Queue</h1>
-        <p className="page-subtitle">
-          NYISO generation and storage interconnection queue — active projects, cluster studies, in-service, and withdrawn
-        </p>
-      </div>
-
-      <div className="iq-toolbar">
-        <button
-          className={`btn btn-primary iq-scrape-btn${scraping ? ' refreshing' : ''}`}
-          onClick={handleScrape}
-          disabled={scraping}
-        >
-          <span className={`refresh-icon${scraping ? ' spin' : ''}`}>↻</span>
-          {scraping ? 'Scraping...' : 'Scrape Queue'}
-        </button>
-        {scrapeMsg && <span className="iq-scrape-msg">{scrapeMsg}</span>}
-        {summary?.scrape_timestamp && (
-          <span className="iq-timestamp">Last scrape: {String(summary.scrape_timestamp)}</span>
-        )}
-      </div>
-
-      {summary && (
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-          <div className="kpi-card">
-            <div className="kpi-label">Active Projects</div>
-            <div className="kpi-value">{summary.total_active}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Cluster Projects</div>
-            <div className="kpi-value">{summary.total_cluster}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">In Service</div>
-            <div className="kpi-value">{summary.total_in_service}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Total SP Capacity</div>
-            <div className="kpi-value">
-              {Number(summary.total_sp_mw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-          </div>
-          {hasChanges && (
-            <div className="kpi-card accent">
-              <div className="kpi-label">Changes Detected</div>
-              <div className="kpi-value">
-                {newCount + removedCount + updatedCount}
-              </div>
-            </div>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1>Interconnection Queue</h1>
+          <p className="page-subtitle">
+            NYISO generation and storage interconnection pipeline — capacity analytics, technology trends, and project tracking
+          </p>
+        </div>
+        <div className="iq-header-actions">
+          <button
+            className={`btn btn-primary iq-scrape-btn${scraping ? ' refreshing' : ''}`}
+            onClick={handleScrape}
+            disabled={scraping}
+          >
+            <span className={`refresh-icon${scraping ? ' spin' : ''}`}>&#8635;</span>
+            {scraping ? 'Scraping...' : 'Scrape Queue'}
+          </button>
+          {scrapeMsg && <span className="iq-scrape-msg">{scrapeMsg}</span>}
+          {summary?.scrape_timestamp && (
+            <span className="iq-timestamp">Last Updated: {String(summary.scrape_timestamp).slice(0, 16)}</span>
           )}
         </div>
-      )}
+      </div>
 
-      {hasChanges && changes.length > 0 && (
-        <div className="section-container">
-          <div className="section-title">Recent Changes</div>
+      <CollapsibleSection title="Queue Intelligence" defaultOpen={true}>
+        {intelligenceSummary ? (
+          <div className="price-summary-box">
+            <div className="price-summary-header">
+              <span className="price-summary-title">Queue Intelligence Summary</span>
+              <span className="price-summary-badge">Deterministic</span>
+            </div>
+            <div className="price-summary-body">{intelligenceSummary}</div>
+          </div>
+        ) : (
+          <div className="iq-empty">No queue data available. Click "Scrape Queue" to fetch.</div>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Queue KPIs" defaultOpen={true}>
+        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+          <div className="kpi-card">
+            <div className="kpi-label">Active Queue Capacity</div>
+            <div className="kpi-value">
+              {Math.round(kpis.activeMw).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+            <div className="kpi-sub">{kpis.activeCount} projects</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Cluster Study Capacity</div>
+            <div className="kpi-value">
+              {Math.round(kpis.clusterMw).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+            <div className="kpi-sub">{kpis.clusterCount} projects</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">In-Service Capacity</div>
+            <div className="kpi-value">
+              {Math.round(kpis.inServiceMw).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+            <div className="kpi-sub">{kpis.inServiceCount} projects</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Withdrawn Capacity</div>
+            <div className="kpi-value">
+              {Math.round(kpis.withdrawnMw).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+            <div className="kpi-sub">{kpis.withdrawnCount} projects</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Storage Capacity</div>
+            <div className="kpi-value">
+              {Math.round(kpis.storageMw).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Solar Capacity</div>
+            <div className="kpi-value">
+              {Math.round(kpis.solarMw).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Wind Capacity</div>
+            <div className="kpi-value">
+              {Math.round(kpis.windMw).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label">Largest Project</div>
+            <div className="kpi-value">
+              {kpis.largest ? <>{Math.round(Number(kpis.largest.sp_mw)).toLocaleString()}<span className="kpi-unit">MW</span></> : '—'}
+            </div>
+            {kpis.largest && <div className="kpi-sub">{kpis.largest.project_name ? (kpis.largest.project_name.length > 25 ? kpis.largest.project_name.slice(0, 23) + '...' : kpis.largest.project_name) : kpis.largest.queue_pos}</div>}
+          </div>
+          <div className="kpi-card accent">
+            <div className="kpi-label">Average Project Size</div>
+            <div className="kpi-value">
+              {Math.round(kpis.avgSize).toLocaleString()}<span className="kpi-unit">MW</span>
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Queue Analytics" defaultOpen={true}>
+        <div className="iq-pipeline-bar">
+          <div className="iq-pipeline-stage">
+            <div className="iq-pipeline-label">Cluster</div>
+            <div className="iq-pipeline-mw">{Math.round(kpis.clusterMw).toLocaleString()} MW</div>
+            <div className="iq-pipeline-count">{kpis.clusterCount} projects</div>
+          </div>
+          <div className="iq-pipeline-arrow">&rarr;</div>
+          <div className="iq-pipeline-stage active">
+            <div className="iq-pipeline-label">Active</div>
+            <div className="iq-pipeline-mw">{Math.round(kpis.activeMw).toLocaleString()} MW</div>
+            <div className="iq-pipeline-count">{kpis.activeCount} projects</div>
+          </div>
+          <div className="iq-pipeline-arrow">&rarr;</div>
+          <div className="iq-pipeline-stage done">
+            <div className="iq-pipeline-label">In Service</div>
+            <div className="iq-pipeline-mw">{Math.round(kpis.inServiceMw).toLocaleString()} MW</div>
+            <div className="iq-pipeline-count">{kpis.inServiceCount} projects</div>
+          </div>
+        </div>
+
+        <div className="iq-charts-row">
+          <div className="chart-card">
+            <div className="chart-card-header">
+              <div className="chart-card-title">Queue Capacity by Fuel Type</div>
+              <span className="badge badge-primary">{fuelChartData.length} types</span>
+            </div>
+            <QueueBarChart data={fuelChartData} xKey="Fuel" yKey="MW" layout="horizontal" height={Math.max(200, fuelChartData.length * 30)} />
+          </div>
+          <div className="chart-card">
+            <div className="chart-card-header">
+              <div className="chart-card-title">Queue Capacity by Zone</div>
+              <span className="badge badge-primary">{zoneChartData.length} zones</span>
+            </div>
+            <QueueBarChart data={zoneChartData} xKey="Zone" yKey="MW" layout="vertical" height={260} />
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Recent Queue Activity"
+        defaultOpen={newCount > 0 || removedCount > 0}
+        badge={newCount + removedCount > 0 ? `${newCount + removedCount} changes` : undefined}
+      >
+        <div className="iq-activity-summary">
+          <div className="kpi-card" style={{ flex: 1 }}>
+            <div className="kpi-label">New Projects</div>
+            <div className="kpi-value">{newCount}</div>
+          </div>
+          <div className="kpi-card" style={{ flex: 1 }}>
+            <div className="kpi-label">Projects Withdrawn</div>
+            <div className="kpi-value">{removedCount}</div>
+          </div>
+          <div className="kpi-card" style={{ flex: 1 }}>
+            <div className="kpi-label">MW Added</div>
+            <div className="kpi-value">{Math.round(newMwAdded).toLocaleString()}<span className="kpi-unit">MW</span></div>
+          </div>
+        </div>
+        {changes.length > 0 ? (
           <div className="iq-changes-list">
             {changes.slice(0, 20).map((c, i) => (
               <div className={`iq-change-item iq-change-${c.change_type}`} key={i}>
@@ -182,56 +541,48 @@ export default function InterconnectionQueue() {
                 <span className="iq-change-pos">{c.queue_pos}</span>
                 <span className="iq-change-name">{c.project_name}</span>
                 <span className="iq-change-detail">
-                  {c.developer}{c.fuel_type ? ` | ${c.fuel_type}` : ''}
-                  {c.sp_mw ? ` | ${c.sp_mw} MW` : ''}
+                  {c.developer}{c.fuel_type ? ` | ${fuelLabel(c.fuel_type)}` : ''}
+                  {c.sp_mw ? ` | ${Number(c.sp_mw).toLocaleString()} MW` : ''}
+                  {c.zone ? ` | Zone ${c.zone}` : ''}
                 </span>
-                {c.change_type === 'updated' && c.changed_fields && (
-                  <span className="iq-change-fields">
-                    Changed: {JSON.parse(c.changed_fields).join(', ')}
-                  </span>
-                )}
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="iq-empty" style={{ padding: '16px 0' }}>No recent changes detected.</div>
+        )}
+      </CollapsibleSection>
 
-      {(Object.keys(fuelBreakdown).length > 0 || Object.keys(zoneBreakdown).length > 0) && (
-        <div className="iq-breakdown-row">
-          {Object.keys(fuelBreakdown).length > 0 && (
-            <div className="iq-breakdown-card">
-              <div className="iq-breakdown-title">Active + Cluster by Fuel Type</div>
-              <div className="iq-breakdown-list">
-                {Object.entries(fuelBreakdown)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([fuel, count]) => (
-                    <div className="iq-breakdown-item" key={fuel}>
-                      <span className="iq-breakdown-label">{fuel}</span>
-                      <span className="iq-breakdown-value">{count}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-          {Object.keys(zoneBreakdown).length > 0 && (
-            <div className="iq-breakdown-card">
-              <div className="iq-breakdown-title">Active + Cluster by Zone</div>
-              <div className="iq-breakdown-list">
-                {Object.entries(zoneBreakdown)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([zone, count]) => (
-                    <div className="iq-breakdown-item" key={zone}>
-                      <span className="iq-breakdown-label">{zone}</span>
-                      <span className="iq-breakdown-value">{count}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
+      <CollapsibleSection title="Largest Projects" defaultOpen={false} badge="Top 15">
+        <div className="iq-table-wrap" style={{ maxHeight: 480 }}>
+          <table className="iq-table">
+            <thead>
+              <tr>
+                <th style={{ minWidth: 70 }}>Queue #</th>
+                <th style={{ minWidth: 180 }}>Project Name</th>
+                <th style={{ minWidth: 160 }}>Developer</th>
+                <th style={{ minWidth: 80 }}>Fuel Type</th>
+                <th style={{ minWidth: 70 }}>SP MW</th>
+                <th style={{ minWidth: 50 }}>Zone</th>
+              </tr>
+            </thead>
+            <tbody>
+              {largestProjects.map((r, i) => (
+                <tr key={i} className={Number(r.sp_mw) > 300 ? 'iq-row-highlight' : ''}>
+                  <td>{r.queue_pos}</td>
+                  <td>{r.project_name}</td>
+                  <td>{r.developer}</td>
+                  <td>{fuelLabel(r.fuel_type)}</td>
+                  <td className="numeric">{Math.round(Number(r.sp_mw)).toLocaleString()}</td>
+                  <td>{r.zone}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+      </CollapsibleSection>
 
-      <div className="section-container">
+      <CollapsibleSection title="Full Queue Table" defaultOpen={false} badge={`${allRows.length} projects`}>
         <div className="iq-table-header">
           <div className="iq-tabs">
             {sheetTabs.map(t => (
@@ -245,22 +596,44 @@ export default function InterconnectionQueue() {
               </button>
             ))}
           </div>
-          <input
-            type="text"
-            className="iq-search"
-            placeholder="Search projects..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
+          <div className="iq-filter-row">
+            <select className="iq-filter-select" value={fuelFilter} onChange={e => setFuelFilter(e.target.value)}>
+              <option value="all">All Fuels</option>
+              {allFuelTypes.map(f => <option key={f} value={f}>{fuelLabel(f)} ({f})</option>)}
+            </select>
+            <select className="iq-filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
+              <option value="all">All Zones</option>
+              {allZones.map(z => <option key={z} value={z}>Zone {z}</option>)}
+            </select>
+            <input
+              type="text"
+              className="iq-search"
+              placeholder="Search projects, developers, counties..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="iq-table-wrap">
           <table className="iq-table">
             <thead>
               <tr>
-                {DISPLAY_COLS.map(col => (
-                  <th key={col.key} style={{ minWidth: col.width }}>{col.label}</th>
-                ))}
+                {DISPLAY_COLS.map(col => {
+                  const isSortable = ['sp_mw', 'developer', 'zone', 'queue_pos', 'fuel_type', 'project_name'].includes(col.key);
+                  return (
+                    <th
+                      key={col.key}
+                      style={{ minWidth: col.width, cursor: isSortable ? 'pointer' : 'default' }}
+                      onClick={() => isSortable && handleSort(col.key as SortKey)}
+                    >
+                      {col.label}
+                      {sortKey === col.key && (
+                        <span className="iq-sort-icon">{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>
+                      )}
+                    </th>
+                  );
+                })}
                 {sheetFilter === 'all' && <th style={{ minWidth: 100 }}>Sheet</th>}
               </tr>
             </thead>
@@ -270,13 +643,15 @@ export default function InterconnectionQueue() {
                   {allRows.length === 0 ? 'No data — click "Scrape Queue" to fetch' : 'No matching projects'}
                 </td></tr>
               ) : (
-                filteredRows.slice(0, 500).map((row: any, i: number) => (
-                  <tr key={i}>
+                filteredRows.slice(0, 500).map((row, i) => (
+                  <tr key={i} className={Number(row.sp_mw) > 300 ? 'iq-row-highlight' : ''}>
                     {DISPLAY_COLS.map(col => (
                       <td key={col.key} className={col.numeric ? 'numeric' : ''}>
-                        {col.numeric && row[col.key] != null
-                          ? Number(row[col.key]).toLocaleString(undefined, { maximumFractionDigits: 1 })
-                          : row[col.key] ?? ''}
+                        {col.key === 'fuel_type'
+                          ? fuelLabel(String(row[col.key] || ''))
+                          : col.numeric && row[col.key] != null
+                            ? Number(row[col.key]).toLocaleString(undefined, { maximumFractionDigits: 1 })
+                            : (row[col.key] as string) ?? ''}
                       </td>
                     ))}
                     {sheetFilter === 'all' && (
@@ -291,7 +666,7 @@ export default function InterconnectionQueue() {
         {filteredRows.length > 500 && (
           <div className="iq-truncation">Showing 500 of {filteredRows.length.toLocaleString()} projects</div>
         )}
-      </div>
+      </CollapsibleSection>
     </div>
   );
 }

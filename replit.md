@@ -61,7 +61,7 @@ frontend/
       Congestion.tsx      # Congestion Analysis — constraint rankings, stacked bar, outages, Constraint Impact Analysis drilldown
       OpportunityExplorer.tsx  # Opportunity Explorer — zone rankings, trader + battery takeaways, embedded AI analyst
       GeneratorMap.tsx     # Generator Price Map — Leaflet geographic LMP/MLC/MCC visualization (standalone or embedded mode)
-      InterconnectionQueue.tsx  # Interconnection Queue — KPIs, changes list, fuel/zone breakdown, searchable table with sheet tabs
+      InterconnectionQueue.tsx  # Interconnection Queue — Intelligence summary, 9 MW-based KPIs, pipeline viz (Cluster→Active→In Service), fuel/zone bar charts, recent activity, largest projects, sortable/filterable table, collapsible sections
     components/
       PriceChart.tsx      # Flexible chart (line/line+markers/stacked area/stacked bar) with configurable tooltip prefix/suffix
       PriceChartControls.tsx  # Side control panel for Price page (zones, resolution, date range, chart type)

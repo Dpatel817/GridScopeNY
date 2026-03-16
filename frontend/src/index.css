@@ -1961,11 +1961,9 @@ tr:hover td { background: var(--bg); }
 }
 .iq-table-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: 12px;
-  flex-wrap: wrap;
 }
 .iq-tabs {
   display: flex;
@@ -2076,6 +2074,109 @@ tr:hover td { background: var(--bg); }
   font-size: 12px;
   color: var(--text-muted);
   border-top: 1px solid var(--border);
+}
+.iq-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.iq-pipeline-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.iq-pipeline-stage {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 24px;
+  text-align: center;
+  min-width: 160px;
+}
+.iq-pipeline-stage.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg-card));
+}
+.iq-pipeline-stage.done {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+}
+.iq-pipeline-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.iq-pipeline-mw {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.iq-pipeline-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.iq-pipeline-arrow {
+  font-size: 1.4rem;
+  color: var(--text-muted);
+  padding: 0 12px;
+}
+.iq-charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .iq-charts-row { grid-template-columns: 1fr; }
+  .iq-pipeline-bar { flex-direction: column; }
+  .iq-pipeline-arrow { transform: rotate(90deg); padding: 4px 0; }
+}
+.iq-activity-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.iq-filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.iq-filter-select {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+}
+.iq-filter-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+.iq-row-highlight {
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-card)) !important;
+}
+.iq-row-highlight td {
+  font-weight: 600;
+}
+.iq-sort-icon {
+  font-size: 10px;
+  color: var(--primary);
+  margin-left: 2px;
+}
+.iq-table th {
+  cursor: default;
 }
 
 /* Price Intelligence */
