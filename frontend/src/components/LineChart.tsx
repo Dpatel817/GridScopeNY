@@ -36,7 +36,7 @@ export default function LineChart({ data, xKey, yKeys, title, height = 300 }: Pr
           />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
           {yKeys.map((k, i) => (
-            <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]} dot={false} strokeWidth={1.5} />
+            <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]} dot={false} strokeWidth={1.5} connectNulls={true} />
           ))}
         </ReLineChart>
       </ResponsiveContainer>

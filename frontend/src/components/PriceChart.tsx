@@ -29,7 +29,7 @@ function makeTooltip(prefix: string, suffix: string) {
     return (
       <div className="price-tooltip">
         <div className="price-tooltip-label">{tooltipLabelFormatter(label)}</div>
-        {payload.map((entry: any, i: number) => {
+        {payload.filter((entry: any) => entry.value != null).map((entry: any, i: number) => {
           const val = typeof entry.value === 'number'
             ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
             : entry.value;
@@ -104,7 +104,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
           <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]}
             dot={showDots ? { r: 2 } : false}
             activeDot={showDots ? { r: 4 } : { r: 3 }}
-            strokeWidth={1.5} />
+            strokeWidth={1.5} connectNulls={true} />
         ))}
       </ReLineChart>
     </ResponsiveContainer>

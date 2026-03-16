@@ -13,7 +13,7 @@ export interface CongestionRow {
 
 export interface PivotedRow {
   Date: string;
-  [key: string]: string | number;
+  [key: string]: string | number | null;
 }
 
 export function isOnPeak(he: number): boolean {
@@ -140,9 +140,15 @@ export function pivotCongestion(
         map[key]._counts[name]++;
       }
     }
-    return Object.values(map)
+    const sorted = Object.values(map)
       .sort((a, b) => a._sortDate < b._sortDate ? -1 : a._sortDate > b._sortDate ? 1 : a._sortHE - b._sortHE)
       .map(({ _sortDate: _d, _sortHE: _h, _counts: _c, ...rest }) => rest as PivotedRow);
+    for (const row of sorted) {
+      for (const c of constraints) {
+        if (!(c in row)) row[c] = null;
+      }
+    }
+    return sorted;
   }
 
   const accum: Record<string, Record<string, { sum: number; count: number }>> = {};
@@ -158,7 +164,7 @@ export function pivotCongestion(
     }
   }
 
-  return Object.entries(accum)
+  const result = Object.entries(accum)
     .map(([date, cData]) => {
       const row: PivotedRow = { Date: date };
       for (const [name, { sum, count }] of Object.entries(cData)) {
@@ -167,4 +173,10 @@ export function pivotCongestion(
       return row;
     })
     .sort((a, b) => (a.Date < b.Date ? -1 : 1));
+  for (const row of result) {
+    for (const c of constraints) {
+      if (!(c in row)) row[c] = null;
+    }
+  }
+  return result;
 }
