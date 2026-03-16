@@ -159,5 +159,5 @@ bash start.sh
 
 ## Dependencies
 
-Python: fastapi, uvicorn, pandas, numpy, pyarrow, plotly, python-dotenv, openpyxl, requests
+Python: fastapi, uvicorn, pandas, numpy, pyarrow, python-dotenv, openpyxl, requests, openai
 Node: react, react-router-dom, recharts, leaflet, react-leaflet, vite

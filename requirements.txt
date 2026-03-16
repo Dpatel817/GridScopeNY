@@ -1,9 +1,8 @@
-streamlit
 pandas
 numpy
-plotly
 python-dotenv
 openpyxl
 fastapi
 uvicorn[standard]
 requests
+openai
