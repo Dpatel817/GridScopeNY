@@ -110,27 +110,25 @@ export default function ChartControls({
             </button>
           ))}
         </div>
-        {dateRange === 'custom' && availableDates.length > 0 && (
+        {dateRange === 'custom' && (
           <div className="pcc-date-inputs">
-            <select
+            <input
+              type="date"
               className="pcc-date"
               value={startDate}
+              min={availableDates.length > 0 ? availableDates[0] : undefined}
+              max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
               onChange={e => onStartDateChange(e.target.value)}
-            >
-              {availableDates.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+            />
             <span className="pcc-date-sep">to</span>
-            <select
+            <input
+              type="date"
               className="pcc-date"
               value={endDate}
+              min={availableDates.length > 0 ? availableDates[0] : undefined}
+              max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
               onChange={e => onEndDateChange(e.target.value)}
-            >
-              {availableDates.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+            />
           </div>
         )}
       </div>

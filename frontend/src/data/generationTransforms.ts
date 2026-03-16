@@ -55,8 +55,17 @@ export function filterByDateRange(
     if (!latest) return rows;
     return rows.filter(r => r.Date === latest);
   }
-  if (range === 'custom' && startDate && endDate) {
-    return rows.filter(r => r.Date >= startDate && r.Date <= endDate);
+  if (range === 'custom') {
+    if (startDate && endDate) {
+      return rows.filter(r => r.Date >= startDate && r.Date <= endDate);
+    }
+    const dates = getAvailableDates(rows);
+    if (dates.length > 0) {
+      const end = dates[dates.length - 1];
+      const startIdx = Math.max(0, dates.length - 7);
+      const start = dates[startIdx];
+      return rows.filter(r => r.Date >= start && r.Date <= end);
+    }
   }
   return rows;
 }

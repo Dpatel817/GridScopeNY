@@ -171,7 +171,7 @@ export default function Generation() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'daily', undefined, undefined, 20000, 730);
+  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'hourly', undefined, undefined, 50000, 90);
 
   const rows: GenRow[] = useMemo(() => (fuelData?.data || []) as GenRow[], [fuelData]);
   const { genCol, fuelCol } = useMemo(() => detectColumns(rows), [rows]);
@@ -334,7 +334,15 @@ export default function Generation() {
             resolution={resolution}
             onResolutionChange={setResolution}
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
+            onDateRangeChange={(r: DateRange) => {
+              setDateRange(r);
+              if (r === 'custom' && !startDate && !endDate && availableDates.length > 0) {
+                const end = availableDates[availableDates.length - 1];
+                const startIdx = Math.max(0, availableDates.length - 7);
+                setStartDate(availableDates[startIdx]);
+                setEndDate(end);
+              }
+            }}
             startDate={startDate}
             endDate={endDate}
             onStartDateChange={setStartDate}

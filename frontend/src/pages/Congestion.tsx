@@ -967,15 +967,25 @@ function CongestionChartControls({
             </button>
           ))}
         </div>
-        {dateRange === 'custom' && availableDates.length > 0 && (
+        {dateRange === 'custom' && (
           <div className="pcc-date-inputs">
-            <select className="pcc-date" value={startDate} onChange={e => onStartDateChange(e.target.value)}>
-              {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+            <input
+              type="date"
+              className="pcc-date"
+              value={startDate}
+              min={availableDates.length > 0 ? availableDates[0] : undefined}
+              max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
+              onChange={e => onStartDateChange(e.target.value)}
+            />
             <span className="pcc-date-sep">to</span>
-            <select className="pcc-date" value={endDate} onChange={e => onEndDateChange(e.target.value)}>
-              {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+            <input
+              type="date"
+              className="pcc-date"
+              value={endDate}
+              min={availableDates.length > 0 ? availableDates[0] : undefined}
+              max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
+              onChange={e => onEndDateChange(e.target.value)}
+            />
           </div>
         )}
       </div>
@@ -1008,7 +1018,7 @@ export default function Congestion() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 20000, 730);
+  const { data: daConstraints, loading, error } = useDataset('dam_limiting_constraints', 'hourly', undefined, undefined, 50000, 90);
 
   const rows: CongestionRow[] = useMemo(
     () => (daConstraints?.data || []) as CongestionRow[],
@@ -1181,7 +1191,15 @@ export default function Congestion() {
             resolution={resolution}
             onResolutionChange={setResolution}
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
+            onDateRangeChange={(r: DateRange) => {
+              setDateRange(r);
+              if (r === 'custom' && !startDate && !endDate && availableDates.length > 0) {
+                const end = availableDates[availableDates.length - 1];
+                const startIdx = Math.max(0, availableDates.length - 7);
+                setStartDate(availableDates[startIdx]);
+                setEndDate(end);
+              }
+            }}
             startDate={startDate}
             endDate={endDate}
             onStartDateChange={setStartDate}

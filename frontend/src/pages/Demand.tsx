@@ -34,8 +34,8 @@ export default function Demand() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'daily', undefined, undefined, 20000, 730);
-  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'daily', undefined, undefined, 20000, 730);
+  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'hourly', undefined, undefined, 50000, 90);
+  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'hourly', undefined, undefined, 50000, 90);
 
   const loading = fLoading || aLoading;
 
@@ -105,8 +105,17 @@ export default function Demand() {
       if (!latest) return aligned;
       return aligned.filter(r => r.Date === latest);
     }
-    if (dateRange === 'custom' && startDate && endDate) {
-      return aligned.filter(r => r.Date >= startDate && r.Date <= endDate);
+    if (dateRange === 'custom') {
+      if (startDate && endDate) {
+        return aligned.filter(r => r.Date >= startDate && r.Date <= endDate);
+      }
+      const dates = [...new Set(aligned.map(r => r.Date))].sort();
+      if (dates.length > 0) {
+        const end = dates[dates.length - 1];
+        const startIdx = Math.max(0, dates.length - 7);
+        const start = dates[startIdx];
+        return aligned.filter(r => r.Date >= start && r.Date <= end);
+      }
     }
     return aligned;
   }, [aligned, dateRange, startDate, endDate, forecastRows]);
@@ -245,7 +254,15 @@ export default function Demand() {
             resolution={resolution}
             onResolutionChange={setResolution}
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
+            onDateRangeChange={(r: DateRange) => {
+              setDateRange(r);
+              if (r === 'custom' && !startDate && !endDate && availableDates.length > 0) {
+                const end = availableDates[availableDates.length - 1];
+                const startIdx = Math.max(0, availableDates.length - 7);
+                setStartDate(availableDates[startIdx]);
+                setEndDate(end);
+              }
+            }}
             startDate={startDate}
             endDate={endDate}
             onStartDateChange={setStartDate}

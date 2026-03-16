@@ -36,8 +36,8 @@ export default function Prices() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
-  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'daily', undefined, undefined, 20000, 730);
+  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 90);
+  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 50000, 90);
 
   const loading = daLoading || rtLoading;
 
@@ -208,7 +208,15 @@ export default function Prices() {
             resolution={resolution}
             onResolutionChange={setResolution}
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
+            onDateRangeChange={(r: DateRange) => {
+              setDateRange(r);
+              if (r === 'custom' && !startDate && !endDate && availableDates.length > 0) {
+                const end = availableDates[availableDates.length - 1];
+                const startIdx = Math.max(0, availableDates.length - 7);
+                setStartDate(availableDates[startIdx]);
+                setEndDate(end);
+              }
+            }}
             startDate={startDate}
             endDate={endDate}
             onStartDateChange={setStartDate}
