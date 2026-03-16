@@ -7,6 +7,8 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+import os
+import subprocess
 import sys
 from typing import Optional, Any
 
@@ -31,6 +33,13 @@ from src.config import OPENAI_API_KEY
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+SCRAPER_INTERVAL_SECONDS = int(os.getenv("SCRAPER_INTERVAL_SECONDS", "900"))
+CACHE_REFRESH_INTERVAL_SECONDS = int(os.getenv("CACHE_REFRESH_INTERVAL_SECONDS", "300"))
+
+_background_tasks: list[asyncio.Task] = []
+_scrape_lock = asyncio.Lock()
+_cache_lock = asyncio.Lock()
 
 app = FastAPI(
     title="GridScope NY API",
@@ -66,6 +75,80 @@ async def preload_large_datasets():
                 _build_daily_cache(key, meta, df)
         logger.info("Daily cache build complete")
     threading.Thread(target=_preload, daemon=True).start()
+
+
+def _refresh_memory_cache() -> None:
+    from src.api_data_loader import _df_cache
+
+    _df_cache.clear()
+    logger.info("Cleared API dataframe cache")
+
+
+def _run_scraper_once() -> None:
+    logger.info("Starting scheduled scrape job")
+    cmd = [sys.executable, "scraper.py", "--lookback-days", "2"]
+    completed = subprocess.run(
+        cmd,
+        cwd=os.path.dirname(os.path.abspath(__file__)),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        logger.error(
+            "Scheduled scraper failed (code=%s): %s",
+            completed.returncode,
+            completed.stderr.strip() or completed.stdout.strip(),
+        )
+        return
+
+    logger.info("Scheduled scrape completed successfully")
+    _refresh_memory_cache()
+
+
+async def _scraper_loop() -> None:
+    await asyncio.sleep(5)
+    while True:
+        try:
+            async with _scrape_lock:
+                await asyncio.to_thread(_run_scraper_once)
+        except Exception:
+            logger.exception("Unexpected error in scraper loop")
+        await asyncio.sleep(SCRAPER_INTERVAL_SECONDS)
+
+
+async def _cache_refresh_loop() -> None:
+    await asyncio.sleep(5)
+    while True:
+        try:
+            async with _cache_lock:
+                await asyncio.to_thread(_refresh_memory_cache)
+        except Exception:
+            logger.exception("Unexpected error in cache refresh loop")
+        await asyncio.sleep(CACHE_REFRESH_INTERVAL_SECONDS)
+
+
+@app.on_event("startup")
+async def start_background_jobs():
+    _background_tasks.append(asyncio.create_task(_scraper_loop(), name="scheduled-scraper"))
+    _background_tasks.append(asyncio.create_task(_cache_refresh_loop(), name="cache-refresh"))
+    logger.info(
+        "Background jobs started (scraper every %ss, cache refresh every %ss)",
+        SCRAPER_INTERVAL_SECONDS,
+        CACHE_REFRESH_INTERVAL_SECONDS,
+    )
+
+
+@app.on_event("shutdown")
+async def stop_background_jobs():
+    for task in _background_tasks:
+        task.cancel()
+    for task in _background_tasks:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    _background_tasks.clear()
 
 
 
@@ -1712,5 +1795,4 @@ def scrape_interconnection_queue():
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-
 

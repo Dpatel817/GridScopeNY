@@ -34,8 +34,8 @@ export default function Demand() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'hourly', undefined, undefined, 20000, 730);
-  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'hourly', undefined, undefined, 50000, 730);
+  const { data: forecastData, loading: fLoading, error: fError } = useDataset('isolf', 'hourly', undefined, undefined, 20000, 0);
+  const { data: actualData, loading: aLoading, error: aError } = useDataset('pal', 'hourly', undefined, undefined, 50000, 0);
 
   const loading = fLoading || aLoading;
 

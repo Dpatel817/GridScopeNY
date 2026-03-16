@@ -395,7 +395,7 @@ export default function Generation() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'hourly', undefined, undefined, 50000, 90);
+  const { data: fuelData, loading, error } = useDataset('rtfuelmix', 'hourly', undefined, undefined, 50000, 0);
 
   const rows: GenRow[] = useMemo(() => (fuelData?.data || []) as GenRow[], [fuelData]);
   const { genCol, fuelCol } = useMemo(() => detectColumns(rows), [rows]);

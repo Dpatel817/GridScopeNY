@@ -119,7 +119,7 @@ export default function DatasetSection({ datasetKey, resolution, defaultExpanded
       const params = new URLSearchParams({
         resolution: effectiveRes,
         limit: '10000',
-        days: '90',
+        days: '0',
         offset: String(nextOffset),
       });
       if (isFilterable && filterVal && filterColumn) {
