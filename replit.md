@@ -88,14 +88,31 @@ frontend/
 src/
   api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)
+backfill.py               # ONE-TIME historical backfill (2024-01 to present, monthly ZIPs)
+daily_scraper.py           # NIGHTLY incremental updater (rolling 7-day, idempotent)
+etl/
+  config.py               # Paths, constants, backfill start date
+  datasets.py             # Registry of all 39 NYISO datasets with URLs, primary keys, types
+  fetchers.py             # HTTP session, archive/daily/snapshot fetchers, ZIP extraction
+  processors.py           # DataFrame cleaning, timestamp parsing, numeric coercion
+  storage.py              # Parquet upsert with dedup, legacy data/ sync
+  manifests.py            # JSON manifest tracking (processed months/dates, idempotency)
+  utils.py                # Logging setup
 ETL/
-  fetch_nyiso_data.py     # Fetches CSVs from NYISO MIS (7-day rolling window)
-  process_nyiso_data.py   # Cleans, renames, and saves processed CSVs
-  fetch_interconnection_queue.py  # Scrapes NYISO Interconnection Queue Excel, normalizes, snapshot comparison, change detection
+  fetch_nyiso_data.py     # Legacy 7-day rolling scraper (superseded by daily_scraper.py)
+  process_nyiso_data.py   # Legacy processor (still used by api.py /api/refresh endpoint)
+  fetch_interconnection_queue.py  # Queue Excel parser (used by both backfill + daily_scraper)
+raw_data/                 # Raw downloads organized by dataset (zip/, csv/, txt/, xlsx/)
+processed_csv/            # Intermediate processed CSVs by dataset
+parquet_data/             # Master deduplicated Parquet files by dataset
+manifests/                # JSON manifests tracking processed months/dates
+logs/                     # ETL run logs
 data/
-  raw/                    # Raw NYISO CSV files
-  processed/              # Cleaned CSVs + Parquet files consumed by the API (Parquet preferred)
+  raw/                    # Legacy raw CSVs (synced from parquet_data by ETL)
+  processed/              # Legacy processed CSVs + Parquet (synced, consumed by API)
   snapshots/              # Interconnection queue snapshot for change detection
+.github/workflows/
+  nightly_update.yml      # GitHub Actions cron: midnight ET daily_scraper.py --all
 ```
 
 ## Page Architecture

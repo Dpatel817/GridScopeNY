@@ -1,0 +1,137 @@
+Here is the complete package to get your Replit environment set up. It includes the methodology, the exact prompt you can feed into Replit's AI, and a sample Python script demonstrating the core engine.
+
+### The Methodology
+
+To build this reliably without cluttering your Replit storage or creating duplicate data, we will use a **Two-Pronged Architecture**:
+
+1. **The Backfill Script (Run Once):** This iterates through the first day of every month from `20240101` to `20260301`. It downloads the `.zip` files, extracts the daily `.csv` files into a `raw_data` directory, cleans them, and appends them into a master `.parquet` file for each dataset.
+2. **The Daily Cron Job (Run Nightly via GitHub Actions):** This script runs daily at midnight. It fetches the rolling 7-day `.csv` links (or the current month's zip). It processes the new data and concats it with your existing master Parquet file.
+3. **The Idempotency Engine:** Every time new data touches the master Parquet file, Pandas drops duplicates based on a subset of primary keys (e.g., `Time Stamp`, `Name`, `PTID`). This guarantees that overlapping days from the daily CSVs and the monthly zips never create duplicate rows.
+
+---
+
+### The Replit Prompt
+
+Copy and paste the text below directly into your Replit AI assistant or Replit Agent.
+
+> **Prompt for Replit:**
+> "I need to build a Python ETL pipeline to scrape and process New York Independent System Operator (NYISO) grid data.
+> **Architecture Requirements:**
+> 1. **Folder Structure:** Create three directories: `raw_data/` (for downloaded zips and raw CSVs), `processed_csv/` (for intermediate cleaning), and `parquet_data/` (for the final master datasets).
+> 2. **Historical Backfill:** Create a script named `backfill.py` that iterates through months starting from Jan 1, 2024 to the current month (e.g., '20240101', '20240201'). It should download NYISO monthly zipped CSV archives, extract them to `raw_data`, process them, and save them as `.parquet` files in `parquet_data/`.
+> 3. **Daily Updater:** Create a script named `daily_scraper.py` meant to be triggered by a GitHub Actions cron job at midnight. It should fetch the rolling daily CSVs for the last 7 days, process them, and append them to the existing Parquet files.
+> 4. **Deduplication:** Whenever writing to a Parquet file, the script must load the existing Parquet file, concatenate the new dataframe, and run `df.drop_duplicates(keep='last')` based on the dataset's primary keys (e.g., 'Time Stamp', 'Name', 'PTID' depending on the file) before overwriting the Parquet file.
+> 
+> 
+> **Data Sources:**
+> We will start by implementing this for the 'DA LBMP (Zonal)' dataset to establish the pattern.
+> * Monthly Zip Pattern: `https://mis.nyiso.com/public/csv/damlbmp/{YYYYMM01}damlbmp_zone_csv.zip`
+> * Daily CSV Pattern: `https://mis.nyiso.com/public/csv/damlbmp/{YYYYMMDD}damlbmp_zone.csv`
+> 
+> 
+> Please write `backfill.py` and `daily_scraper.py` using `requests`, `pandas`, `zipfile`, `io`, and `fastparquet` or `pyarrow`. Implement robust error handling (e.g., HTTP 404s for missing future dates). Once we get the DA LBMP dataset working, I will provide a dictionary of 35 other endpoints to loop through."
+
+---
+
+### Sample Python Script (`backfill.py`)
+
+Here is a working prototype of the backfill logic for the DA LBMP Zonal data. This shows exactly how to handle the zipped files in memory, save the raw files, and build the deduplicated Parquet master file.
+
+```python
+import os
+import requests
+import pandas as pd
+import zipfile
+import io
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
+# --- Configuration ---
+START_DATE = datetime(2024, 1, 1)
+END_DATE = datetime(2026, 3, 1) # Stop at current month
+BASE_ZIP_URL = "https://mis.nyiso.com/public/csv/damlbmp/{date}damlbmp_zone_csv.zip"
+
+RAW_DIR = "raw_data/damlbmp_zone"
+PARQUET_FILE = "parquet_data/damlbmp_zone_master.parquet"
+
+# Ensure directories exist
+os.makedirs(RAW_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(PARQUET_FILE), exist_ok=True)
+
+def generate_monthly_dates(start, end):
+    """Generates a list of YYYYMM01 strings between start and end dates."""
+    dates = []
+    current = start
+    while current <= end:
+        dates.append(current.strftime("%Y%m%d"))
+        current += relativedelta(months=1)
+    return dates
+
+def process_monthly_zip(date_str):
+    url = BASE_ZIP_URL.format(date=date_str)
+    print(f"Fetching: {url}")
+    
+    response = requests.get(url)
+    if response.status_code != 200:
+        print(f"  -> Failed to download or file does not exist (Status {response.status_code})")
+        return None
+    
+    # Extract Zip in memory
+    monthly_dfs = []
+    with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+        for filename in z.namelist():
+            if filename.endswith(".csv"):
+                # 1. Save Raw CSV to disk (as requested)
+                z.extract(filename, RAW_DIR)
+                
+                # 2. Read into Pandas for processing
+                with z.open(filename) as f:
+                    df = pd.read_csv(f)
+                    monthly_dfs.append(df)
+                    
+    if not monthly_dfs:
+        return None
+        
+    return pd.concat(monthly_dfs, ignore_index=True)
+
+def update_parquet(new_data_df):
+    """Appends new data to the master parquet file and drops duplicates."""
+    if os.path.exists(PARQUET_FILE):
+        existing_df = pd.read_parquet(PARQUET_FILE)
+        combined_df = pd.concat([existing_df, new_data_df], ignore_index=True)
+    else:
+        combined_df = new_data_df
+
+    # Deduplicate: Adjust 'subset' based on the specific dataset's unique columns
+    # For DA LBMP Zonal, Timestamp and Name (Zone name) define a unique row.
+    if 'Time Stamp' in combined_df.columns and 'Name' in combined_df.columns:
+        combined_df.drop_duplicates(subset=['Time Stamp', 'Name'], keep='last', inplace=True)
+    else:
+        # Generic fallback
+        combined_df.drop_duplicates(keep='last', inplace=True)
+
+    # Sort for cleaner querying later
+    if 'Time Stamp' in combined_df.columns:
+        combined_df['Time Stamp'] = pd.to_datetime(combined_df['Time Stamp'])
+        combined_df.sort_values(by=['Time Stamp', 'Name'], inplace=True)
+
+    # Save back to Parquet
+    combined_df.to_parquet(PARQUET_FILE, index=False, engine='pyarrow')
+    print(f"  -> Parquet updated. Total rows: {len(combined_df)}")
+
+def run_backfill():
+    months_to_fetch = generate_monthly_dates(START_DATE, END_DATE)
+    
+    for month_str in months_to_fetch:
+        df = process_monthly_zip(month_str)
+        if df is not None and not df.empty:
+            update_parquet(df)
+            
+    print("Backfill Complete!")
+
+if __name__ == "__main__":
+    run_backfill()
+
+```
+
+Would you like me to map out the specific primary keys (like `Time Stamp` and `Name`) you will need to accurately deduplicate the other categories, like the Generator or Interface Flow datasets?
