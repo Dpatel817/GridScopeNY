@@ -1,10 +1,13 @@
 """
-Fetch and process the NYISO Interconnection Queue Excel workbook.
-Downloads from NYISO, parses all sheets, normalizes columns,
-performs snapshot comparison, and outputs processed CSVs.
+Interconnection Queue ETL — download, parse, diff, and store the
+NYISO Interconnection Queue Excel workbook.
+
+Consolidated from ETL/fetch_interconnection_queue.py into the etl/ package.
 """
+import io
 import json
 import hashlib
+import logging
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+logger = logging.getLogger(__name__)
 
 QUEUE_URL = "https://www.nyiso.com/documents/20142/1407078/NYISO-Interconnection-Queue.xlsx"
 
@@ -131,20 +135,20 @@ DATE_COLS = [
 ]
 
 
-def get_project_root():
+def _get_project_root():
     try:
         return Path(__file__).resolve().parent.parent
     except NameError:
         return Path.cwd()
 
 
-def download_workbook(url: str, timeout: int = 60) -> bytes | None:
+def download_workbook(url: str = QUEUE_URL, timeout: int = 60) -> bytes | None:
     try:
-        resp = requests.get(url, timeout=timeout, verify=False)
+        resp = requests.get(url, timeout=timeout)
         resp.raise_for_status()
         return resp.content
     except Exception as e:
-        print(f"[IQ] Download failed: {e}")
+        logger.error(f"[IQ] Download failed: {e}")
         return None
 
 
@@ -404,36 +408,18 @@ def create_summary(all_data: pd.DataFrame, changes_df: pd.DataFrame, timestamp: 
     return pd.DataFrame(summary)
 
 
-def run():
-    root = get_project_root()
-    processed_dir = root / "data" / "processed"
-    snapshot_dir = root / "data" / "snapshots"
-    processed_dir.mkdir(parents=True, exist_ok=True)
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
+def parse_workbook(xls) -> pd.DataFrame:
+    """Parse all sheets from an open ExcelFile, returning a combined DataFrame.
 
+    Used by scraper.py and backfill.py for parquet pipeline integration.
+    """
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    print(f"[IQ] Starting scrape at {timestamp}")
-
-    content = download_workbook(QUEUE_URL)
-    if content is None:
-        print("[IQ] Download failed. Preserving existing data.")
-        return False
-
-    try:
-        import io
-        xls = pd.ExcelFile(io.BytesIO(content), engine="openpyxl")
-    except Exception as e:
-        print(f"[IQ] Failed to parse Excel: {e}")
-        return False
-
-    print(f"[IQ] Found sheets: {xls.sheet_names}")
-
-    all_frames = []
+    frames = []
 
     for sheet_name in xls.sheet_names:
         label = identify_sheet(sheet_name)
         if label is None:
-            print(f"[IQ] Skipping unknown sheet: {sheet_name}")
+            logger.debug(f"[IQ] Skipping unknown sheet: {sheet_name}")
             continue
 
         try:
@@ -443,29 +429,59 @@ def run():
                 parsed = parse_standard_sheet(xls, sheet_name, label, timestamp)
 
             if not parsed.empty:
-                all_frames.append(parsed)
-                print(f"[IQ] Sheet '{sheet_name}' -> {label}: {len(parsed)} rows")
+                frames.append(parsed)
+                logger.info(f"[IQ] Sheet '{sheet_name}' -> {label}: {len(parsed)} rows")
             else:
-                print(f"[IQ] Sheet '{sheet_name}' -> {label}: empty")
+                logger.debug(f"[IQ] Sheet '{sheet_name}' -> {label}: empty")
         except Exception as e:
-            print(f"[IQ] Error parsing sheet '{sheet_name}': {e}")
+            logger.warning(f"[IQ] Error parsing sheet '{sheet_name}': {e}")
             traceback.print_exc()
 
-    if not all_frames:
-        print("[IQ] No data parsed from any sheet.")
+    if not frames:
+        return pd.DataFrame()
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def run():
+    """Full pipeline: download, parse, diff, and write output files."""
+    root = _get_project_root()
+    processed_dir = root / "data" / "processed"
+    snapshot_dir = root / "data" / "snapshots"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    logger.info(f"[IQ] Starting scrape at {timestamp}")
+
+    content = download_workbook(QUEUE_URL)
+    if content is None:
+        logger.warning("[IQ] Download failed. Preserving existing data.")
         return False
 
-    all_data = pd.concat(all_frames, ignore_index=True)
-    print(f"[IQ] Total rows: {len(all_data)}")
+    try:
+        xls = pd.ExcelFile(io.BytesIO(content), engine="openpyxl")
+    except Exception as e:
+        logger.error(f"[IQ] Failed to parse Excel: {e}")
+        return False
+
+    logger.info(f"[IQ] Found sheets: {xls.sheet_names}")
+
+    all_data = parse_workbook(xls)
+    if all_data.empty:
+        logger.warning("[IQ] No data parsed from any sheet.")
+        return False
+
+    logger.info(f"[IQ] Total rows: {len(all_data)}")
 
     prev_snapshot_path = snapshot_dir / "interconnection_queue_latest.csv"
     previous_df = pd.DataFrame()
     if prev_snapshot_path.exists():
         try:
             previous_df = pd.read_csv(prev_snapshot_path, low_memory=False)
-            print(f"[IQ] Loaded previous snapshot: {len(previous_df)} rows")
+            logger.info(f"[IQ] Loaded previous snapshot: {len(previous_df)} rows")
         except Exception:
-            print("[IQ] Could not load previous snapshot")
+            logger.warning("[IQ] Could not load previous snapshot")
 
     changes_df = detect_changes(all_data, previous_df, timestamp)
     summary_df = create_summary(all_data, changes_df, timestamp)
@@ -488,12 +504,13 @@ def run():
     new_count = len(changes_df[changes_df["change_type"] == "new"]) if not changes_df.empty else 0
     removed_count = len(changes_df[changes_df["change_type"] == "removed"]) if not changes_df.empty else 0
     updated_count = len(changes_df[changes_df["change_type"] == "updated"]) if not changes_df.empty else 0
-    print(f"[IQ] Changes: {new_count} new, {removed_count} removed, {updated_count} updated")
-    print(f"[IQ] Scrape complete.")
+    logger.info(f"[IQ] Changes: {new_count} new, {removed_count} removed, {updated_count} updated")
+    logger.info("[IQ] Scrape complete.")
     return True
 
 
 if __name__ == "__main__":
     import sys
+    logging.basicConfig(level=logging.INFO)
     success = run()
     sys.exit(0 if success else 1)

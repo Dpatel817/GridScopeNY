@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
-import subprocess
 import sys
 from typing import Optional, Any
 
@@ -1700,21 +1699,15 @@ def get_daily_events(date: Optional[str] = None):
 @app.post("/api/iq/scrape")
 def scrape_interconnection_queue():
     try:
-        result = subprocess.run(
-            [sys.executable, "ETL/fetch_interconnection_queue.py"],
-            capture_output=True, text=True, timeout=120,
-        )
+        from etl.interconnection_queue import run as iq_run
+        success = iq_run()
         from src.api_data_loader import _df_cache
         for key in list(_df_cache.keys()):
             if "iq_" in key or "interconnection" in key:
                 del _df_cache[key]
         return {
-            "status": "ok" if result.returncode == 0 else "error",
-            "stdout": result.stdout[-2000:] if result.stdout else "",
-            "stderr": result.stderr[-500:] if result.stderr else "",
+            "status": "ok" if success else "error",
         }
-    except subprocess.TimeoutExpired:
-        return {"status": "timeout", "message": "IQ scrape timed out"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

@@ -70,7 +70,18 @@ def update_snapshot_dataset(session, dataset_name, meta):
         return
 
     if meta["dataset_type"] == "snapshot_xlsx" and dataset_name == "interconnection_queue":
-        _process_interconnection_queue(path, dataset_name, meta)
+        from etl.interconnection_queue import parse_workbook
+        try:
+            xls = pd.ExcelFile(path, engine="openpyxl")
+        except Exception as e:
+            logger.error(f"Cannot read queue xlsx: {e}")
+            mark_snapshot_fetched(dataset_name)
+            return
+        combined = parse_workbook(xls)
+        if not combined.empty:
+            upsert_parquet(combined, dataset_name, meta)
+            sync_to_legacy(dataset_name, meta)
+            logger.info(f"[interconnection_queue] {len(combined)} rows")
     else:
         df = process_raw_file(path, meta)
         if not df.empty:
@@ -79,38 +90,6 @@ def update_snapshot_dataset(session, dataset_name, meta):
             logger.info(f"[{dataset_name}] Snapshot: {len(df)} rows")
 
     mark_snapshot_fetched(dataset_name)
-
-
-def _process_interconnection_queue(path, dataset_name, meta):
-    from ETL.fetch_interconnection_queue import SHEET_MAP, COLUMN_MAP
-
-    try:
-        xls = pd.ExcelFile(path, engine="openpyxl")
-    except Exception as e:
-        logger.error(f"Cannot read queue xlsx: {e}")
-        return
-
-    frames = []
-    for sheet_name in xls.sheet_names:
-        key = sheet_name.strip().lower()
-        source_sheet = SHEET_MAP.get(key)
-        if not source_sheet:
-            continue
-        try:
-            df = pd.read_excel(xls, sheet_name=sheet_name, engine="openpyxl")
-            df.columns = df.columns.str.strip().str.lower()
-            rename = {k: v for k, v in COLUMN_MAP.items() if k in df.columns}
-            df = df.rename(columns=rename)
-            df["source_sheet"] = source_sheet
-            frames.append(df)
-        except Exception as e:
-            logger.warning(f"Sheet {sheet_name}: {e}")
-
-    if frames:
-        combined = pd.concat(frames, ignore_index=True)
-        upsert_parquet(combined, dataset_name, meta)
-        sync_to_legacy(dataset_name, meta)
-        logger.info(f"[interconnection_queue] {len(combined)} rows across {len(frames)} sheets")
 
 
 def main():

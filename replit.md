@@ -98,8 +98,7 @@ etl/
   storage.py              # Parquet upsert with dedup, legacy data/ sync
   manifests.py            # JSON manifest tracking (processed months/dates, idempotency)
   utils.py                # Logging setup
-ETL/
-  fetch_interconnection_queue.py  # Queue Excel parser (used by both backfill + daily_scraper)
+  interconnection_queue.py  # Queue Excel parser, snapshot diffing, summary (consolidated from ETL/)
 raw_data/                 # Raw downloads organized by dataset (zip/, csv/, txt/, xlsx/)
 processed_csv/            # Intermediate processed CSVs by dataset
 parquet_data/             # Master deduplicated Parquet files by dataset
