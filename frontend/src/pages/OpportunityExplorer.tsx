@@ -58,10 +58,10 @@ export default function OpportunityExplorer() {
   const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
-  const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 250000, 730);
-  const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 250000, 730);
-  const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 20000, 730);
-  const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 20000, 730);
+  const { data: daData, loading: daLoading, error: daError } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 250000, 0);
+  const { data: rtData, loading: rtLoading, error: rtError } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 250000, 0);
+  const { data: congestionData } = useDataset('dam_limiting_constraints', 'daily', undefined, undefined, 20000, 0);
+  const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 20000, 0);
 
   const loading = daLoading || rtLoading;
   const dataError = daError || rtError;

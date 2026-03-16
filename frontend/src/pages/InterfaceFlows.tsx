@@ -354,7 +354,7 @@ export default function InterfaceFlows() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: flowData, loading, error } = useDataset('external_limits_flows', 'hourly', undefined, undefined, 50000, 90);
+  const { data: flowData, loading, error } = useDataset('external_limits_flows', 'hourly', undefined, undefined, 50000, 0);
 
   const rows: FlowRow[] = useMemo(
     () => (flowData?.data || []) as FlowRow[],
