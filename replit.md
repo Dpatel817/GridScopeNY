@@ -39,7 +39,7 @@ frontend/
     index.css             # Full design system (CSS variables, all component styles)
     components/
       Layout.tsx          # Dark sidebar with branding, sectioned nav, mounts MarketAnalystWidget
-      MarketAnalystWidget.tsx  # Persistent bottom-right AI chat widget (page-aware context, quick prompts)
+      MarketAnalystWidget.tsx  # Persistent bottom-right AI chat widget (global cross-market context, all datasets)
       LineChart.tsx       # Recharts line chart wrapper (multi-line, wide-format, robust fmtX for dates)
       StackedBarChart.tsx # Recharts stacked bar chart (multi-series, uses same color palette)
       SeriesSelector.tsx  # Multi-select dropdown for filtering chart series (zones, fuels, etc.)
@@ -53,7 +53,8 @@ frontend/
       useDataRefresh.ts   # Data refresh hook: auto-refresh (5 min), manual refresh, cache clear
     pages/
       Home.tsx            # Market Overview — KPIs, Live System Context (RT events + oper announcements), workflow steps, nav tiles
-      Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards (on-peak avg, peak/low DA/RT, top DART), side chart controls, 3 view tabs (DA/RT/DART), flexible chart types (line/area/bar)
+      Prices.tsx          # Price Intelligence — AI summary, 7 KPI cards, side chart controls, 3 view tabs (DA/RT/DART), ScarcitySignalSection (Energy vs Ancillary Price Signals)
+      ScarcitySignalSection.tsx  # Dual-panel scarcity/DR signal charts (LMP + ASP), zone/product/resolution/date controls, KPI cards, summary
       Demand.tsx          # Demand Intelligence — AI summary, 10 KPI cards (forecast/actual peaks+lows, error metrics), side chart controls, 3 view tabs (Zonal/FvA/Error)
       Generation.tsx      # Generation Mix — AI summary, 8 KPI cards (gen peaks, fuel shares, renewable%), side chart controls, 3 view tabs (Fuel/Stack/Total), fuel breakdown table, OIC section, embedded Generator Map
       InterfaceFlows.tsx  # Interface Flows — AI summary, 8 KPI cards (on-peak totals, peak flows, most active, top internal/external, count), side chart controls with class/interface/resolution/date/chart-type, flow chart, interface summary table, TTCF Derates section
@@ -83,6 +84,7 @@ frontend/
       congestionTransforms.ts # Congestion date/constraint filtering, resolution aggregation, pivoting with dedup
       congestionMetrics.ts    # Congestion KPI stats (on-peak costs, peak pos/neg, top constraint, concentration)
       congestionSummary.ts    # AI congestion summary context builder, deterministic fallback, API fetch
+      priceResponseTransforms.ts # Scarcity signal transforms: DA/RT LMP+ASP alignment, pivoting, scarcity metrics, summary builder
 src/
   api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
   config.py               # App constants (dirs, API keys)

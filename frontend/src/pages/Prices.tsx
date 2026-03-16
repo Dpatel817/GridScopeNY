@@ -3,6 +3,7 @@ import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
 import PriceChartControls from '../components/PriceChartControls';
+import ScarcitySignalSection from '../components/ScarcitySignalSection';
 import { filterNyisoZones } from '../data/zones';
 import type { PriceRow, Resolution, DateRange, ChartType } from '../data/priceTransforms';
 import {
@@ -275,6 +276,8 @@ export default function Prices() {
           </div>
         </div>
       )}
+
+      <ScarcitySignalSection />
 
       <div className="section-container">
         <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>

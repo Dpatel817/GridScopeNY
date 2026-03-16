@@ -568,9 +568,13 @@ function CongestionChartControls({
         </div>
         {dateRange === 'custom' && availableDates.length > 0 && (
           <div className="pcc-date-inputs">
-            <input type="date" className="pcc-date" value={startDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onStartDateChange(e.target.value)} />
+            <select className="pcc-date" value={startDate} onChange={e => onStartDateChange(e.target.value)}>
+              {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
             <span className="pcc-date-sep">to</span>
-            <input type="date" className="pcc-date" value={endDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onEndDateChange(e.target.value)} />
+            <select className="pcc-date" value={endDate} onChange={e => onEndDateChange(e.target.value)}>
+              {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
           </div>
         )}
       </div>
