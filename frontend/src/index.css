@@ -2298,6 +2298,13 @@ tr:hover td { background: var(--bg); }
   color: var(--text-muted);
   margin-left: auto;
 }
+.lmp-component-selector {
+  display: flex;
+  gap: 6px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
 .price-chart-main .chart-card {
   border: none;
   border-radius: 0;

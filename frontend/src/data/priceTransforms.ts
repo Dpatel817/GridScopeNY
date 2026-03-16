@@ -64,27 +64,30 @@ export interface PivotedRow {
   [zone: string]: string | number;
 }
 
+export type LmpField = 'LMP' | 'MLC' | 'MCC';
+
 export function pivotByZone(
   rows: PriceRow[],
   zones: string[],
-  resolution: Resolution
+  resolution: Resolution,
+  field: LmpField = 'LMP'
 ): PivotedRow[] {
   const filtered = filterByZones(filterNyisoOnly(rows), zones);
   const hasHE = filtered.some(r => r.HE != null && Number(r.HE) > 0);
 
   if (resolution === 'hourly' && hasHE) {
-    return pivotHourly(filtered, zones);
+    return pivotHourly(filtered, zones, field);
   }
   if (hasHE && resolution === 'on_peak') {
-    return pivotAggregated(filtered.filter(r => isOnPeak(r.HE)), zones, 'date');
+    return pivotAggregated(filtered.filter(r => isOnPeak(r.HE)), zones, 'date', field);
   }
   if (hasHE && resolution === 'off_peak') {
-    return pivotAggregated(filtered.filter(r => !isOnPeak(r.HE)), zones, 'date');
+    return pivotAggregated(filtered.filter(r => !isOnPeak(r.HE)), zones, 'date', field);
   }
-  return pivotAggregated(filtered, zones, 'date');
+  return pivotAggregated(filtered, zones, 'date', field);
 }
 
-function pivotHourly(rows: PriceRow[], zones: string[]): PivotedRow[] {
+function pivotHourly(rows: PriceRow[], zones: string[], field: LmpField = 'LMP'): PivotedRow[] {
   const map: Record<string, PivotedRow> = {};
   for (const r of rows) {
     const zone = String(r.Zone);
@@ -92,7 +95,7 @@ function pivotHourly(rows: PriceRow[], zones: string[]): PivotedRow[] {
     const key = `${r.Date}_${r.HE ?? ''}`;
     const label = r.HE != null ? `${r.Date} HE${r.HE}` : r.Date;
     if (!map[key]) map[key] = { Date: label };
-    map[key][zone] = Number(r.LMP);
+    map[key][zone] = Number(r[field]);
   }
   return Object.values(map).sort((a, b) => (a.Date < b.Date ? -1 : a.Date > b.Date ? 1 : 0));
 }
@@ -100,7 +103,8 @@ function pivotHourly(rows: PriceRow[], zones: string[]): PivotedRow[] {
 function pivotAggregated(
   rows: PriceRow[],
   zones: string[],
-  _groupBy: 'date' = 'date'
+  _groupBy: 'date' = 'date',
+  field: LmpField = 'LMP'
 ): PivotedRow[] {
   const accum: Record<string, Record<string, { sum: number; count: number }>> = {};
   for (const r of rows) {
@@ -109,9 +113,9 @@ function pivotAggregated(
     const key = r.Date;
     if (!accum[key]) accum[key] = {};
     if (!accum[key][zone]) accum[key][zone] = { sum: 0, count: 0 };
-    const lmp = Number(r.LMP);
-    if (!isNaN(lmp)) {
-      accum[key][zone].sum += lmp;
+    const val = Number(r[field]);
+    if (!isNaN(val)) {
+      accum[key][zone].sum += val;
       accum[key][zone].count++;
     }
   }

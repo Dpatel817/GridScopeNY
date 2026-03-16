@@ -188,12 +188,38 @@ def _load_csv_safe(filename: str, days: int | None = None) -> pd.DataFrame:
     csv_path: Path = PROCESSED_DIR / filename
     parquet_path = csv_path.with_suffix(".parquet")
 
-    if parquet_path.exists():
+    use_parquet = False
+    if parquet_path.exists() and csv_path.exists():
+        try:
+            import pyarrow.parquet as pq
+            pf = pq.ParquetFile(parquet_path)
+            pq_cols = {f.name.strip() for f in pf.schema_arrow}
+            csv_sample = pd.read_csv(csv_path, nrows=0)
+            csv_cols = {c.strip() for c in csv_sample.columns}
+            pq_mtime = os.path.getmtime(parquet_path)
+            csv_mtime = os.path.getmtime(csv_path)
+            if not (csv_cols.issubset(pq_cols) or csv_cols == pq_cols):
+                logger.info(
+                    "Parquet %s has mismatched columns vs CSV (parquet: %s, csv: %s); using CSV",
+                    parquet_path.name, pq_cols, csv_cols,
+                )
+                path = csv_path
+            elif csv_mtime > pq_mtime:
+                logger.info(
+                    "CSV %s is newer than parquet (%s vs %s); using CSV",
+                    csv_path.name, csv_mtime, pq_mtime,
+                )
+                path = csv_path
+            else:
+                path = parquet_path
+                use_parquet = True
+        except Exception:
+            path = csv_path
+    elif parquet_path.exists():
         path = parquet_path
         use_parquet = True
     elif csv_path.exists():
         path = csv_path
-        use_parquet = False
     else:
         logger.warning("File not found: %s (tried .parquet and .csv)", csv_path)
         return pd.DataFrame()

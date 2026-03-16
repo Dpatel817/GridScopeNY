@@ -5,7 +5,7 @@ import PriceChart from '../components/PriceChart';
 import PriceChartControls from '../components/PriceChartControls';
 import ScarcitySignalSection from '../components/ScarcitySignalSection';
 import { filterNyisoZones } from '../data/zones';
-import type { PriceRow, Resolution, DateRange, ChartType } from '../data/priceTransforms';
+import type { PriceRow, Resolution, DateRange, ChartType, LmpField } from '../data/priceTransforms';
 import {
   filterByDateRange, filterNyisoOnly, pivotByZone,
   computeDartSpread, getAvailableDates, isOnPeak,
@@ -30,6 +30,7 @@ export default function Prices() {
   const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('da');
+  const [lmpField, setLmpField] = useState<LmpField>('LMP');
   const [showRaw, setShowRaw] = useState(false);
 
   const [aiSummary, setAiSummary] = useState('');
@@ -111,13 +112,13 @@ export default function Prices() {
   );
 
   const daChartData = useMemo(
-    () => pivotByZone(daFiltered, selectedZones, resolution),
-    [daFiltered, selectedZones, resolution]
+    () => pivotByZone(daFiltered, selectedZones, resolution, lmpField),
+    [daFiltered, selectedZones, resolution, lmpField]
   );
 
   const rtChartData = useMemo(
-    () => pivotByZone(rtFiltered, selectedZones, resolution),
-    [rtFiltered, selectedZones, resolution]
+    () => pivotByZone(rtFiltered, selectedZones, resolution, lmpField),
+    [rtFiltered, selectedZones, resolution, lmpField]
   );
 
   const dartChartData = useMemo(
@@ -248,10 +249,26 @@ export default function Prices() {
               </span>
             </div>
 
+            {(viewMode === 'da' || viewMode === 'rt') && (
+              <div className="lmp-component-selector">
+                {(['LMP', 'MLC', 'MCC'] as LmpField[]).map(f => (
+                  <button
+                    key={f}
+                    className={`pcc-btn${lmpField === f ? ' active' : ''}`}
+                    onClick={() => setLmpField(f)}
+                  >
+                    {f === 'LMP' ? 'Total LMP' : f === 'MLC' ? 'Losses (MLC)' : 'Congestion (MCC)'}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {viewMode === 'da' && (
               <div className="chart-card">
                 <div className="chart-card-header">
-                  <div className="chart-card-title">Day-Ahead Zonal LBMPs</div>
+                  <div className="chart-card-title">
+                    Day-Ahead Zonal {lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}
+                  </div>
                   <span className="badge badge-primary">{daChartData.length} points</span>
                 </div>
                 <PriceChart
@@ -267,7 +284,9 @@ export default function Prices() {
             {viewMode === 'rt' && (
               <div className="chart-card">
                 <div className="chart-card-header">
-                  <div className="chart-card-title">Real-Time Zonal LBMPs</div>
+                  <div className="chart-card-title">
+                    Real-Time Zonal {lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}
+                  </div>
                   <span className="badge badge-primary">{rtChartData.length} points</span>
                 </div>
                 <PriceChart
