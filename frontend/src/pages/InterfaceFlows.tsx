@@ -18,6 +18,7 @@ const DATASETS = [
   'external_limits_flows', 'atc_ttc', 'ttcf',
   'par_flows', 'erie_circulation_da', 'erie_circulation_rt',
 ];
+const LIVE_REFRESH_MS = 30 * 1000;
 
 interface TtcfResponse {
   status: string;
@@ -354,7 +355,7 @@ export default function InterfaceFlows() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: flowData, loading, error } = useDataset('external_limits_flows', 'hourly', undefined, undefined, 50000, 0);
+  const { data: flowData, loading, error } = useDataset('external_limits_flows', 'hourly', undefined, undefined, 50000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
 
   const rows: FlowRow[] = useMemo(
     () => (flowData?.data || []) as FlowRow[],

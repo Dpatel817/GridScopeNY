@@ -45,6 +45,7 @@ const DATE_RANGES: { key: DateRange; label: string }[] = [
   { key: 'custom', label: 'Custom Range' },
   { key: 'all', label: 'All Dates' },
 ];
+const LIVE_REFRESH_MS = 30 * 1000;
 
 interface CleanPrint { date: string; he: number; }
 interface MixedPrint { date: string; he: number; active_constraints: number; }
@@ -679,7 +680,7 @@ function fmtDate(val: string | undefined): string {
 }
 
 function OutageScheduleSection() {
-  const { data: outageData, loading } = useDataset('outage_schedule', 'daily', undefined, undefined, 20000, 0);
+  const { data: outageData, loading } = useDataset('outage_schedule', 'daily', undefined, undefined, 20000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
   const [expanded, setExpanded] = useState(true);
   const [dateOutBefore, setDateOutBefore] = useState('');
   const [dateInAfter, setDateInAfter] = useState('');
@@ -1028,7 +1029,7 @@ export default function Congestion() {
   const aiRequestedRef = useRef(false);
 
   const datasetKey = marketType === 'DA' ? 'dam_limiting_constraints' : 'rt_limiting_constraints';
-  const { data: constraintData, loading, error } = useDataset(datasetKey, 'hourly', undefined, undefined, 50000, 0);
+  const { data: constraintData, loading, error } = useDataset(datasetKey, 'hourly', undefined, undefined, 50000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
 
   const rows: CongestionRow[] = useMemo(
     () => (constraintData?.data || []) as CongestionRow[],

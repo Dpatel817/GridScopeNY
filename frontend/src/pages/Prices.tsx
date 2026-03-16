@@ -20,6 +20,8 @@ const RAW_DATASETS = [
   'reference_bus_lbmp', 'ext_rto_cts_price', 'damasp', 'rtasp',
 ];
 
+const LIVE_REFRESH_MS = 30 * 1000;
+
 type ViewMode = 'da' | 'rt' | 'dart';
 
 export default function Prices() {
@@ -37,8 +39,8 @@ export default function Prices() {
   const [aiLoading, setAiLoading] = useState(false);
   const aiRequestedRef = useState(() => ({ current: false }))[0];
 
-  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 0);
-  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 50000, 0);
+  const { data: daData, loading: daLoading } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
+  const { data: rtData, loading: rtLoading } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 50000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
 
   const loading = daLoading || rtLoading;
 
