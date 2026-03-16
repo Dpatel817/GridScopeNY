@@ -98,6 +98,7 @@ async def get_data(
     filter_col: Optional[str] = Query(default=None),
     filter_val: Optional[str] = Query(default=None),
     days: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0),
 ):
     if dataset_key not in DATASET_META:
         raise HTTPException(
@@ -114,6 +115,7 @@ async def get_data(
             filter_col=filter_col,
             filter_val=filter_val,
             days=days if days > 0 else 0,
+            offset=offset,
         ),
     )
 

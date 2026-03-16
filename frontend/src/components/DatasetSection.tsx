@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useDataset, useFilterOptions } from '../hooks/useDataset';
+import { useState, useCallback, useEffect } from 'react';
+import { useDataset, useFilterOptions, DatasetResponse } from '../hooks/useDataset';
 import LineChart from './LineChart';
 import DataTable from './DataTable';
 import MetricsRow, { buildMetrics } from './MetricsRow';
@@ -61,8 +61,19 @@ interface Props {
 
 const WIDE_FORMAT_KEYS = ['isolf'];
 
+function resetPaginationState(
+  setAllRecords: (v: Record<string, any>[]) => void,
+  setPaginationMeta: (v: { total_rows: number; has_more: boolean } | null) => void,
+) {
+  setAllRecords([]);
+  setPaginationMeta(null);
+}
+
 export default function DatasetSection({ datasetKey, resolution, defaultExpanded = false }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [allRecords, setAllRecords] = useState<Record<string, any>[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [paginationMeta, setPaginationMeta] = useState<{ total_rows: number; has_more: boolean } | null>(null);
   const effectiveRes = resolution;
   const { data, loading, error } = useDataset(
     expanded ? datasetKey : '',
@@ -85,9 +96,48 @@ export default function DatasetSection({ datasetKey, resolution, defaultExpanded
     filterVal
   );
 
+  useEffect(() => {
+    resetPaginationState(setAllRecords, setPaginationMeta);
+  }, [datasetKey, resolution, expanded, filterVal]);
+
   const activeData = isFilterable && filterVal ? filteredData : data;
   const isLoading = isFilterable && filterVal ? filteredLoading : loading;
-  const records = activeData?.data || [];
+
+  const baseRecords = activeData?.data || [];
+  const records = allRecords.length > 0 ? allRecords : baseRecords;
+
+  const hasMore = paginationMeta ? paginationMeta.has_more : (activeData?.has_more ?? false);
+  const totalRows = paginationMeta ? paginationMeta.total_rows : (activeData?.total_rows ?? 0);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!activeData || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const existingRecords = allRecords.length > 0 ? allRecords : baseRecords;
+      const nextOffset = existingRecords.length;
+      const params = new URLSearchParams({
+        resolution: effectiveRes,
+        limit: '10000',
+        days: '90',
+        offset: String(nextOffset),
+      });
+      if (isFilterable && filterVal && filterColumn) {
+        params.set('filter_col', filterColumn);
+        params.set('filter_val', filterVal);
+      }
+      const res = await fetch(`/api/dataset/${datasetKey}?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json: DatasetResponse = await res.json();
+      const merged = [...existingRecords, ...json.data];
+      setAllRecords(merged);
+      setPaginationMeta({ total_rows: json.total_rows, has_more: json.has_more });
+    } catch (e) {
+      console.error('Failed to load more data:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [activeData, loadingMore, baseRecords, allRecords, effectiveRes, filterVal, filterColumn, isFilterable, datasetKey]);
+
   const label = activeData?.label || DATASET_LABELS[datasetKey] || datasetKey;
   const native = meta?.native || '';
   const isTimeSeries = ['hourly', '5min'].includes(native);
@@ -182,12 +232,19 @@ export default function DatasetSection({ datasetKey, resolution, defaultExpanded
                 return cd.length > 1 ? <div className="card"><LineChart data={cd} xKey={xKey} yKeys={yKeys} height={280} /></div> : null;
               })()}
 
-              <DataTable data={records} maxRows={200} />
+              <DataTable
+                data={records}
+                maxRows={500}
+                hasMore={hasMore}
+                onLoadMore={handleLoadMore}
+                loadingMore={loadingMore}
+              />
 
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                {activeData?.rows?.toLocaleString()} total rows
+                {totalRows > 0 ? `${totalRows.toLocaleString()} total rows` : `${(activeData?.rows ?? 0).toLocaleString()} total rows`}
                 {activeData?.aggregated_rows ? ` | ${activeData.aggregated_rows.toLocaleString()} after aggregation` : ''}
-                {` | ${activeData?.returned_rows?.toLocaleString()} returned`}
+                {` | ${records.length.toLocaleString()} loaded`}
+                {hasMore && ` | More data available`}
                 {effectiveRes !== 'raw' && supportsAgg ? ` | Resolution: ${effectiveRes}` : ''}
               </div>
             </>

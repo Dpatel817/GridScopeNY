@@ -18,6 +18,9 @@ export interface DatasetResponse {
   rows: number;
   aggregated_rows?: number;
   returned_rows: number;
+  total_rows: number;
+  offset: number;
+  has_more: boolean;
   resolution: string;
   columns: string[];
   data: Record<string, any>[];
@@ -31,6 +34,7 @@ export function useDataset(
   filterVal?: string,
   limit: number = 10000,
   days: number = 90,
+  offset: number = 0,
 ) {
   const [data, setData] = useState<DatasetResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,7 +45,7 @@ export function useDataset(
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ resolution, limit: String(limit), days: String(days) });
+      const params = new URLSearchParams({ resolution, limit: String(limit), days: String(days), offset: String(offset) });
       if (filterCol && filterVal) {
         params.set('filter_col', filterCol);
         params.set('filter_val', filterVal);
@@ -55,7 +59,7 @@ export function useDataset(
     } finally {
       setLoading(false);
     }
-  }, [datasetKey, resolution, filterCol, filterVal, limit, days]);
+  }, [datasetKey, resolution, filterCol, filterVal, limit, days, offset]);
 
   useEffect(() => {
     fetchData();

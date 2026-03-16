@@ -833,10 +833,11 @@ def get_dataset_json(
     filter_col: str | None = None,
     filter_val: str | None = None,
     days: int | None = None,
+    offset: int = 0,
 ) -> dict:
     meta = DATASET_META.get(dataset_key)
     if not meta:
-        return {"dataset": dataset_key, "status": "unknown", "rows": 0, "data": []}
+        return {"dataset": dataset_key, "status": "unknown", "rows": 0, "returned_rows": 0, "total_rows": 0, "offset": 0, "has_more": False, "data": []}
 
     use_daily_cache = (
         resolution == "daily"
@@ -855,8 +856,9 @@ def get_dataset_json(
                     df = df[df[date_col] >= cutoff]
             total_raw = len(df)
             total_after_agg = total_raw
-            if limit and len(df) > limit:
-                df = df.tail(limit)
+            end = offset + limit
+            df = df.iloc[offset:end]
+            has_more = end < total_after_agg
             records = _clean_df_for_json(df)
             return {
                 "dataset": dataset_key,
@@ -865,6 +867,9 @@ def get_dataset_json(
                 "rows": total_raw,
                 "aggregated_rows": total_after_agg,
                 "returned_rows": len(records),
+                "total_rows": total_after_agg,
+                "offset": offset,
+                "has_more": has_more,
                 "resolution": resolution,
                 "columns": list(df.columns),
                 "data": records,
@@ -878,6 +883,10 @@ def get_dataset_json(
             "label": meta.get("label", dataset_key),
             "status": "empty",
             "rows": 0,
+            "returned_rows": 0,
+            "total_rows": 0,
+            "offset": 0,
+            "has_more": False,
             "columns": [],
             "data": [],
             "meta": _safe_meta(meta),
@@ -900,8 +909,9 @@ def get_dataset_json(
     df = _aggregate_df(df, meta, resolution)
     total_after_agg = len(df)
 
-    if limit and len(df) > limit:
-        df = df.tail(limit)
+    end = offset + limit
+    df = df.iloc[offset:end]
+    has_more = end < total_after_agg
 
     records = _clean_df_for_json(df)
 
@@ -912,6 +922,9 @@ def get_dataset_json(
         "rows": total_raw,
         "aggregated_rows": total_after_agg,
         "returned_rows": len(records),
+        "total_rows": total_after_agg,
+        "offset": offset,
+        "has_more": has_more,
         "resolution": resolution,
         "columns": list(df.columns),
         "data": records,
