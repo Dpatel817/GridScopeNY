@@ -93,10 +93,10 @@ export default function Demand() {
   }, [forecastRows, actualRows]);
 
   const kpis: DemandKPIs = useMemo(() => {
-    if (!latestDate) return computeDemandKPIs(forecastRows, aligned);
+    if (!latestDate) return computeDemandKPIs(forecastRows, aligned, forecastRows, aligned);
     const fLatest = forecastRows.filter(r => r.Date === latestDate);
     const aLatest = aligned.filter(r => r.Date === latestDate);
-    return computeDemandKPIs(fLatest, aLatest);
+    return computeDemandKPIs(fLatest, aLatest, forecastRows, aligned);
   }, [forecastRows, aligned, latestDate]);
 
   const fallbackSummary = useMemo(() => deterministicDemandSummary(kpis), [kpis]);

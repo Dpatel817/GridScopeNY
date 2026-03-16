@@ -1056,9 +1056,9 @@ export default function Congestion() {
   }, [rows]);
 
   const kpis: CongestionKPIs = useMemo(() => {
-    if (!latestDate) return computeCongestionKPIs(rows);
+    if (!latestDate) return computeCongestionKPIs(rows, rows);
     const latest = rows.filter((r: any) => r.Date === latestDate);
-    return computeCongestionKPIs(latest);
+    return computeCongestionKPIs(latest, rows);
   }, [rows, latestDate]);
 
   const fallbackSummary = useMemo(() => deterministicCongestionSummary(kpis), [kpis]);

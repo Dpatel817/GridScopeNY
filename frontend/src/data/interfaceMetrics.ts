@@ -14,7 +14,7 @@ export interface FlowKPIs {
   activeCount: number;
 }
 
-export function computeFlowKPIs(rows: FlowRow[]): FlowKPIs {
+export function computeFlowKPIs(rows: FlowRow[], allRows?: FlowRow[]): FlowKPIs {
   const { nameCol, flowCol } = detectFlowColumns(rows);
 
   const intervalInternal: Record<string, number> = {};
@@ -59,8 +59,37 @@ export function computeFlowKPIs(rows: FlowRow[]): FlowKPIs {
     byIface[raw].count++;
   }
 
-  const intTotals = Object.values(intervalInternal);
-  const extTotals = Object.values(intervalExternal);
+  let intTotals = Object.values(intervalInternal);
+  let extTotals = Object.values(intervalExternal);
+
+  if (intTotals.length === 0 && extTotals.length === 0 && hasHE && allRows && allRows.length > 0) {
+    const dates = [...new Set(allRows.map(r => r.Date))].sort();
+    for (let d = dates.length - 1; d >= 0; d--) {
+      const dayRows = allRows.filter(r => r.Date === dates[d]);
+      if (dayRows.some(r => isOnPeak(Number(r.HE || 0)))) {
+        const fallbackInt: Record<string, number> = {};
+        const fallbackExt: Record<string, number> = {};
+        for (const r of dayRows) {
+          const raw = String(r[nameCol] || '');
+          if (!raw) continue;
+          const flow = Number(r[flowCol] || 0);
+          if (isNaN(flow)) continue;
+          const he = Number(r.HE || 0);
+          if (!isOnPeak(he)) continue;
+          const meta = getInterfaceMeta(raw);
+          const intervalKey = `${r.Date}_${r.HE}`;
+          if (meta.classification === 'Internal') {
+            fallbackInt[intervalKey] = (fallbackInt[intervalKey] || 0) + flow;
+          } else {
+            fallbackExt[intervalKey] = (fallbackExt[intervalKey] || 0) + flow;
+          }
+        }
+        intTotals = Object.values(fallbackInt);
+        extTotals = Object.values(fallbackExt);
+        break;
+      }
+    }
+  }
 
   const onPeakAvgInternal = intTotals.length
     ? intTotals.reduce((a, b) => a + b, 0) / intTotals.length

@@ -18,7 +18,9 @@ export interface DemandKPIs {
 
 export function computeDemandKPIs(
   forecastRows: DemandRow[],
-  aligned: AlignedRow[]
+  aligned: AlignedRow[],
+  allForecastRows?: DemandRow[],
+  allAligned?: AlignedRow[]
 ): DemandKPIs {
   const onPeakForecasts: number[] = [];
   const onPeakActuals: number[] = [];
@@ -28,6 +30,22 @@ export function computeDemandKPIs(
     if (!hasHE || isOnPeak(r.HE)) {
       if (!isNaN(r.Forecast) && r.Forecast > 0) onPeakForecasts.push(r.Forecast);
       if (!isNaN(r.Actual) && r.Actual > 0) onPeakActuals.push(r.Actual);
+    }
+  }
+
+  if (onPeakForecasts.length === 0 && onPeakActuals.length === 0 && hasHE && allAligned && allAligned.length > 0) {
+    const dates = [...new Set(allAligned.map(r => r.Date))].sort();
+    for (let d = dates.length - 1; d >= 0; d--) {
+      const dayRows = allAligned.filter(r => r.Date === dates[d]);
+      if (dayRows.some(r => isOnPeak(r.HE))) {
+        for (const r of dayRows) {
+          if (isOnPeak(r.HE)) {
+            if (!isNaN(r.Forecast) && r.Forecast > 0) onPeakForecasts.push(r.Forecast);
+            if (!isNaN(r.Actual) && r.Actual > 0) onPeakActuals.push(r.Actual);
+          }
+        }
+        break;
+      }
     }
   }
 

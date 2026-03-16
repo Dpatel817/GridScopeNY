@@ -20,7 +20,8 @@ export interface GenerationKPIs {
 
 export function computeGenerationKPIs(
   rows: GenRow[],
-  breakdown: FuelBreakdown[]
+  breakdown: FuelBreakdown[],
+  allRows?: GenRow[]
 ): GenerationKPIs {
   const { genCol, fuelCol } = detectColumns(rows);
 
@@ -42,7 +43,31 @@ export function computeGenerationKPIs(
 
   const intervals = Object.values(intervalTotals);
 
-  const onPeakIntervals = hasHE ? intervals.filter(i => isOnPeak(i.he)) : intervals;
+  let onPeakIntervals = hasHE ? intervals.filter(i => isOnPeak(i.he)) : intervals;
+
+  if (onPeakIntervals.length === 0 && hasHE && allRows && allRows.length > 0) {
+    const dates = [...new Set(allRows.map(r => r.Date))].sort();
+    for (let d = dates.length - 1; d >= 0; d--) {
+      const dayRows = allRows.filter(r => r.Date === dates[d]);
+      if (dayRows.some(r => isOnPeak(Number(r.HE)))) {
+        const daySnap: Record<string, number> = {};
+        for (const r of dayRows) {
+          const fuel = String(r[fuelCol] || '');
+          daySnap[`${r.Date}_${r.HE}_${fuel}`] = Number(r[genCol] || 0);
+        }
+        const dayIntervals: Record<string, { total: number; he: number; date: string }> = {};
+        for (const [sk, gen] of Object.entries(daySnap)) {
+          const parts = sk.split('_');
+          const key = `${parts[0]}_${parts[1]}`;
+          if (!dayIntervals[key]) dayIntervals[key] = { total: 0, he: Number(parts[1]), date: parts[0] };
+          dayIntervals[key].total += gen;
+        }
+        onPeakIntervals = Object.values(dayIntervals).filter(i => isOnPeak(i.he));
+        break;
+      }
+    }
+  }
+
   const onPeakAvgTotal = onPeakIntervals.length > 0
     ? onPeakIntervals.reduce((s, i) => s + i.total, 0) / onPeakIntervals.length
     : null;

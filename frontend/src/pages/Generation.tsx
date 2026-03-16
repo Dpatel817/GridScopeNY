@@ -212,8 +212,8 @@ export default function Generation() {
   );
 
   const kpis: GenerationKPIs = useMemo(
-    () => computeGenerationKPIs(latestRows, breakdown),
-    [latestRows, breakdown]
+    () => computeGenerationKPIs(latestRows, breakdown, rows),
+    [latestRows, breakdown, rows]
   );
 
   const fallbackSummary = useMemo(

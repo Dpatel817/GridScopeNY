@@ -13,7 +13,7 @@ export interface CongestionKPIs {
   top3Share: number | null;
 }
 
-export function computeCongestionKPIs(rows: CongestionRow[]): CongestionKPIs {
+export function computeCongestionKPIs(rows: CongestionRow[], allRows?: CongestionRow[]): CongestionKPIs {
   const { nameCol, costCol } = detectColumns(rows);
 
   let onPeakTotalCost = 0;
@@ -64,6 +64,24 @@ export function computeCongestionKPIs(rows: CongestionRow[]): CongestionKPIs {
 
   const top3Abs = ranked.slice(0, 3).reduce((s, c) => s + c.totalAbs, 0);
   const top3Share = grandTotalAbs > 0 ? (top3Abs / grandTotalAbs) * 100 : null;
+
+  if (onPeakCount === 0 && hasHE && allRows && allRows.length > 0) {
+    const dates = [...new Set(allRows.map(r => r.Date))].sort();
+    for (let d = dates.length - 1; d >= 0; d--) {
+      const dayRows = allRows.filter(r => r.Date === dates[d]);
+      if (dayRows.some(r => isOnPeak(Number(r.HE || 0)))) {
+        for (const r of dayRows) {
+          const he = Number(r.HE || 0);
+          if (!isOnPeak(he)) continue;
+          const cost = Number(r[costCol] || 0);
+          if (isNaN(cost)) continue;
+          onPeakTotalCost += Math.abs(cost);
+          onPeakCount++;
+        }
+        break;
+      }
+    }
+  }
 
   return {
     onPeakTotalCost: onPeakCount > 0 ? onPeakTotalCost : null,

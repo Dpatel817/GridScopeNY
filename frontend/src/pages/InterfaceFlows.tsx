@@ -416,9 +416,9 @@ export default function InterfaceFlows() {
   }, [rows]);
 
   const kpis: FlowKPIs = useMemo(() => {
-    if (!latestDate) return computeFlowKPIs(rows);
+    if (!latestDate) return computeFlowKPIs(rows, rows);
     const latest = rows.filter(r => r.Date === latestDate);
-    return computeFlowKPIs(latest);
+    return computeFlowKPIs(latest, rows);
   }, [rows, latestDate]);
 
   const fallbackSummary = useMemo(() => deterministicFlowSummary(kpis), [kpis]);
