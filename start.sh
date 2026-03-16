@@ -1,9 +1,34 @@
 #!/bin/bash
-# Start FastAPI backend in background, then start React frontend in foreground
+set -e
+
+echo "=== GridScope NY Startup ==="
+
 uvicorn api:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo "API backend started (PID $BACKEND_PID)"
-# Wait for API to be ready
-sleep 3
-# Start React frontend
+
+MAX_WAIT=30
+WAITED=0
+echo "Waiting for backend health check on /api/health ..."
+while [ $WAITED -lt $MAX_WAIT ]; do
+  if ! kill -0 $BACKEND_PID 2>/dev/null; then
+    echo "ERROR: Backend process (PID $BACKEND_PID) exited unexpectedly."
+    echo "Check the logs above for startup errors."
+    exit 1
+  fi
+  if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
+    echo "Backend is healthy after ${WAITED}s"
+    break
+  fi
+  sleep 1
+  WAITED=$((WAITED + 1))
+done
+
+if [ $WAITED -ge $MAX_WAIT ]; then
+  echo "ERROR: Backend did not become healthy within ${MAX_WAIT}s"
+  kill $BACKEND_PID 2>/dev/null || true
+  exit 1
+fi
+
+echo "Starting frontend..."
 cd frontend && npm run dev

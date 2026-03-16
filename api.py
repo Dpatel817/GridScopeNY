@@ -69,6 +69,45 @@ async def preload_large_datasets():
     threading.Thread(target=_preload, daemon=True).start()
 
 
+@app.on_event("startup")
+async def trigger_initial_etl_refresh():
+    import threading
+    def _initial_refresh():
+        if not _refresh_lock.acquire(blocking=False):
+            logger.info("Initial ETL refresh skipped — another refresh is already running")
+            return
+        try:
+            logger.info("Starting initial ETL data refresh in background...")
+            fetch_result = subprocess.run(
+                [sys.executable, "ETL/fetch_nyiso_data.py"],
+                capture_output=True, text=True, timeout=300,
+            )
+            if fetch_result.returncode == 0:
+                logger.info("Initial ETL fetch completed successfully")
+            else:
+                logger.warning("Initial ETL fetch returned non-zero: %s", fetch_result.stderr[-500:] if fetch_result.stderr else "")
+
+            process_result = subprocess.run(
+                [sys.executable, "ETL/process_nyiso_data.py"],
+                capture_output=True, text=True, timeout=300,
+            )
+            if process_result.returncode == 0:
+                logger.info("Initial ETL process completed successfully")
+            else:
+                logger.warning("Initial ETL process returned non-zero: %s", process_result.stderr[-500:] if process_result.stderr else "")
+
+            from src.api_data_loader import _df_cache
+            _df_cache.clear()
+            logger.info("Initial ETL refresh complete — cache cleared for fresh data")
+        except subprocess.TimeoutExpired:
+            logger.error("Initial ETL refresh timed out after 5 minutes")
+        except Exception as exc:
+            logger.error("Initial ETL refresh failed: %s", exc)
+        finally:
+            _refresh_lock.release()
+    threading.Thread(target=_initial_refresh, daemon=True).start()
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "GridScope NY API"}
