@@ -23,6 +23,8 @@ OFF_PEAK_HOURS = [h for h in range(1, 25) if h not in ON_PEAK_HOURS]
 
 _df_cache: dict[str, tuple[float, pd.DataFrame]] = {}
 _CACHE_TTL = 300
+_load_locks: dict[str, threading.Lock] = {}
+_load_locks_guard = threading.Lock()
 
 
 def _clean_df_for_json(df: pd.DataFrame) -> list[dict]:
@@ -201,13 +203,30 @@ def _load_csv_safe(filename: str, days: int | None = None) -> pd.DataFrame:
             csv_cols = {c.strip() for c in csv_sample.columns}
             pq_mtime = os.path.getmtime(parquet_path)
             csv_mtime = os.path.getmtime(csv_path)
-            if not (csv_cols.issubset(pq_cols) or csv_cols == pq_cols):
+            pq_cols_normalized = set()
+            for c in pq_cols:
+                pq_cols_normalized.add(_COLUMN_RENAMES.get(c, c))
+            if "Name" in pq_cols or "Name" in pq_cols_normalized:
+                pq_cols_normalized.add("Zone")
+                pq_cols_normalized.add("Generator")
+            has_time_stamp = "Time Stamp" in pq_cols or "Timestamp" in pq_cols
+            if has_time_stamp:
+                pq_cols_normalized.update({"Date", "HE", "Month", "Year"})
+            for tc in _TIME_COL_HINTS:
+                if tc in pq_cols:
+                    pq_cols_normalized.update({"Date", "HE"})
+                    break
+            _etl_meta_cols = {"source_date", "source_file"}
+            csv_cols_essential = csv_cols - _etl_meta_cols
+            cols_match_directly = csv_cols.issubset(pq_cols) or csv_cols == pq_cols
+            cols_match_normalized = csv_cols_essential.issubset(pq_cols_normalized)
+            if not (cols_match_directly or cols_match_normalized):
                 logger.info(
                     "Parquet %s has mismatched columns vs CSV (parquet: %s, csv: %s); using CSV",
                     parquet_path.name, pq_cols, csv_cols,
                 )
                 path = csv_path
-            elif csv_mtime > pq_mtime:
+            elif csv_mtime > pq_mtime and cols_match_directly:
                 logger.info(
                     "CSV %s is newer than parquet (%s vs %s); using CSV",
                     csv_path.name, csv_mtime, pq_mtime,
@@ -233,6 +252,20 @@ def _load_csv_safe(filename: str, days: int | None = None) -> pd.DataFrame:
     if cached and cached[0] == mtime:
         return cached[1].copy()
 
+    with _load_locks_guard:
+        if cache_key not in _load_locks:
+            _load_locks[cache_key] = threading.Lock()
+        file_lock = _load_locks[cache_key]
+
+    with file_lock:
+        cached = _df_cache.get(cache_key)
+        if cached and cached[0] == mtime:
+            return cached[1].copy()
+
+        return _load_and_cache(path, use_parquet, days, mtime, cache_key)
+
+
+def _load_and_cache(path: Path, use_parquet: bool, days, mtime: float, cache_key: str) -> pd.DataFrame:
     try:
         if use_parquet:
             import pyarrow.parquet as pq
@@ -245,7 +278,8 @@ def _load_csv_safe(filename: str, days: int | None = None) -> pd.DataFrame:
                     break
 
             total_rows = pf.metadata.num_rows
-            if time_col and total_rows > MAX_ROWS_FOR_CACHE and days != 0:
+            _FILTER_THRESHOLD = 500_000
+            if time_col and days != 0 and (total_rows > MAX_ROWS_FOR_CACHE or (days is None and total_rows > _FILTER_THRESHOLD)):
                 filter_days = days or DEFAULT_RECENT_DAYS
                 cutoff = pd.Timestamp.now() - pd.Timedelta(days=filter_days)
                 tc_field = pf.schema_arrow.field(time_col)

@@ -86,7 +86,7 @@ frontend/
       congestionSummary.ts    # AI congestion summary context builder, deterministic fallback, API fetch
       priceResponseTransforms.ts # Scarcity signal transforms: DA/RT LMP+ASP alignment, pivoting, scarcity metrics, summary builder
 src/
-  api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first, CSV fallback)
+  api_data_loader.py      # Dataset metadata (47 datasets), aggregation, caching (Parquet-first with column normalization, CSV fallback), per-file load locks, 90-day time filter for large datasets
   config.py               # App constants (dirs, API keys)
 backfill.py               # ONE-TIME historical backfill (2024-01 to present, monthly ZIPs)
 scraper.py                # 15-minute incremental updater (rolling 2-day, idempotent)

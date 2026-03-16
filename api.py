@@ -59,8 +59,11 @@ app.add_middleware(
 @app.on_event("startup")
 async def preload_large_datasets():
     import threading
-    from src.api_data_loader import _LARGE_DATASETS, _get_daily_cached, _build_daily_cache, _aggregate_df
+    from src.api_data_loader import _LARGE_DATASETS, _get_daily_cached, _build_daily_cache, _aggregate_df, _df_cache
+    _df_cache.clear()
+    logger.info("Cleared in-memory dataframe cache on startup")
     def _preload():
+        import gc
         for key in _LARGE_DATASETS:
             meta = DATASET_META.get(key)
             if not meta:
@@ -73,6 +76,9 @@ async def preload_large_datasets():
             df = _load_csv_safe(meta["file"], days=0)
             if not df.empty:
                 _build_daily_cache(key, meta, df)
+            del df
+            _df_cache.clear()
+            gc.collect()
         logger.info("Daily cache build complete")
     threading.Thread(target=_preload, daemon=True).start()
 
@@ -107,7 +113,7 @@ def _run_scraper_once() -> None:
 
 
 async def _scraper_loop() -> None:
-    await asyncio.sleep(5)
+    await asyncio.sleep(60)
     while True:
         try:
             async with _scrape_lock:
@@ -118,24 +124,15 @@ async def _scraper_loop() -> None:
 
 
 async def _cache_refresh_loop() -> None:
-    await asyncio.sleep(5)
-    while True:
-        try:
-            async with _cache_lock:
-                await asyncio.to_thread(_refresh_memory_cache)
-        except Exception:
-            logger.exception("Unexpected error in cache refresh loop")
-        await asyncio.sleep(CACHE_REFRESH_INTERVAL_SECONDS)
+    pass
 
 
 @app.on_event("startup")
 async def start_background_jobs():
     _background_tasks.append(asyncio.create_task(_scraper_loop(), name="scheduled-scraper"))
-    _background_tasks.append(asyncio.create_task(_cache_refresh_loop(), name="cache-refresh"))
     logger.info(
-        "Background jobs started (scraper every %ss, cache refresh every %ss)",
+        "Background jobs started (scraper every %ss, cache refresh via mtime checks)",
         SCRAPER_INTERVAL_SECONDS,
-        CACHE_REFRESH_INTERVAL_SECONDS,
     )
 
 
@@ -197,7 +194,7 @@ async def get_data(
             limit=limit,
             filter_col=filter_col,
             filter_val=filter_val,
-            days=days if days > 0 else 0,
+            days=days if days > 0 else None,
             offset=offset,
         ),
     )

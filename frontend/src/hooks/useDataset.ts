@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface DatasetMeta {
   label: string;
@@ -47,10 +47,17 @@ export function useDataset(
   const [data, setData] = useState<DatasetResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasDataRef = useRef(false);
+  const queryIdRef = useRef('');
+  const queryId = `${datasetKey}:${resolution}:${filterCol}:${filterVal}:${days}:${offset}`;
+  if (queryIdRef.current !== queryId) {
+    queryIdRef.current = queryId;
+    hasDataRef.current = false;
+  }
 
   const fetchData = useCallback(async () => {
     if (!datasetKey) return;
-    setLoading(true);
+    if (!hasDataRef.current) setLoading(true);
     setError(null);
     try {
       const fetchPage = async (pageOffset: number): Promise<DatasetResponse> => {
@@ -71,6 +78,7 @@ export function useDataset(
 
       if (!loadAllPages) {
         const json = await fetchPage(offset);
+        hasDataRef.current = true;
         setData(json);
         return;
       }
@@ -89,6 +97,7 @@ export function useDataset(
         hasMore = page.has_more;
       }
 
+      hasDataRef.current = true;
       setData({
         ...firstPage,
         data: combinedData,
