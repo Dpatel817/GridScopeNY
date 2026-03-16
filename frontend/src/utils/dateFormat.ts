@@ -34,12 +34,9 @@ function fmtHour(d: Date): string {
   return `${h12} ${suffix}`;
 }
 
-function fmtMMMd(d: Date): string {
-  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
-}
-
-function fmtMMM(d: Date): string {
-  return MONTH_ABBR[d.getMonth()];
+function fmtMMMYearTick(d: Date): string {
+  const yr = String(d.getFullYear()).slice(2);
+  return `${MONTH_ABBR[d.getMonth()]} '${yr}`;
 }
 
 function fmtYear(d: Date): string {
@@ -65,10 +62,15 @@ function getTier(spanDays: number): DateTier {
   return 'yearly';
 }
 
+function fmtMMMdYear(d: Date): string {
+  const yr = String(d.getFullYear()).slice(2);
+  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()} '${yr}`;
+}
+
 const TICK_FN: Record<DateTier, (d: Date) => string> = {
   hourly: fmtHour,
-  daily: fmtMMMd,
-  monthly: fmtMMM,
+  daily: fmtMMMdYear,
+  monthly: fmtMMMYearTick,
   yearly: fmtYear,
 };
 
@@ -99,30 +101,30 @@ export function getTickInterval(data: Record<string, unknown>[], xKey: string): 
   let maxTicks: number;
   switch (tier) {
     case 'hourly': maxTicks = 12; break;
-    case 'daily':  maxTicks = 15; break;
-    case 'monthly': maxTicks = 12; break;
-    case 'yearly': maxTicks = 10; break;
+    case 'daily':  maxTicks = 20; break;
+    case 'monthly': maxTicks = 18; break;
+    case 'yearly': maxTicks = 12; break;
   }
 
   if (len <= maxTicks) return 'preserveStartEnd';
   return Math.max(1, Math.floor(len / maxTicks));
 }
 
-function fmtHourTooltip(d: Date): string {
+function fmtTimeStr(d: Date): string {
   const h = d.getHours();
   const m = d.getMinutes();
   const suffix = h >= 12 ? 'PM' : 'AM';
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   const minStr = m < 10 ? '0' + m : String(m);
-  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${h12}:${minStr} ${suffix}`;
+  return `${h12}:${minStr} ${suffix}`;
 }
 
-function fmtDayTooltip(d: Date): string {
-  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-}
-
-function fmtMonthTooltip(d: Date): string {
-  return `${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
+function fmtFullTooltip(d: Date, hasTime: boolean): string {
+  const datePart = `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  if (hasTime) {
+    return `${datePart} ${fmtTimeStr(d)}`;
+  }
+  return datePart;
 }
 
 export function getExpectedHourCount(dateStr: string): 23 | 24 | 25 {
@@ -173,31 +175,14 @@ export function makeUniqueHourlyKey(date: string, he: number | string, seen: Set
   return { key: baseKey, label: `${date} HE${heNum}` };
 }
 
-export function tooltipLabelFormatter(spanDaysOrData: number | Record<string, unknown>[], xKey?: string): (v: DateInput) => string {
-  let spanDays: number;
-  if (typeof spanDaysOrData === 'number') {
-    spanDays = spanDaysOrData;
-  } else {
-    spanDays = getDateRangeSpanDays(spanDaysOrData, xKey ?? '');
-  }
-  const tier = getTier(spanDays);
-
-  const tooltipFn: Record<DateTier, (d: Date) => string> = {
-    hourly: fmtHourTooltip,
-    daily: fmtDayTooltip,
-    monthly: fmtMonthTooltip,
-    yearly: fmtMonthTooltip,
-  };
-
-  const fmt = tooltipFn[tier];
-
+export function tooltipLabelFormatter(_spanDaysOrData: number | Record<string, unknown>[], _xKey?: string): (v: DateInput) => string {
   return (v: DateInput): string => {
     if (v === null || v === undefined || v === '') return '';
     const s = String(v);
     if (s === 'undefined' || s === 'null' || s === 'NaN') return '';
 
     const heMatch = s.match(/^(\d{4}-\d{2}-\d{2})\s+HE(\d+)(b?)$/);
-    if (heMatch && tier === 'hourly') {
+    if (heMatch) {
       const dateStr = heMatch[1];
       const he = heMatch[2];
       const isDup = heMatch[3] === 'b';
@@ -206,13 +191,14 @@ export function tooltipLabelFormatter(spanDaysOrData: number | Record<string, un
       if (isDup) label += ' (DST)';
       else if (dstHours !== 24) label += dstHours === 23 ? ' (Spring Fwd)' : ' (Fall Back)';
       const d = parseToDate(s);
-      if (d) label = `${fmtMMMd(d)}, ${label}`;
+      if (d) label = `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} — ${label}`;
       return label;
     }
 
     const d = parseToDate(s);
     if (!d) return s.length > 16 ? s.slice(0, 16) : s;
 
-    return fmt(d);
+    const hasTime = s.includes('T');
+    return fmtFullTooltip(d, hasTime);
   };
 }
