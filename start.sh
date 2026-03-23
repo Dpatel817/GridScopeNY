@@ -3,8 +3,11 @@ set -e
 
 echo "=== GridScope NY Startup ==="
 
-uvicorn api:app --host 0.0.0.0 --port 8000 &
+# Run uvicorn from the backend/ directory so relative imports resolve correctly
+cd backend
+python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
+cd ..
 echo "API backend started (PID $BACKEND_PID)"
 
 MAX_WAIT=30

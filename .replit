@@ -29,6 +29,9 @@ task = "shell.exec"
 args = "bash start.sh"
 waitForPort = 5000
 
+[env]
+PYTHONPATH = "backend"
+
 [[ports]]
 localPort = 5000
 externalPort = 80
