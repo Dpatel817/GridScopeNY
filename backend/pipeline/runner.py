@@ -11,8 +11,9 @@ from datetime import date, timedelta
 import pandas as pd
 
 from etl.datasets import DATASET_REGISTRY
+from etl.extract.http_client import create_session
 from etl.fetchers import (
-    create_session, fetch_daily_file, fetch_monthly_archive,
+    fetch_daily_file, fetch_monthly_archive,
     fetch_snapshot, get_date_range, get_month_range,
 )
 from etl.processors import process_raw_files, process_raw_file

@@ -33,7 +33,7 @@ ETL/GridScopeNY/data/loaded_zip_members.csv
 # ETL uppercase (legacy)
 ETL/
 
-# Replit
+# Local caches / IDE artifacts
 .cache/
 .config/
 attached_assets/
