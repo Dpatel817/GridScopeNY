@@ -4,6 +4,8 @@ import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
 import PriceChartControls from '../components/PriceChartControls';
 import ScarcitySignalSection from '../components/ScarcitySignalSection';
+import Widget from '../components/Widget';
+import WidgetGrid from '../components/WidgetGrid';
 import { filterNyisoZones } from '../data/zones';
 import type { PriceRow, Resolution, DateRange, ChartType, LmpField } from '../data/priceTransforms';
 import {
@@ -235,117 +237,61 @@ export default function Prices() {
       {loading && <div className="loading"><div className="spinner" /> Loading price data...</div>}
 
       {!loading && (
-        <div className="price-chart-layout">
-          <PriceChartControls
-            zones={allZones}
-            selectedZones={selectedZones}
-            onZonesChange={setSelectedZones}
-            resolution={resolution}
-            onResolutionChange={setResolution}
-            dateRange={dateRange}
-            onDateRangeChange={handleDateRangeChange}
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-            availableDates={availableDates}
-            chartType={chartType}
-            onChartTypeChange={setChartType}
-          />
-          <div className="price-chart-main">
-            <div className="price-view-tabs">
-              <button
-                className={`pcc-btn${viewMode === 'da' ? ' active' : ''}`}
-                onClick={() => setViewMode('da')}
-              >
-                Day-Ahead LMPs
-              </button>
-              <button
-                className={`pcc-btn${viewMode === 'rt' ? ' active' : ''}`}
-                onClick={() => setViewMode('rt')}
-              >
-                Real-Time LMPs
-              </button>
-              <button
-                className={`pcc-btn${viewMode === 'dart' ? ' active' : ''}`}
-                onClick={() => setViewMode('dart')}
-              >
-                DART Spread
-              </button>
-              <span className="price-view-info">
-                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
-                {' · '}{selectedZones.length}/{allZones.length} zones
-                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
-              </span>
-            </div>
-
-            {(viewMode === 'da' || viewMode === 'rt' || viewMode === 'dart') && (
-              <div className="lmp-component-selector">
+        <WidgetGrid>
+          <Widget
+            size="full"
+            title={
+              viewMode === 'da'
+                ? `Day-Ahead Zonal ${lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}`
+                : viewMode === 'rt'
+                ? `Real-Time Zonal ${lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}`
+                : `DA-RT ${lmpField === 'LMP' ? 'LMP' : lmpField === 'MLC' ? 'Losses (MLC)' : 'Congestion (MCC)'} Spread`
+            }
+            subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${selectedZones.length}/${allZones.length} zones · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
+            badge={`${viewMode === 'da' ? daChartData.length : viewMode === 'rt' ? rtChartData.length : dartChartData.length} points`}
+            actions={
+              <div className="widget-tabs">
+                {(['da', 'rt', 'dart'] as ViewMode[]).map(m => (
+                  <button key={m} className={`widget-tab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)}>
+                    {m === 'da' ? 'Day-Ahead LMPs' : m === 'rt' ? 'Real-Time LMPs' : 'DART Spread'}
+                  </button>
+                ))}
+                <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
                 {(['LMP', 'MLC', 'MCC'] as LmpField[]).map(f => (
-                  <button
-                    key={f}
-                    className={`pcc-btn${lmpField === f ? ' active' : ''}`}
-                    onClick={() => setLmpField(f)}
-                  >
-                    {f === 'LMP' ? 'Total LMP' : f === 'MLC' ? 'Losses (MLC)' : 'Congestion (MCC)'}
+                  <button key={f} className={`widget-tab${lmpField === f ? ' active' : ''}`} onClick={() => setLmpField(f)}>
+                    {f === 'LMP' ? 'Total LMP' : f === 'MLC' ? 'Losses' : 'Congestion'}
                   </button>
                 ))}
               </div>
-            )}
-
-            {viewMode === 'da' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">
-                    Day-Ahead Zonal {lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}
-                  </div>
-                  <span className="badge badge-primary">{daChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={daChartData}
-                  xKey="Date"
-                  yKeys={selectedZones}
-                  chartType={chartType}
-                  height={380}
-                />
-              </div>
-            )}
-
-            {viewMode === 'rt' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">
-                    Real-Time Zonal {lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}
-                  </div>
-                  <span className="badge badge-primary">{rtChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={rtChartData}
-                  xKey="Date"
-                  yKeys={selectedZones}
-                  chartType={chartType}
-                  height={380}
-                />
-              </div>
-            )}
-
-            {viewMode === 'dart' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">DA-RT {lmpField === 'LMP' ? 'LMP' : lmpField === 'MLC' ? 'Losses (MLC)' : 'Congestion (MCC)'} Spread (DA minus RT)</div>
-                  <span className="badge badge-primary">{dartChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={dartChartData}
-                  xKey="Date"
-                  yKeys={selectedZones}
-                  chartType={chartType}
-                  height={380}
-                />
-              </div>
-            )}
-          </div>
-        </div>
+            }
+            controls={
+              <PriceChartControls
+                zones={allZones}
+                selectedZones={selectedZones}
+                onZonesChange={setSelectedZones}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+                dateRange={dateRange}
+                onDateRangeChange={handleDateRangeChange}
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
+                availableDates={availableDates}
+                chartType={chartType}
+                onChartTypeChange={setChartType}
+              />
+            }
+          >
+            <PriceChart
+              data={viewMode === 'da' ? daChartData : viewMode === 'rt' ? rtChartData : dartChartData}
+              xKey="Date"
+              yKeys={selectedZones}
+              chartType={chartType}
+              height={420}
+            />
+          </Widget>
+        </WidgetGrid>
       )}
 
       <ScarcitySignalSection />

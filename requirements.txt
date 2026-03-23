@@ -8,3 +8,5 @@ requests
 openai
 pyarrow
 aiofiles
+beautifulsoup4
+lxml

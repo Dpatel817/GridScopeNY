@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useCallback, useRef, type ChangeEvent } f
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
+import Widget from '../components/Widget';
+import WidgetGrid from '../components/WidgetGrid';
 import type { CongestionRow, ConstraintStat, ChartType, Resolution, DateRange } from '../data/congestionTransforms';
 import {
   detectColumns, getAvailableDates,
@@ -1021,7 +1023,6 @@ export default function Congestion() {
   const [endDate, setEndDate] = useState('');
   const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedConstraints, setSelectedConstraints] = useState<string[]>([]);
-  const [showBindingTable, setShowBindingTable] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
 
   const [aiSummary, setAiSummary] = useState('');
@@ -1222,95 +1223,78 @@ export default function Congestion() {
       )}
 
       {!loading && (
-        <div className="price-chart-layout">
-          <CongestionChartControls
-            constraints={allConstraintNames}
-            selectedConstraints={selectedConstraints}
-            onConstraintsChange={setSelectedConstraints}
-            resolution={resolution}
-            onResolutionChange={setResolution}
-            dateRange={dateRange}
-            onDateRangeChange={handleDateRangeChange}
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-            availableDates={availableDates}
-            chartType={chartType}
-            onChartTypeChange={setChartType}
-          />
-
-          <div className="price-chart-main">
-            <div className="price-view-tabs">
-              <span className="price-view-info">
-                {marketType === 'DA' ? 'DAM' : 'RTM'}
-                {' · '}{resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
-                {' · '}{activeForChart.length}/{allConstraintNames.length} constraints
-                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
-              </span>
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-card-header">
-                <div className="chart-card-title">Constraint Costs Over Time</div>
-                <span className="badge badge-primary">{chartData.length} points</span>
-              </div>
-              <PriceChart
-                data={chartData}
-                xKey="Date"
-                yKeys={activeForChart}
+        <WidgetGrid>
+          <Widget
+            size="full"
+            title="Constraint Costs Over Time"
+            subtitle={`${marketType === 'DA' ? 'DAM' : 'RTM'} · ${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${activeForChart.length}/${allConstraintNames.length} constraints · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
+            badge={`${chartData.length} points`}
+            controls={
+              <CongestionChartControls
+                constraints={allConstraintNames}
+                selectedConstraints={selectedConstraints}
+                onConstraintsChange={setSelectedConstraints}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+                dateRange={dateRange}
+                onDateRangeChange={handleDateRangeChange}
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
+                availableDates={availableDates}
                 chartType={chartType}
-                height={380}
-                valuePrefix="$"
-                valueSuffix=""
+                onChartTypeChange={setChartType}
               />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!loading && constraintStats.length > 0 && (
-        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div
-            className="chart-card-header"
-            style={{ padding: '14px 20px', cursor: 'pointer' }}
-            onClick={() => setShowBindingTable(!showBindingTable)}
+            }
           >
-            <div className="chart-card-title">
-              <span className="chevron">{showBindingTable ? '▾' : '▸'}</span>{' '}
-              Binding Constraints ({constraintStats.length})
-            </div>
-            <span className="badge badge-primary">ranked by total cost</span>
-          </div>
-          {showBindingTable && (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="rank-table" style={{ borderSpacing: 0 }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: 50 }}>#</th>
-                    <th>Constraint</th>
-                    <th>Total Cost</th>
-                    <th>Avg Cost</th>
-                    <th>Max Cost</th>
-                    <th>Bindings</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {constraintStats.map(c => (
-                    <tr key={c.name}>
-                      <td><span className="rank-num">{c.rank}</span></td>
-                      <td style={{ fontWeight: 600, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</td>
-                      <td style={{ fontWeight: 700, color: 'var(--primary)' }}>${c.total.toFixed(2)}</td>
-                      <td>${c.avg.toFixed(2)}</td>
-                      <td>${c.max.toFixed(2)}</td>
-                      <td>{c.count}</td>
+            <PriceChart
+              data={chartData}
+              xKey="Date"
+              yKeys={activeForChart}
+              chartType={chartType}
+              height={420}
+              valuePrefix="$"
+              valueSuffix=""
+            />
+          </Widget>
+
+          {constraintStats.length > 0 && (
+            <Widget
+              size="full"
+              title={`Binding Constraints (${constraintStats.length})`}
+              subtitle="ranked by total cost"
+              noPad
+            >
+              <div style={{ overflowX: 'auto' }}>
+                <table className="rank-table" style={{ borderSpacing: 0 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 50 }}>#</th>
+                      <th>Constraint</th>
+                      <th>Total Cost</th>
+                      <th>Avg Cost</th>
+                      <th>Max Cost</th>
+                      <th>Bindings</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {constraintStats.map(c => (
+                      <tr key={c.name}>
+                        <td><span className="rank-num">{c.rank}</span></td>
+                        <td style={{ fontWeight: 600, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</td>
+                        <td style={{ fontWeight: 700, color: 'var(--primary)' }}>${c.total.toFixed(2)}</td>
+                        <td>${c.avg.toFixed(2)}</td>
+                        <td>${c.max.toFixed(2)}</td>
+                        <td>{c.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Widget>
           )}
-        </div>
+        </WidgetGrid>
       )}
 
       <ConstraintImpactAnalysis />

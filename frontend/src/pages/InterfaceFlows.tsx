@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
+import Widget from '../components/Widget';
+import WidgetGrid from '../components/WidgetGrid';
 import type { FlowRow, ClassFilter, InterfaceInfo, InterfaceStat, ChartType, Resolution, DateRange } from '../data/interfaceTransforms';
 import {
   detectFlowColumns, extractInterfaces, getAvailableDates,
@@ -569,118 +571,86 @@ export default function InterfaceFlows() {
       )}
 
       {!loading && (
-        <div className="price-chart-layout">
-          <FlowChartControls
-            classFilter={classFilter}
-            onClassFilterChange={setClassFilter}
-            internalCount={internalCount}
-            externalCount={externalCount}
-            interfaces={visibleDisplayNames}
-            selectedInterfaces={selectedInterfaces}
-            onInterfacesChange={setSelectedInterfaces}
-            resolution={resolution}
-            onResolutionChange={setResolution}
-            dateRange={dateRange}
-            onDateRangeChange={handleDateRangeChange}
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-            availableDates={availableDates}
-            chartType={chartType}
-            onChartTypeChange={setChartType}
-          />
-
-          <div className="price-chart-main">
-            <div className="price-view-tabs">
-              <span className="price-view-info">
-                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
-                {' · '}{activeForChart.length}/{visibleDisplayNames.length} interfaces
-                {classFilter !== 'all' && ` · ${classFilter}`}
-                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
-              </span>
-            </div>
-
+        <WidgetGrid>
+          <Widget
+            size="full"
+            title="Interface Flows Over Time"
+            subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${activeForChart.length}/${visibleDisplayNames.length} interfaces${classFilter !== 'all' ? ` · ${classFilter}` : ''} · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
+            badge={`${chartData.length} points`}
+            controls={
+              <FlowChartControls
+                classFilter={classFilter}
+                onClassFilterChange={setClassFilter}
+                internalCount={internalCount}
+                externalCount={externalCount}
+                interfaces={visibleDisplayNames}
+                selectedInterfaces={selectedInterfaces}
+                onInterfacesChange={setSelectedInterfaces}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+                dateRange={dateRange}
+                onDateRangeChange={handleDateRangeChange}
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
+                availableDates={availableDates}
+                chartType={chartType}
+                onChartTypeChange={setChartType}
+              />
+            }
+          >
             {stackWarning && (
-              <div style={{
-                padding: '8px 14px', background: 'color-mix(in srgb, var(--warning) 12%, transparent)',
-                border: '1px solid var(--warning)', borderRadius: 8, marginBottom: 8, fontSize: 12,
-                color: 'var(--text-muted)'
-              }}>
+              <div style={{ padding: '8px 14px', background: 'var(--warning-light)', border: '1px solid var(--warning)', borderRadius: 8, marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
                 Stacked charts disabled — data contains negative flows. Showing line chart instead.
               </div>
             )}
+            <PriceChart
+              data={chartData}
+              xKey="Date"
+              yKeys={activeForChart}
+              chartType={effectiveChartType}
+              height={420}
+              valuePrefix=""
+              valueSuffix=" MW"
+            />
+          </Widget>
 
-            <div className="chart-card">
-              <div className="chart-card-header">
-                <div className="chart-card-title">Interface Flows Over Time</div>
-                <span className="badge badge-primary">{chartData.length} points</span>
+          {interfaceStats.length > 0 && (
+            <Widget size="full" title={`Interface Summary`} subtitle={`${interfaceStats.length} interfaces${classFilter !== 'all' ? ` · ${classFilter} only` : ''}`} noPad>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="rank-table" style={{ borderSpacing: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Interface</th>
+                      <th>Class</th>
+                      <th>Region / Path</th>
+                      <th>Direction</th>
+                      <th>Avg Flow (MW)</th>
+                      <th>Max Flow (MW)</th>
+                      <th>Min Flow (MW)</th>
+                      <th>Observations</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {interfaceStats.map(s => (
+                      <tr key={s.raw} onClick={() => handleRowClick(s.display)} style={{ cursor: 'pointer', background: highlightedInterface === s.display ? 'var(--primary-light)' : undefined }}>
+                        <td style={{ fontWeight: 600 }}>{s.display}</td>
+                        <td><span className={`intf-class-tag ${s.meta.classification === 'Internal' ? 'intf-internal' : 'intf-external'}`}>{s.meta.classification}</span></td>
+                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.region}</td>
+                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.direction}</td>
+                        <td>{s.avg.toFixed(1)}</td>
+                        <td style={{ fontWeight: 600, color: s.max > 2000 ? 'var(--danger)' : 'var(--text)' }}>{s.max.toFixed(0)}</td>
+                        <td>{s.min.toFixed(0)}</td>
+                        <td>{s.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <PriceChart
-                data={chartData}
-                xKey="Date"
-                yKeys={activeForChart}
-                chartType={effectiveChartType}
-                height={380}
-                valuePrefix=""
-                valueSuffix=" MW"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!loading && interfaceStats.length > 0 && (
-        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <div className="chart-card-title">
-              Interface Summary ({interfaceStats.length} interfaces{classFilter !== 'all' ? ` · ${classFilter} only` : ''})
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="rank-table" style={{ borderSpacing: 0 }}>
-              <thead>
-                <tr>
-                  <th>Interface</th>
-                  <th>Class</th>
-                  <th>Region / Path</th>
-                  <th>Direction</th>
-                  <th>Avg Flow (MW)</th>
-                  <th>Max Flow (MW)</th>
-                  <th>Min Flow (MW)</th>
-                  <th>Observations</th>
-                </tr>
-              </thead>
-              <tbody>
-                {interfaceStats.map(s => (
-                  <tr
-                    key={s.raw}
-                    onClick={() => handleRowClick(s.display)}
-                    style={{
-                      cursor: 'pointer',
-                      background: highlightedInterface === s.display
-                        ? 'color-mix(in srgb, var(--primary) 10%, transparent)'
-                        : undefined,
-                    }}
-                  >
-                    <td style={{ fontWeight: 600 }}>{s.display}</td>
-                    <td>
-                      <span className={`intf-class-tag ${s.meta.classification === 'Internal' ? 'intf-internal' : 'intf-external'}`}>
-                        {s.meta.classification}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.region}</td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.direction}</td>
-                    <td>{s.avg.toFixed(1)}</td>
-                    <td style={{ fontWeight: 600, color: s.max > 2000 ? 'var(--danger)' : 'var(--text)' }}>{s.max.toFixed(0)}</td>
-                    <td>{s.min.toFixed(0)}</td>
-                    <td>{s.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+            </Widget>
+          )}
+        </WidgetGrid>
       )}
 
       <TTCFDeratesSection />

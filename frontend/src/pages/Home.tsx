@@ -1,17 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { useInventory, useDataset } from '../hooks/useDataset';
 import EmptyState from '../components/EmptyState';
 import DatasetSection from '../components/DatasetSection';
+import ZoneLmpTable from '../components/ZoneLmpTable';
+import GeneratorMap from './GeneratorMap';
+import Widget from '../components/Widget';
+import WidgetGrid from '../components/WidgetGrid';
 
-const NAV_CARDS = [
-  { path: '/prices', title: 'Prices', desc: 'DA/RT LBMP spreads, ancillary services, CTS', category: 'market' },
-  { path: '/demand', title: 'Demand Intelligence', desc: 'Load forecasts, actuals, forecast errors', category: 'market' },
-  { path: '/generation', title: 'Generation', desc: 'Fuel mix, commitments, BTM solar, generator map', category: 'market' },
-  { path: '/interfaces', title: 'Interface Flows', desc: 'Transmission pressure, ATC/TTC, derates', category: 'market' },
-  { path: '/congestion', title: 'Congestion', desc: 'Binding constraints, outage schedules', category: 'market' },
-  { path: '/opportunities', title: 'Opportunity Explorer', desc: 'Zone rankings, trader takeaways, AI explanation', category: 'hero' },
-];
 
 const USEFUL_LINKS = [
   { label: 'Modo Energy NYISO Research', url: 'https://modoenergy.com/research?regions=nyiso' },
@@ -22,7 +17,7 @@ const USEFUL_LINKS = [
   { label: 'Iroqouis-Z2 Gas Notices', url: 'https://ioly.iroquois.com/infopost/#critical' },
   { label: 'Tetco-M3 Gas Notices', url: 'https://infopost.enbridge.com/infopost/TEHome.asp?Pipe=TE' },
   { label: 'Transco-Z6 Gas Notices', url: 'https://www.1line.williams.com/Transco/info-postings/notices/critical-notices.html' },
-  { label: 'TGP-Z5 Gas Notices', url: 'https://pipeline2.kindermorgan.com/Notices/Notices.aspx?type=C&code=TGP'},
+  { label: 'TGP-Z5 Gas Notices', url: 'https://pipeline2.kindermorgan.com/Notices/Notices.aspx?type=C&code=TGP' },
   { label: 'IESO Market Data', url: 'https://www.ieso.ca/' },
 ];
 
@@ -167,30 +162,18 @@ export default function Home() {
   const { inventory, loading } = useInventory();
   const [refOpen, setRefOpen] = useState(false);
 
-  const { data: priceData } = useDataset('da_lbmp_zone', 'daily', undefined, undefined, 10000, 0);
-  const { data: demandData } = useDataset('isolf', 'daily', undefined, undefined, 10000, 0);
+  // Price data for zone table
+  const { data: daData } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 1);
+  const { data: rtData } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 50000, 1);
+  // Load data — isolf = DA load forecast, pal = RT actual load
+  const { data: daLoadData } = useDataset('isolf', 'hourly', undefined, undefined, 20000, 1);
+  const { data: rtLoadData } = useDataset('pal', 'hourly', undefined, undefined, 20000, 1);
 
   const totalDatasets = inventory
     ? Object.values(inventory).reduce((sum: number, page: any) => sum + Object.keys(page).length, 0) : 0;
   const availableDatasets = inventory
     ? Object.values(inventory).reduce((sum: number, page: any) =>
         sum + Object.values(page).filter((d: any) => d.status === 'available').length, 0) : 0;
-
-  const latestPrice = priceData?.data?.length
-    ? (() => {
-        const nycRows = priceData.data.filter((r: any) => r.Zone === 'N.Y.C.');
-        if (!nycRows.length) return null;
-        const last = nycRows[nycRows.length - 1];
-        return { zone: 'N.Y.C.', lmp: Number(last.LMP).toFixed(2) };
-      })()
-    : null;
-
-  const peakLoad = demandData?.data?.length
-    ? (() => {
-        const vals = demandData.data.map((r: any) => Number(r.NYISO || r['N.Y.C.'] || 0)).filter(Boolean);
-        return vals.length ? Math.max(...vals).toLocaleString(undefined, { maximumFractionDigits: 0 }) : null;
-      })()
-    : null;
 
   return (
     <div className="page">
@@ -203,38 +186,38 @@ export default function Home() {
 
       {availableDatasets === 0 && !loading && <EmptyState />}
 
-      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        <div className="kpi-card">
-          <div className="kpi-label">Latest DA LMP (NYC)</div>
-          <div className="kpi-value">
-            {latestPrice ? <>{latestPrice.lmp}<span className="kpi-unit">$/MWh</span></> : '—'}
+      <WidgetGrid>
+        {/* Zone LMP / Load KPI Table */}
+        <Widget
+          size="two-thirds"
+          title="Zonal Price & Load Summary"
+          subtitle="Latest day avg · All zones A–K"
+          badge={`${availableDatasets}/${totalDatasets} datasets`}
+          noPad
+        >
+          <ZoneLmpTable
+            daRows={(daData?.data ?? []) as any}
+            rtRows={(rtData?.data ?? []) as any}
+            daLoadRows={(daLoadData?.data ?? []) as any}
+            rtLoadRows={(rtLoadData?.data ?? []) as any}
+          />
+          <div style={{ display: 'flex', gap: 16, padding: '8px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--success)', fontWeight: 600 }}>▲ positive spread</span>
+            <span style={{ color: 'var(--danger)', fontWeight: 600 }}>▼ negative spread</span>
+            <span>DA–RT spread = DA LMP minus RT LMP</span>
           </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Peak System Load</div>
-          <div className="kpi-value">
-            {peakLoad ? <>{peakLoad}<span className="kpi-unit">MW</span></> : '—'}
-          </div>
-        </div>
-        <div className="kpi-card accent">
-          <div className="kpi-label">Datasets Available</div>
-          <div className="kpi-value">{availableDatasets}<span className="kpi-unit">/ {totalDatasets}</span></div>
-        </div>
-      </div>
+        </Widget>
+      </WidgetGrid>
 
       <LiveSystemContext />
 
-      <div className="section-container">
-        <div className="section-title">Navigate</div>
-        <div className="home-grid">
-          {NAV_CARDS.map(c => (
-            <Link key={c.path} to={c.path} className={`home-card${c.category === 'hero' ? ' hero-card' : ''}`}>
-              <h3>{c.title}</h3>
-              <p>{c.desc}</p>
-            </Link>
-          ))}
-        </div>
-      </div>
+      {/* Generator Price Map */}
+      <WidgetGrid>
+        <Widget size="full" title="Generator Price Map" subtitle="NYISO generator-level LMP visualization" noPad>
+          <GeneratorMap embedded={true} />
+        </Widget>
+      </WidgetGrid>
+
 
       <div className="section-container">
         <div className="section-title">Resources</div>

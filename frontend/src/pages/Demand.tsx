@@ -3,6 +3,8 @@ import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
 import ChartControls from '../components/ChartControls';
+import Widget from '../components/Widget';
+import WidgetGrid from '../components/WidgetGrid';
 import type { ChartType, Resolution, DateRange } from '../data/priceTransforms';
 import type { DemandRow, AlignedRow } from '../data/demandTransforms';
 import {
@@ -266,106 +268,56 @@ export default function Demand() {
       )}
 
       {!loading && (
-        <div className="price-chart-layout">
-          <ChartControls
-            seriesLabel="Zones"
-            series={allZones}
-            selectedSeries={selectedZones}
-            onSeriesChange={setSelectedZones}
-            resolution={resolution}
-            onResolutionChange={setResolution}
-            dateRange={dateRange}
-            onDateRangeChange={handleDateRangeChange}
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-            availableDates={availableDates}
-            chartType={chartType}
-            onChartTypeChange={setChartType}
-          />
-          <div className="price-chart-main">
-            <div className="price-view-tabs">
-              <button
-                className={`pcc-btn${viewMode === 'zonal' ? ' active' : ''}`}
-                onClick={() => setViewMode('zonal')}
-              >
-                Zonal Forecast
-              </button>
-              <button
-                className={`pcc-btn${viewMode === 'fva' ? ' active' : ''}`}
-                onClick={() => setViewMode('fva')}
-              >
-                Forecast vs Actual
-              </button>
-              <button
-                className={`pcc-btn${viewMode === 'error' ? ' active' : ''}`}
-                onClick={() => setViewMode('error')}
-              >
-                Forecast Error
-              </button>
-              <span className="price-view-info">
-                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
-                {' · '}{selectedZones.length}/{allZones.length} zones
-                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
-              </span>
-            </div>
-
-            {viewMode === 'zonal' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">System Load Forecast by Zone</div>
-                  <span className="badge badge-primary">{zonalChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={zonalChartData}
-                  xKey="Date"
-                  yKeys={selectedZones}
-                  chartType={chartType}
-                  height={380}
-                  valuePrefix=""
-                  valueSuffix=" MW"
-                />
+        <WidgetGrid>
+          <Widget
+            size="full"
+            title={
+              viewMode === 'zonal' ? 'System Load Forecast by Zone'
+              : viewMode === 'fva' ? 'Forecast vs Actual (NYISO Total)'
+              : 'Forecast Error (Forecast minus Actual)'
+            }
+            subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${selectedZones.length}/${allZones.length} zones · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
+            badge={`${viewMode === 'zonal' ? zonalChartData.length : viewMode === 'fva' ? fvaChartData.length : errorChartData.length} points`}
+            actions={
+              <div className="widget-tabs">
+                {(['zonal', 'fva', 'error'] as ViewMode[]).map(m => (
+                  <button key={m} className={`widget-tab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)}>
+                    {m === 'zonal' ? 'Zonal Forecast' : m === 'fva' ? 'Forecast vs Actual' : 'Forecast Error'}
+                  </button>
+                ))}
               </div>
-            )}
-
-            {viewMode === 'fva' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">Forecast vs Actual (NYISO Total)</div>
-                  <span className="badge badge-primary">{fvaChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={fvaChartData}
-                  xKey="Date"
-                  yKeys={['Forecast', 'Actual']}
-                  chartType={chartType}
-                  height={380}
-                  valuePrefix=""
-                  valueSuffix=" MW"
-                />
-              </div>
-            )}
-
-            {viewMode === 'error' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">Forecast Error (Forecast minus Actual)</div>
-                  <span className="badge badge-primary">{errorChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={errorChartData}
-                  xKey="Date"
-                  yKeys={['Error']}
-                  chartType={chartType}
-                  height={380}
-                  valuePrefix=""
-                  valueSuffix=" MW"
-                />
-              </div>
-            )}
-          </div>
-        </div>
+            }
+            controls={
+              <ChartControls
+                seriesLabel="Zones"
+                series={allZones}
+                selectedSeries={selectedZones}
+                onSeriesChange={setSelectedZones}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+                dateRange={dateRange}
+                onDateRangeChange={handleDateRangeChange}
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
+                availableDates={availableDates}
+                chartType={chartType}
+                onChartTypeChange={setChartType}
+              />
+            }
+          >
+            <PriceChart
+              data={viewMode === 'zonal' ? zonalChartData : viewMode === 'fva' ? fvaChartData : errorChartData}
+              xKey="Date"
+              yKeys={viewMode === 'zonal' ? selectedZones : viewMode === 'fva' ? ['Forecast', 'Actual'] : ['Error']}
+              chartType={chartType}
+              height={420}
+              valuePrefix=""
+              valueSuffix=" MW"
+            />
+          </Widget>
+        </WidgetGrid>
       )}
 
       <div className="section-container">

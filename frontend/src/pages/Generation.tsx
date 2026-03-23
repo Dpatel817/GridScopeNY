@@ -5,6 +5,8 @@ import PriceChart from '../components/PriceChart';
 import ChartControls from '../components/ChartControls';
 import BarChart from '../components/BarChart';
 import StackedBarChart from '../components/StackedBarChart';
+import Widget from '../components/Widget';
+import WidgetGrid from '../components/WidgetGrid';
 import type { ChartType, Resolution, DateRange } from '../data/priceTransforms';
 import type { GenRow, FuelBreakdown } from '../data/generationTransforms';
 
@@ -561,136 +563,83 @@ export default function Generation() {
       )}
 
       {!loading && (
-        <div className="price-chart-layout">
-          <ChartControls
-            seriesLabel="Fuel Types"
-            series={allFuels}
-            selectedSeries={selectedFuels}
-            onSeriesChange={setSelectedFuels}
-            resolution={resolution}
-            onResolutionChange={setResolution}
-            dateRange={dateRange}
-            onDateRangeChange={handleDateRangeChange}
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-            availableDates={availableDates}
-            chartType={chartType}
-            onChartTypeChange={setChartType}
-          />
-          <div className="price-chart-main">
-            <div className="price-view-tabs">
-              <button
-                className={`pcc-btn${viewMode === 'fuel' ? ' active' : ''}`}
-                onClick={() => setViewMode('fuel')}
-              >
-                By Fuel Type
-              </button>
-              <button
-                className={`pcc-btn${viewMode === 'stacked' ? ' active' : ''}`}
-                onClick={() => setViewMode('stacked')}
-              >
-                Fuel Mix Stack
-              </button>
-              <button
-                className={`pcc-btn${viewMode === 'total' ? ' active' : ''}`}
-                onClick={() => setViewMode('total')}
-              >
-                Total Generation
-              </button>
-              <span className="price-view-info">
-                {resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'}
-                {' · '}{selectedFuels.length}/{allFuels.length} fuels
-                {' · '}{dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}
-              </span>
-            </div>
-
-            {viewMode === 'fuel' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">Generation by Fuel Type</div>
-                  <span className="badge badge-primary">{fuelChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={fuelChartData}
-                  xKey="Date"
-                  yKeys={selectedFuels}
-                  chartType={chartType}
-                  height={380}
-                  valuePrefix=""
-                  valueSuffix=" MW"
-                />
-              </div>
-            )}
-
-            {viewMode === 'stacked' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">Fuel Mix Stacked View</div>
-                  <span className="badge badge-primary">{fuelChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={fuelChartData}
-                  xKey="Date"
-                  yKeys={selectedFuels}
-                  chartType="area"
-                  height={380}
-                  valuePrefix=""
-                  valueSuffix=" MW"
-                />
-              </div>
-            )}
-
-            {viewMode === 'total' && (
-              <div className="chart-card">
-                <div className="chart-card-header">
-                  <div className="chart-card-title">Total Generation (All Selected Fuels)</div>
-                  <span className="badge badge-primary">{totalChartData.length} points</span>
-                </div>
-                <PriceChart
-                  data={totalChartData}
-                  xKey="Date"
-                  yKeys={['Total']}
-                  chartType={chartType}
-                  height={380}
-                  valuePrefix=""
-                  valueSuffix=" MW"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {!loading && breakdown.length > 0 && (
-        <div className="chart-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <div className="chart-card-title">Fuel Mix Breakdown ({breakdown.length} types)</div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="rank-table" style={{ borderSpacing: 0 }}>
-              <thead>
-                <tr>
-                  <th>Fuel Type</th>
-                  <th>Avg Generation</th>
-                  <th>Peak Generation</th>
-                  <th>Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {breakdown.map(f => (
-                  <tr key={f.name}>
-                    <td style={{ fontWeight: 600 }}>{f.name}</td>
-                    <td>{Math.round(f.avg).toLocaleString()} MW</td>
-                    <td style={{ fontWeight: 600 }}>{Math.round(f.max).toLocaleString()} MW</td>
-                    <td>{f.share.toFixed(1)}%</td>
-                  </tr>
+        <WidgetGrid>
+          <Widget
+            size="full"
+            title={
+              viewMode === 'fuel' ? 'Generation by Fuel Type'
+              : viewMode === 'stacked' ? 'Fuel Mix Stacked View'
+              : 'Total Generation (All Selected Fuels)'
+            }
+            subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${selectedFuels.length}/${allFuels.length} fuels · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
+            badge={`${viewMode === 'total' ? totalChartData.length : fuelChartData.length} points`}
+            actions={
+              <div className="widget-tabs">
+                {(['fuel', 'stacked', 'total'] as ViewMode[]).map(m => (
+                  <button key={m} className={`widget-tab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)}>
+                    {m === 'fuel' ? 'By Fuel Type' : m === 'stacked' ? 'Fuel Mix Stack' : 'Total Generation'}
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </div>
+            }
+            controls={
+              <ChartControls
+                seriesLabel="Fuel Types"
+                series={allFuels}
+                selectedSeries={selectedFuels}
+                onSeriesChange={setSelectedFuels}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+                dateRange={dateRange}
+                onDateRangeChange={handleDateRangeChange}
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
+                availableDates={availableDates}
+                chartType={chartType}
+                onChartTypeChange={setChartType}
+              />
+            }
+          >
+            <PriceChart
+              data={viewMode === 'total' ? totalChartData : fuelChartData}
+              xKey="Date"
+              yKeys={viewMode === 'total' ? ['Total'] : selectedFuels}
+              chartType={viewMode === 'stacked' ? 'area' : chartType}
+              height={420}
+              valuePrefix=""
+              valueSuffix=" MW"
+            />
+          </Widget>
+
+          {breakdown.length > 0 && (
+            <Widget size="half" title="Fuel Mix Breakdown" badge={`${breakdown.length} types`} noPad>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="rank-table" style={{ borderSpacing: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Fuel Type</th>
+                      <th>Avg Gen</th>
+                      <th>Peak Gen</th>
+                      <th>Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {breakdown.map(f => (
+                      <tr key={f.name}>
+                        <td style={{ fontWeight: 600 }}>{f.name}</td>
+                        <td>{Math.round(f.avg).toLocaleString()} MW</td>
+                        <td style={{ fontWeight: 600 }}>{Math.round(f.max).toLocaleString()} MW</td>
+                        <td>{f.share.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Widget>
+          )}
+        </WidgetGrid>
       )}
 
       <OICCommitmentSection />
