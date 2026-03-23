@@ -419,7 +419,88 @@ h3 { font-size: 1rem; font-weight: 600; }
   text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;
 }
 
-/* KPI Cards */
+/* ============================================================
+   FIXED KPI SECTION (Intelligence Pages)
+   ============================================================ */
+.kpi-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.kpi-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.kpi-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kpi-section-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.kpi-section-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-primary-soft);
+  padding: 3px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.kpi-summary-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.kpi-grid-fixed {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.kpi-card-fixed {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  transition: all var(--transition);
+}
+
+.kpi-card-fixed:hover {
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.kpi-card-fixed.accent {
+  background: linear-gradient(135deg, var(--accent-secondary-soft), var(--accent-primary-soft));
+  border-color: rgba(45,212,191,0.25);
+}
+
+/* ============================================================
+   KPI CARDS
+   ============================================================ */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -1142,12 +1223,84 @@ tr:hover td { background: var(--bg-hover); }
 .widget-controls-panel .pcc-label { margin-bottom: 6px; }
 .widget-controls-panel .pcc-zone-grid { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow-y: auto; }
 .widget-controls-panel .pcc-btn-group { flex-direction: row; flex-wrap: wrap; }
-.widget-body { padding: 16px; flex: 1; min-width: 0; overflow: hidden; }
+.widget-body { padding: 16px; flex: 1; min-width: 0; overflow: hidden; display: flex; gap: 16px; }
+.widget-body .price-summary-body { padding: 0; }
+.widget-body .kpi-grid:last-child { margin-bottom: 0; }
 .widget-body-nopad { flex: 1; overflow: hidden; min-width: 0; }
+
+/* Controls sidebar (left side) */
+.widget-controls-sidebar {
+  width: 180px;
+  min-width: 160px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.widget-content-with-controls {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 .widget-tabs { display: flex; gap: 4px; align-items: center; }
 .widget-tab { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; transition: all var(--transition); font-family: var(--font); }
 .widget-tab:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 .widget-tab.active { background: var(--accent-primary); color: white; border-color: var(--accent-primary); }
+
+/* Drag handle */
+.widget-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-muted);
+  cursor: grab;
+  flex-shrink: 0;
+  border-radius: 4px;
+  transition: color var(--transition), background var(--transition);
+  margin-right: 4px;
+}
+.widget-drag-handle:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.widget-drag-handle:active { cursor: grabbing; }
+
+/* DraggableGrid wrapper */
+.draggable-grid-wrapper { margin-bottom: 0; width: 100%; }
+.draggable-grid { min-height: 60px; }
+
+/* react-grid-layout overrides */
+.react-grid-item { transition: none !important; }
+.react-grid-item.react-grid-placeholder {
+  background: var(--accent-primary-soft) !important;
+  border: 2px dashed var(--accent-primary) !important;
+  border-radius: var(--radius) !important;
+  opacity: 1 !important;
+}
+.react-grid-item > .react-resizable-handle {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.react-grid-item:hover > .react-resizable-handle { opacity: 1; }
+.react-resizable-handle-se {
+  width: 16px !important;
+  height: 16px !important;
+  bottom: 4px !important;
+  right: 4px !important;
+}
+.react-resizable-handle-se::after {
+  border-color: var(--text-muted) !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+/* Make widgets fill their grid cell height */
+.react-grid-item .widget { height: 100%; display: flex; flex-direction: column; }
+.react-grid-item .widget .widget-body { flex: 1; overflow: auto; }
+.react-grid-item .widget .widget-body-nopad { flex: 1; overflow: auto; min-width: 0; }
+.react-grid-item .widget .widget-content-with-controls { flex: 1; overflow: auto; }
 
 /* ============================================================
    RESPONSIVE

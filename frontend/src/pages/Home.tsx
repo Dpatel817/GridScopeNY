@@ -160,7 +160,6 @@ function LiveSystemContext() {
 
 export default function Home() {
   const { inventory, loading } = useInventory();
-  const [refOpen, setRefOpen] = useState(false);
 
   // Price data for zone table
   const { data: daData } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 1);
@@ -219,59 +218,48 @@ export default function Home() {
       </WidgetGrid>
 
 
-      <div className="section-container">
-        <div className="section-title">Resources</div>
-        <div className="links-grid">
-          {USEFUL_LINKS.map(l => (
-            <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" className="link-card">
-              <div className="link-label">{l.label}</div>
-              <div className="link-url">{l.url}</div>
-            </a>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-container">
-        <div
-          className="collapsible-header"
-          onClick={() => setRefOpen(!refOpen)}
-          style={{ marginBottom: refOpen ? 0 : 12 }}
-        >
-          <span className="chevron">{refOpen ? '▾' : '▸'}</span>
-          Reference Data & System Tables
-        </div>
-        {refOpen && (
-          <div style={{ marginTop: 8 }}>
-            <DatasetSection datasetKey="generator_names" resolution="raw" />
-            <DatasetSection datasetKey="load_names" resolution="raw" />
-            <DatasetSection datasetKey="active_transmission_nodes" resolution="raw" />
-
-            {inventory && (
-              <div className="card" style={{ marginTop: 12 }}>
-                <div className="card-title">Data Inventory</div>
-                {Object.entries(inventory).map(([page, datasets]: [string, any]) => (
-                  <div key={page} style={{ marginBottom: 16 }}>
-                    <h3 style={{ textTransform: 'capitalize', marginBottom: 8 }}>{page}</h3>
-                    <div className="inventory-grid">
-                      {Object.entries(datasets).map(([key, info]: [string, any]) => (
-                        <div key={key} className="inv-item">
-                          <div className="inv-name">{info.label || key}</div>
-                          <div className="inv-rows">
-                            <span className={`badge badge-${info.status === 'available' ? 'success' : 'warning'}`}>
-                              {info.status}
-                            </span>
-                            {info.rows > 0 && ` ${info.rows.toLocaleString()} rows`}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+      <WidgetGrid>
+        <Widget size="full" title="Resources">
+          <div className="links-grid">
+            {USEFUL_LINKS.map(l => (
+              <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" className="link-card">
+                <div className="link-label">{l.label}</div>
+                <div className="link-url">{l.url}</div>
+              </a>
+            ))}
           </div>
-        )}
-      </div>
+        </Widget>
+
+        <Widget size="full" title="Reference Data & System Tables" defaultCollapsed={true} noPad>
+          <DatasetSection datasetKey="generator_names" resolution="raw" />
+          <DatasetSection datasetKey="load_names" resolution="raw" />
+          <DatasetSection datasetKey="active_transmission_nodes" resolution="raw" />
+
+          {inventory && (
+            <div className="card" style={{ margin: '12px 0 0' }}>
+              <div className="card-title">Data Inventory</div>
+              {Object.entries(inventory).map(([page, datasets]: [string, any]) => (
+                <div key={page} style={{ marginBottom: 16 }}>
+                  <h3 style={{ textTransform: 'capitalize', marginBottom: 8 }}>{page}</h3>
+                  <div className="inventory-grid">
+                    {Object.entries(datasets).map(([key, info]: [string, any]) => (
+                      <div key={key} className="inv-item">
+                        <div className="inv-name">{info.label || key}</div>
+                        <div className="inv-rows">
+                          <span className={`badge badge-${info.status === 'available' ? 'success' : 'warning'}`}>
+                            {info.status}
+                          </span>
+                          {info.rows > 0 && ` ${info.rows.toLocaleString()} rows`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Widget>
+      </WidgetGrid>
     </div>
   );
 }

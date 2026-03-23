@@ -166,23 +166,23 @@ export default function ZoneLmpTable({ daRows, rtRows, daLoadRows, rtLoadRows }:
         <thead>
           <tr>
             <th rowSpan={2} style={{ borderRight: '1px solid var(--border)' }}>Zone</th>
-            <th colSpan={3} style={{ textAlign: 'center', borderRight: '1px solid var(--border)', background: '#eff6ff' }}>Day-Ahead ($/MWh)</th>
-            <th colSpan={3} style={{ textAlign: 'center', borderRight: '1px solid var(--border)', background: '#f0fdf4' }}>Real-Time ($/MWh)</th>
-            <th colSpan={3} style={{ textAlign: 'center', borderRight: '1px solid var(--border)', background: '#fefce8' }}>DA–RT Spread ($/MWh)</th>
-            <th colSpan={2} style={{ textAlign: 'center', background: '#f8fafc' }}>Load (MW)</th>
+            <th colSpan={3} style={{ textAlign: 'center', borderRight: '1px solid var(--border)', background: 'color-mix(in srgb, var(--accent-primary) 8%, var(--bg-secondary))' }}>Day-Ahead ($/MWh)</th>
+            <th colSpan={3} style={{ textAlign: 'center', borderRight: '1px solid var(--border)', background: 'color-mix(in srgb, var(--success) 8%, var(--bg-secondary))' }}>Real-Time ($/MWh)</th>
+            <th colSpan={3} style={{ textAlign: 'center', borderRight: '1px solid var(--border)', background: 'color-mix(in srgb, var(--warning) 8%, var(--bg-secondary))' }}>DA–RT Spread ($/MWh)</th>
+            <th colSpan={2} style={{ textAlign: 'center', background: 'var(--bg-secondary)' }}>Load (MW)</th>
           </tr>
           <tr>
-            <th style={{ background: '#eff6ff' }}>LMP</th>
-            <th style={{ background: '#eff6ff' }}>MLC</th>
-            <th style={{ background: '#eff6ff', borderRight: '1px solid var(--border)' }}>MCC</th>
-            <th style={{ background: '#f0fdf4' }}>LMP</th>
-            <th style={{ background: '#f0fdf4' }}>MLC</th>
-            <th style={{ background: '#f0fdf4', borderRight: '1px solid var(--border)' }}>MCC</th>
-            <th style={{ background: '#fefce8' }}>LMP</th>
-            <th style={{ background: '#fefce8' }}>MLC</th>
-            <th style={{ background: '#fefce8', borderRight: '1px solid var(--border)' }}>MCC</th>
-            <th style={{ background: '#f8fafc' }}>DA</th>
-            <th style={{ background: '#f8fafc' }}>RT</th>
+            <th style={{ background: 'color-mix(in srgb, var(--accent-primary) 5%, var(--bg-secondary))' }}>LMP</th>
+            <th style={{ background: 'color-mix(in srgb, var(--accent-primary) 5%, var(--bg-secondary))' }}>MLC</th>
+            <th style={{ background: 'color-mix(in srgb, var(--accent-primary) 5%, var(--bg-secondary))', borderRight: '1px solid var(--border)' }}>MCC</th>
+            <th style={{ background: 'color-mix(in srgb, var(--success) 5%, var(--bg-secondary))' }}>LMP</th>
+            <th style={{ background: 'color-mix(in srgb, var(--success) 5%, var(--bg-secondary))' }}>MLC</th>
+            <th style={{ background: 'color-mix(in srgb, var(--success) 5%, var(--bg-secondary))', borderRight: '1px solid var(--border)' }}>MCC</th>
+            <th style={{ background: 'color-mix(in srgb, var(--warning) 5%, var(--bg-secondary))' }}>LMP</th>
+            <th style={{ background: 'color-mix(in srgb, var(--warning) 5%, var(--bg-secondary))' }}>MLC</th>
+            <th style={{ background: 'color-mix(in srgb, var(--warning) 5%, var(--bg-secondary))', borderRight: '1px solid var(--border)' }}>MCC</th>
+            <th style={{ background: 'var(--bg-secondary)' }}>DA</th>
+            <th style={{ background: 'var(--bg-secondary)' }}>RT</th>
           </tr>
         </thead>
         <tbody>
@@ -192,15 +192,15 @@ export default function ZoneLmpTable({ daRows, rtRows, daLoadRows, rtLoadRows }:
                 <span style={{ color: 'var(--text-muted)', fontSize: 10, marginRight: 4 }}>Z{r.code}</span>
                 {r.zone}
               </td>
-              <td style={{ background: '#f8fbff' }}>{fmt(r.daLmp)}</td>
-              <td style={{ background: '#f8fbff' }}>{fmt(r.daMlc)}</td>
-              <td style={{ background: '#f8fbff', borderRight: '1px solid var(--border)' }}>{fmt(r.daMcc)}</td>
-              <td style={{ background: '#f8fff8' }}>{fmt(r.rtLmp)}</td>
-              <td style={{ background: '#f8fff8' }}>{fmt(r.rtMlc)}</td>
-              <td style={{ background: '#f8fff8', borderRight: '1px solid var(--border)' }}>{fmt(r.rtMcc)}</td>
-              <td style={{ color: dartColor(r.dartLmp), fontWeight: 600, background: '#fffef0' }}>{fmt(r.dartLmp)}</td>
-              <td style={{ color: dartColor(r.dartMlc), fontWeight: 600, background: '#fffef0' }}>{fmt(r.dartMlc)}</td>
-              <td style={{ color: dartColor(r.dartMcc), fontWeight: 600, background: '#fffef0', borderRight: '1px solid var(--border)' }}>{fmt(r.dartMcc)}</td>
+              <td style={{ background: 'color-mix(in srgb, var(--accent-primary) 4%, var(--bg-card))' }}>{fmt(r.daLmp)}</td>
+              <td style={{ background: 'color-mix(in srgb, var(--accent-primary) 4%, var(--bg-card))' }}>{fmt(r.daMlc)}</td>
+              <td style={{ background: 'color-mix(in srgb, var(--accent-primary) 4%, var(--bg-card))', borderRight: '1px solid var(--border)' }}>{fmt(r.daMcc)}</td>
+              <td style={{ background: 'color-mix(in srgb, var(--success) 4%, var(--bg-card))' }}>{fmt(r.rtLmp)}</td>
+              <td style={{ background: 'color-mix(in srgb, var(--success) 4%, var(--bg-card))' }}>{fmt(r.rtMlc)}</td>
+              <td style={{ background: 'color-mix(in srgb, var(--success) 4%, var(--bg-card))', borderRight: '1px solid var(--border)' }}>{fmt(r.rtMcc)}</td>
+              <td style={{ color: dartColor(r.dartLmp), fontWeight: 600, background: 'color-mix(in srgb, var(--warning) 4%, var(--bg-card))' }}>{fmt(r.dartLmp)}</td>
+              <td style={{ color: dartColor(r.dartMlc), fontWeight: 600, background: 'color-mix(in srgb, var(--warning) 4%, var(--bg-card))' }}>{fmt(r.dartMlc)}</td>
+              <td style={{ color: dartColor(r.dartMcc), fontWeight: 600, background: 'color-mix(in srgb, var(--warning) 4%, var(--bg-card))', borderRight: '1px solid var(--border)' }}>{fmt(r.dartMcc)}</td>
               <td>{fmtLoad(r.daLoad)}</td>
               <td>{fmtLoad(r.rtLoad)}</td>
             </tr>

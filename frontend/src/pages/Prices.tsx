@@ -5,7 +5,8 @@ import PriceChart from '../components/PriceChart';
 import PriceChartControls from '../components/PriceChartControls';
 import ScarcitySignalSection from '../components/ScarcitySignalSection';
 import Widget from '../components/Widget';
-import WidgetGrid from '../components/WidgetGrid';
+import DraggableGrid from '../components/DraggableGrid';
+import type { GridItem } from '../components/DraggableGrid';
 import { filterNyisoZones } from '../data/zones';
 import type { PriceRow, Resolution, DateRange, ChartType, LmpField } from '../data/priceTransforms';
 import {
@@ -26,6 +27,12 @@ const LIVE_REFRESH_MS = 30 * 1000;
 
 type ViewMode = 'da' | 'rt' | 'dart';
 
+const DEFAULT_LAYOUT: GridItem[] = [
+  { i: 'chart',    x: 0, y: 0,  w: 12, h: 8, minH: 6 },
+  { i: 'scarcity', x: 0, y: 8,  w: 12, h: 8, minH: 6 },
+  { i: 'raw',      x: 0, y: 16, w: 12, h: 3, minH: 3 },
+];
+
 export default function Prices() {
   const [resolution, setResolution] = useState<Resolution>('hourly');
   const [dateRange, setDateRange] = useState<DateRange>('today');
@@ -35,7 +42,6 @@ export default function Prices() {
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('da');
   const [lmpField, setLmpField] = useState<LmpField>('LMP');
-  const [showRaw, setShowRaw] = useState(false);
 
   const [aiSummary, setAiSummary] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -169,77 +175,82 @@ export default function Prices() {
         </p>
       </div>
 
-      <div className="price-summary-box">
-        <div className="price-summary-header">
-          <span className="price-summary-icon"></span>
-          <span className="price-summary-title">Market Price Summary</span>
-          {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
-          {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
-          {!aiLoading && !aiSummary && <span className="price-summary-badge">Deterministic</span>}
+      {/* Fixed KPI Section */}
+      <div className="kpi-section">
+        <div className="kpi-section-header">
+          <div className="kpi-section-title">Market Price Summary</div>
+          <span className="kpi-section-badge">
+            {aiLoading ? 'Generating...' : aiSummary ? 'AI Enhanced' : 'Deterministic'}
+          </span>
         </div>
-        <div className="price-summary-body">{displaySummary}</div>
+        <div className="kpi-summary-text">{displaySummary}</div>
+        
+        <div className="kpi-section-header" style={{ marginTop: 24 }}>
+          <div className="kpi-section-title">Key Price Metrics</div>
+          {commonKpiDate && <div className="kpi-section-subtitle">Latest day: {commonKpiDate}</div>}
+        </div>
+        {loading ? (
+          <div className="loading"><div className="spinner" /> Loading price data...</div>
+        ) : (
+          <div className="kpi-grid-fixed">
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">On-Peak Avg DA</div>
+              <div className="kpi-value">
+                {kpis.onPeakAvgDA != null ? <>${kpis.onPeakAvgDA.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+              </div>
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">On-Peak Avg RT</div>
+              <div className="kpi-value">
+                {kpis.onPeakAvgRT != null ? <>${kpis.onPeakAvgRT.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+              </div>
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Peak DA LMP</div>
+              <div className="kpi-value">
+                {kpis.peakDA ? <>${kpis.peakDA.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+              </div>
+              {kpis.peakDA && <div className="kpi-sub">{kpis.peakDA.timestamp} · {kpis.peakDA.zone}</div>}
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Peak RT LMP</div>
+              <div className="kpi-value">
+                {kpis.peakRT ? <>${kpis.peakRT.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+              </div>
+              {kpis.peakRT && <div className="kpi-sub">{kpis.peakRT.timestamp} · {kpis.peakRT.zone}</div>}
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Low DA LMP</div>
+              <div className="kpi-value">
+                {kpis.lowDA ? <>${kpis.lowDA.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+              </div>
+              {kpis.lowDA && <div className="kpi-sub">{kpis.lowDA.timestamp} · {kpis.lowDA.zone}</div>}
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Low RT LMP</div>
+              <div className="kpi-value">
+                {kpis.lowRT ? <>${kpis.lowRT.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
+              </div>
+              {kpis.lowRT && <div className="kpi-sub">{kpis.lowRT.timestamp} · {kpis.lowRT.zone}</div>}
+            </div>
+            <div className="kpi-card-fixed accent">
+              <div className="kpi-label">Top DART Zone</div>
+              <div className="kpi-value">{kpis.topDartZone?.zone ?? '—'}</div>
+              {kpis.topDartZone && (
+                <div className="kpi-sub">
+                  ${kpis.topDartZone.avgSpread.toFixed(2)} avg · ${kpis.topDartZone.maxSpread.toFixed(2)} max
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {!loading && (
-        <div className="kpi-grid price-kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-label">On-Peak Avg DA</div>
-            <div className="kpi-value">
-              {kpis.onPeakAvgDA != null ? <>${kpis.onPeakAvgDA.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">On-Peak Avg RT</div>
-            <div className="kpi-value">
-              {kpis.onPeakAvgRT != null ? <>${kpis.onPeakAvgRT.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Peak DA LMP</div>
-            <div className="kpi-value">
-              {kpis.peakDA ? <>${kpis.peakDA.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
-            </div>
-            {kpis.peakDA && <div className="kpi-sub">{kpis.peakDA.timestamp} · {kpis.peakDA.zone}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Peak RT LMP</div>
-            <div className="kpi-value">
-              {kpis.peakRT ? <>${kpis.peakRT.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
-            </div>
-            {kpis.peakRT && <div className="kpi-sub">{kpis.peakRT.timestamp} · {kpis.peakRT.zone}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Low DA LMP</div>
-            <div className="kpi-value">
-              {kpis.lowDA ? <>${kpis.lowDA.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
-            </div>
-            {kpis.lowDA && <div className="kpi-sub">{kpis.lowDA.timestamp} · {kpis.lowDA.zone}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Low RT LMP</div>
-            <div className="kpi-value">
-              {kpis.lowRT ? <>${kpis.lowRT.value.toFixed(2)}<span className="kpi-unit">/MWh</span></> : '—'}
-            </div>
-            {kpis.lowRT && <div className="kpi-sub">{kpis.lowRT.timestamp} · {kpis.lowRT.zone}</div>}
-          </div>
-          <div className="kpi-card accent">
-            <div className="kpi-label">Top DART Zone</div>
-            <div className="kpi-value">{kpis.topDartZone?.zone ?? '—'}</div>
-            {kpis.topDartZone && (
-              <div className="kpi-sub">
-                ${kpis.topDartZone.avgSpread.toFixed(2)} avg · ${kpis.topDartZone.maxSpread.toFixed(2)} max
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Draggable Widgets */}
+      <DraggableGrid id="prices" defaultLayout={DEFAULT_LAYOUT} rowHeight={60}>
 
-      {loading && <div className="loading"><div className="spinner" /> Loading price data...</div>}
-
-      {!loading && (
-        <WidgetGrid>
-          <Widget
-            size="full"
+        <div key="chart">
+          <Widget draggable
             title={
               viewMode === 'da'
                 ? `Day-Ahead Zonal ${lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}`
@@ -247,19 +258,19 @@ export default function Prices() {
                 ? `Real-Time Zonal ${lmpField === 'LMP' ? 'LBMPs' : lmpField === 'MLC' ? 'Marginal Losses' : 'Marginal Congestion'}`
                 : `DA-RT ${lmpField === 'LMP' ? 'LMP' : lmpField === 'MLC' ? 'Losses (MLC)' : 'Congestion (MCC)'} Spread`
             }
-            subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${selectedZones.length}/${allZones.length} zones · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
-            badge={`${viewMode === 'da' ? daChartData.length : viewMode === 'rt' ? rtChartData.length : dartChartData.length} points`}
+            subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${selectedZones.length}/${allZones.length} zones`}
+            badge={`${viewMode === 'da' ? daChartData.length : viewMode === 'rt' ? rtChartData.length : dartChartData.length} pts`}
             actions={
               <div className="widget-tabs">
                 {(['da', 'rt', 'dart'] as ViewMode[]).map(m => (
                   <button key={m} className={`widget-tab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)}>
-                    {m === 'da' ? 'Day-Ahead LMPs' : m === 'rt' ? 'Real-Time LMPs' : 'DART Spread'}
+                    {m === 'da' ? 'DA LMPs' : m === 'rt' ? 'RT LMPs' : 'DART'}
                   </button>
                 ))}
                 <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
                 {(['LMP', 'MLC', 'MCC'] as LmpField[]).map(f => (
                   <button key={f} className={`widget-tab${lmpField === f ? ' active' : ''}`} onClick={() => setLmpField(f)}>
-                    {f === 'LMP' ? 'Total LMP' : f === 'MLC' ? 'Losses' : 'Congestion'}
+                    {f === 'LMP' ? 'LMP' : f === 'MLC' ? 'Losses' : 'Congestion'}
                   </button>
                 ))}
               </div>
@@ -283,32 +294,33 @@ export default function Prices() {
               />
             }
           >
-            <PriceChart
-              data={viewMode === 'da' ? daChartData : viewMode === 'rt' ? rtChartData : dartChartData}
-              xKey="Date"
-              yKeys={selectedZones}
-              chartType={chartType}
-              height={420}
-            />
+            {loading ? (
+              <div className="loading"><div className="spinner" /> Loading...</div>
+            ) : (
+              <PriceChart
+                data={viewMode === 'da' ? daChartData : viewMode === 'rt' ? rtChartData : dartChartData}
+                xKey="Date"
+                yKeys={selectedZones}
+                chartType={chartType}
+                height={420}
+              />
+            )}
           </Widget>
-        </WidgetGrid>
-      )}
-
-      <ScarcitySignalSection />
-
-      <div className="section-container">
-        <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
-          <span className="chevron">{showRaw ? '▾' : '▸'}</span>
-          All Price Datasets ({RAW_DATASETS.length})
         </div>
-        {showRaw && (
-          <div style={{ marginTop: 8 }}>
+
+        <div key="scarcity">
+          <ScarcitySignalSection />
+        </div>
+
+        <div key="raw">
+          <Widget title={`All Price Datasets (${RAW_DATASETS.length})`} draggable defaultCollapsed noPad>
             {RAW_DATASETS.map((key, i) => (
               <DatasetSection key={key} datasetKey={key} resolution="hourly" defaultExpanded={i === 0} />
             ))}
-          </div>
-        )}
-      </div>
+          </Widget>
+        </div>
+
+      </DraggableGrid>
     </div>
   );
 }

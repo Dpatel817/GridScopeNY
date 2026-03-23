@@ -34,4 +34,25 @@ if [ $WAITED -ge $MAX_WAIT ]; then
 fi
 
 echo "Starting frontend..."
-cd frontend && pnpm dev
+cd frontend
+
+# Start vite in background and capture its port
+pnpm dev &
+VITE_PID=$!
+
+# Wait for vite to be ready and extract the port
+echo "Waiting for Vite dev server..."
+sleep 3
+
+# Try common ports
+for PORT in 5000 5001 5002 5003; do
+  if curl -sf http://localhost:$PORT > /dev/null 2>&1; then
+    echo "Frontend ready on port $PORT"
+    echo "Opening browser..."
+    open "http://localhost:$PORT" 2>/dev/null || xdg-open "http://localhost:$PORT" 2>/dev/null || echo "Please open http://localhost:$PORT manually"
+    break
+  fi
+done
+
+# Keep script running
+wait $VITE_PID

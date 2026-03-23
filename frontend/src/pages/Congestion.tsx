@@ -3,7 +3,8 @@ import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
 import Widget from '../components/Widget';
-import WidgetGrid from '../components/WidgetGrid';
+import DraggableGrid from '../components/DraggableGrid';
+import type { GridItem } from '../components/DraggableGrid';
 import type { CongestionRow, ConstraintStat, ChartType, Resolution, DateRange } from '../data/congestionTransforms';
 import {
   detectColumns, getAvailableDates,
@@ -225,14 +226,7 @@ function ConstraintImpactAnalysis() {
   }, [pivot]);
 
   return (
-    <div style={{ marginTop: 32 }}>
-      <div className="section-title" style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>
-        Constraint Impact Analysis
-      </div>
-      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
-        Drill down into a specific constraint to analyze its zonal and generator-level market impact.
-      </p>
-
+    <div>
       <div className="chart-card" style={{ padding: '20px', marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
 
@@ -683,7 +677,6 @@ function fmtDate(val: string | undefined): string {
 
 function OutageScheduleSection() {
   const { data: outageData, loading } = useDataset('outage_schedule', 'daily', undefined, undefined, 20000, 0, 0, { refreshMs: LIVE_REFRESH_MS, loadAllPages: true });
-  const [expanded, setExpanded] = useState(true);
   const [dateOutBefore, setDateOutBefore] = useState('');
   const [dateInAfter, setDateInAfter] = useState('');
   const [equipFilter, setEquipFilter] = useState('');
@@ -754,28 +747,20 @@ function OutageScheduleSection() {
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
 
   return (
-    <div className="section-container" style={{ marginTop: 24 }}>
-      <div className="collapsible-header" onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>
-        <span className="chevron">{expanded ? '▾' : '▸'}</span>
-        Outage Schedule
-        <span className="badge badge-primary" style={{ marginLeft: 8 }}>{filtered.length} outages</span>
-      </div>
+    <div>
+      {loading && (
+        <div className="loading"><div className="spinner" /> Loading outage data...</div>
+      )}
 
-      {expanded && (
-        <div style={{ marginTop: 12 }}>
-          {loading && (
-            <div className="loading"><div className="spinner" /> Loading outage data...</div>
-          )}
+      {!loading && allRows.length === 0 && (
+        <div className="insight-card">
+          <div className="insight-body">No outage schedule data available.</div>
+        </div>
+      )}
 
-          {!loading && allRows.length === 0 && (
-            <div className="insight-card">
-              <div className="insight-body">No outage schedule data available.</div>
-            </div>
-          )}
-
-          {!loading && allRows.length > 0 && (
-            <>
-              <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
+      {!loading && allRows.length > 0 && (
+        <>
+          <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
                 <div className="filter-group">
                   <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
                     Date Out Before
@@ -895,8 +880,6 @@ function OutageScheduleSection() {
               </div>
             </>
           )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1015,6 +998,14 @@ function CongestionChartControls({
   );
 }
 
+const DEFAULT_LAYOUT: GridItem[] = [
+  { i: 'chart',   x: 0, y: 0,  w: 12, h: 8,  minH: 6 },
+  { i: 'stats',   x: 0, y: 8,  w: 12, h: 6,  minH: 4 },
+  { i: 'cia',     x: 0, y: 14, w: 12, h: 10, minH: 8 },
+  { i: 'outage',  x: 0, y: 24, w: 12, h: 6,  minH: 4 },
+  { i: 'raw',     x: 0, y: 30, w: 12, h: 3,  minH: 3 },
+];
+
 export default function Congestion() {
   const [marketType, setMarketType] = useState<MarketType>('DA');
   const [resolution, setResolution] = useState<Resolution>('hourly');
@@ -1023,7 +1014,6 @@ export default function Congestion() {
   const [endDate, setEndDate] = useState('');
   const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedConstraints, setSelectedConstraints] = useState<string[]>([]);
-  const [showRaw, setShowRaw] = useState(false);
 
   const [aiSummary, setAiSummary] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -1127,157 +1117,72 @@ export default function Congestion() {
         </p>
       </div>
 
-      <div className="resolution-bar" style={{ marginBottom: 12 }}>
-        <label>Market:</label>
-        {MARKETS.map(m => (
-          <button
-            key={m.key}
-            className={`resolution-btn ${marketType === m.key ? 'active' : ''}`}
-            onClick={() => handleMarketChange(m.key)}
-          >
-            {m.label}
-          </button>
-        ))}
+      {/* Fixed KPI Section */}
+      <div className="kpi-section">
+        <div className="kpi-section-header">
+          <div className="kpi-section-title">Congestion Summary</div>
+          <span className="kpi-section-badge">{aiLoading ? 'Generating...' : aiSummary ? 'AI Enhanced' : 'Deterministic'}</span>
+        </div>
+        {error && (
+          <div className="alert alert-danger" style={{ marginBottom: 12 }}>Failed to load congestion data: {error}</div>
+        )}
+        <div className="kpi-summary-text">{displaySummary}</div>
+
+        <div className="kpi-section-header" style={{ marginTop: 24 }}>
+          <div className="kpi-section-title">Key Congestion Metrics</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {MARKETS.map(m => (
+              <button key={m.key} className={`pcc-btn${marketType === m.key ? ' active' : ''}`} onClick={() => handleMarketChange(m.key)}>{m.label}</button>
+            ))}
+            {latestDate && <div className="kpi-section-subtitle" style={{ marginLeft: 8 }}>Latest day: {latestDate}</div>}
+          </div>
+        </div>
+        {loading ? (
+          <div className="loading"><div className="spinner" /> Loading congestion data...</div>
+        ) : (
+          <div className="kpi-grid-fixed">
+            <div className="kpi-card-fixed"><div className="kpi-label">On-Peak Total Cost</div><div className="kpi-value">{kpis.onPeakTotalCost != null ? fmtCost(kpis.onPeakTotalCost) : '—'}</div></div>
+            <div className="kpi-card-fixed"><div className="kpi-label">On-Peak Avg Cost</div><div className="kpi-value">{kpis.onPeakAvgCost != null ? <>${kpis.onPeakAvgCost.toFixed(2)}</> : '—'}</div></div>
+            <div className="kpi-card-fixed"><div className="kpi-label">Peak Positive Cost</div><div className="kpi-value">{kpis.peakPositive ? <>${kpis.peakPositive.value.toFixed(2)}</> : '—'}</div>{kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.constraint.slice(0, 23)}{kpis.peakPositive.constraint.length > 23 ? '…' : ''} · {kpis.peakPositive.timestamp}</div>}</div>
+            <div className="kpi-card-fixed accent"><div className="kpi-label">Highest-Cost Constraint</div><div className="kpi-value" style={{ fontSize: '0.85rem' }}>{kpis.highestCostConstraint ? (kpis.highestCostConstraint.length > 25 ? kpis.highestCostConstraint.slice(0, 23) + '…' : kpis.highestCostConstraint) : '—'}</div></div>
+            <div className="kpi-card-fixed"><div className="kpi-label">Binding Constraints</div><div className="kpi-value">{kpis.bindingCount || '—'}</div></div>
+            <div className="kpi-card-fixed"><div className="kpi-label">Top 3 Concentration</div><div className="kpi-value">{kpis.top3Share != null ? <>{kpis.top3Share.toFixed(1)}<span className="kpi-unit">%</span></> : '—'}</div></div>
+          </div>
+        )}
       </div>
 
-      <div className="price-summary-box">
-        <div className="price-summary-header">
-          <span className="price-summary-icon"></span>
-          <span className="price-summary-title">Congestion Summary</span>
-          {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
-          {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
-          {!aiLoading && !aiSummary && <span className="price-summary-badge">Deterministic</span>}
-        </div>
-        <div className="price-summary-body">{displaySummary}</div>
-      </div>
+      {/* Draggable Widgets */}
+      <DraggableGrid id="congestion" defaultLayout={DEFAULT_LAYOUT} rowHeight={60}>
 
-      {error && (
-        <div className="insight-card" style={{ background: 'var(--danger-light)', borderColor: 'var(--danger)' }}>
-          <div className="insight-title" style={{ color: 'var(--danger)' }}>Data Error</div>
-          <div className="insight-body">Failed to load congestion data: {error}</div>
-        </div>
-      )}
-
-      {loading && <div className="loading"><div className="spinner" /> Loading congestion data...</div>}
-
-      {!loading && (
-        <div className="kpi-grid price-kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-label">On-Peak Total Cost</div>
-            <div className="kpi-value">
-              {kpis.onPeakTotalCost != null ? <>{fmtCost(kpis.onPeakTotalCost)}</> : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">On-Peak Avg Cost</div>
-            <div className="kpi-value">
-              {kpis.onPeakAvgCost != null ? <>${kpis.onPeakAvgCost.toFixed(2)}</> : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Peak Positive Cost</div>
-            <div className="kpi-value">
-              {kpis.peakPositive ? <>${kpis.peakPositive.value.toFixed(2)}</> : '—'}
-            </div>
-            {kpis.peakPositive && <div className="kpi-sub">{kpis.peakPositive.constraint.length > 25 ? kpis.peakPositive.constraint.slice(0, 23) + '…' : kpis.peakPositive.constraint} · {kpis.peakPositive.timestamp}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Peak Negative Cost</div>
-            <div className="kpi-value">
-              {kpis.peakNegative ? (
-                <span style={{ color: kpis.peakNegative.value < -50 ? 'var(--danger)' : 'var(--text)' }}>
-                  ${kpis.peakNegative.value.toFixed(2)}
-                </span>
-              ) : '—'}
-            </div>
-            {kpis.peakNegative && <div className="kpi-sub">{kpis.peakNegative.constraint.length > 25 ? kpis.peakNegative.constraint.slice(0, 23) + '…' : kpis.peakNegative.constraint} · {kpis.peakNegative.timestamp}</div>}
-          </div>
-          <div className="kpi-card accent">
-            <div className="kpi-label">Highest-Cost Constraint</div>
-            <div className="kpi-value" style={{ fontSize: '0.85rem' }}>
-              {kpis.highestCostConstraint
-                ? (kpis.highestCostConstraint.length > 25
-                  ? kpis.highestCostConstraint.slice(0, 23) + '…'
-                  : kpis.highestCostConstraint)
-                : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Avg Cost of Top</div>
-            <div className="kpi-value">
-              {kpis.avgCostTopConstraint != null ? <>${kpis.avgCostTopConstraint.toFixed(2)}</> : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Binding Constraints</div>
-            <div className="kpi-value">{kpis.bindingCount || '—'}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Top 3 Concentration</div>
-            <div className="kpi-value">
-              {kpis.top3Share != null ? <>{kpis.top3Share.toFixed(1)}<span className="kpi-unit">%</span></> : '—'}
-            </div>
-            {kpis.top3Share != null && <div className="kpi-sub">of total cost</div>}
-          </div>
-        </div>
-      )}
-
-      {!loading && (
-        <WidgetGrid>
-          <Widget
-            size="full"
+        <div key="chart">
+          <Widget draggable
             title="Constraint Costs Over Time"
-            subtitle={`${marketType === 'DA' ? 'DAM' : 'RTM'} · ${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${activeForChart.length}/${allConstraintNames.length} constraints · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
-            badge={`${chartData.length} points`}
+            subtitle={`${marketType === 'DA' ? 'DAM' : 'RTM'} · ${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${activeForChart.length}/${allConstraintNames.length} constraints`}
+            badge={`${chartData.length} pts`}
             controls={
               <CongestionChartControls
-                constraints={allConstraintNames}
-                selectedConstraints={selectedConstraints}
-                onConstraintsChange={setSelectedConstraints}
-                resolution={resolution}
-                onResolutionChange={setResolution}
-                dateRange={dateRange}
-                onDateRangeChange={handleDateRangeChange}
-                startDate={startDate}
-                endDate={endDate}
-                onStartDateChange={setStartDate}
-                onEndDateChange={setEndDate}
-                availableDates={availableDates}
-                chartType={chartType}
-                onChartTypeChange={setChartType}
+                constraints={allConstraintNames} selectedConstraints={selectedConstraints} onConstraintsChange={setSelectedConstraints}
+                resolution={resolution} onResolutionChange={setResolution}
+                dateRange={dateRange} onDateRangeChange={handleDateRangeChange}
+                startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate}
+                availableDates={availableDates} chartType={chartType} onChartTypeChange={setChartType}
               />
             }
           >
-            <PriceChart
-              data={chartData}
-              xKey="Date"
-              yKeys={activeForChart}
-              chartType={chartType}
-              height={420}
-              valuePrefix="$"
-              valueSuffix=""
-            />
+            {loading ? (
+              <div className="loading"><div className="spinner" /> Loading...</div>
+            ) : (
+              <PriceChart data={chartData} xKey="Date" yKeys={activeForChart} chartType={chartType} height={380} valuePrefix="$" valueSuffix="" />
+            )}
           </Widget>
+        </div>
 
-          {constraintStats.length > 0 && (
-            <Widget
-              size="full"
-              title={`Binding Constraints (${constraintStats.length})`}
-              subtitle="ranked by total cost"
-              noPad
-            >
+        <div key="stats">
+          <Widget draggable title={`Binding Constraints (${constraintStats.length})`} subtitle="ranked by total cost" noPad>
+            {constraintStats.length > 0 ? (
               <div style={{ overflowX: 'auto' }}>
                 <table className="rank-table" style={{ borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 50 }}>#</th>
-                      <th>Constraint</th>
-                      <th>Total Cost</th>
-                      <th>Avg Cost</th>
-                      <th>Max Cost</th>
-                      <th>Bindings</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th style={{ width: 50 }}>#</th><th>Constraint</th><th>Total Cost</th><th>Avg Cost</th><th>Max Cost</th><th>Bindings</th></tr></thead>
                   <tbody>
                     {constraintStats.map(c => (
                       <tr key={c.name}>
@@ -1292,28 +1197,33 @@ export default function Congestion() {
                   </tbody>
                 </table>
               </div>
-            </Widget>
-          )}
-        </WidgetGrid>
-      )}
-
-      <ConstraintImpactAnalysis />
-
-      <OutageScheduleSection />
-
-      <div className="section-container">
-        <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
-          <span className="chevron">{showRaw ? '▾' : '▸'}</span>
-          All Congestion Datasets ({DATASETS.length})
+            ) : (
+              <div className="loading"><div className="spinner" /> Loading constraint stats...</div>
+            )}
+          </Widget>
         </div>
-        {showRaw && (
-          <div style={{ marginTop: 8 }}>
+
+        <div key="cia">
+          <Widget draggable title="Constraint Impact Analysis" subtitle="Drill down into a specific constraint to analyze zonal and generator-level market impact">
+            <ConstraintImpactAnalysis />
+          </Widget>
+        </div>
+
+        <div key="outage">
+          <Widget draggable title="Outage Schedule" noPad defaultCollapsed>
+            <OutageScheduleSection />
+          </Widget>
+        </div>
+
+        <div key="raw">
+          <Widget draggable title={`All Congestion Datasets (${DATASETS.length})`} defaultCollapsed noPad>
             {DATASETS.map((key, i) => (
               <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
             ))}
-          </div>
-        )}
-      </div>
+          </Widget>
+        </div>
+
+      </DraggableGrid>
     </div>
   );
 }

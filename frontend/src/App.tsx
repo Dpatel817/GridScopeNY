@@ -1,31 +1,40 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import Layout from './components/Layout'
-import Home from './pages/Home'
-import Prices from './pages/Prices'
-import Demand from './pages/Demand'
-import Generation from './pages/Generation'
-import InterfaceFlows from './pages/InterfaceFlows'
-import Congestion from './pages/Congestion'
-import OpportunityExplorer from './pages/OpportunityExplorer'
-import InterconnectionQueue from './pages/InterconnectionQueue'
+
+const Layout = lazy(() => import('./components/Layout'))
+const Home = lazy(() => import('./pages/Home'))
+const Prices = lazy(() => import('./pages/Prices'))
+const Demand = lazy(() => import('./pages/Demand'))
+const Generation = lazy(() => import('./pages/Generation'))
+const InterfaceFlows = lazy(() => import('./pages/InterfaceFlows'))
+const Congestion = lazy(() => import('./pages/Congestion'))
+const OpportunityExplorer = lazy(() => import('./pages/OpportunityExplorer'))
+const InterconnectionQueue = lazy(() => import('./pages/InterconnectionQueue'))
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="prices" element={<Prices />} />
-          <Route path="demand" element={<Demand />} />
-          <Route path="generation" element={<Generation />} />
-          <Route path="interfaces" element={<InterfaceFlows />} />
-          <Route path="congestion" element={<Congestion />} />
-          <Route path="interconnection-queue" element={<InterconnectionQueue />} />
-          <Route path="opportunities" element={<OpportunityExplorer />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0d1117', color: '#e6edf3' }}>
+          <div>Loading...</div>
+        </div>
+      }>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="prices" element={<Prices />} />
+            <Route path="demand" element={<Demand />} />
+            <Route path="generation" element={<Generation />} />
+            <Route path="interfaces" element={<InterfaceFlows />} />
+            <Route path="congestion" element={<Congestion />} />
+            <Route path="interconnection-queue" element={<InterconnectionQueue />} />
+            <Route path="opportunities" element={<OpportunityExplorer />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
 
 export default App
+

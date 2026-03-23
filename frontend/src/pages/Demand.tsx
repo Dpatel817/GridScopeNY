@@ -4,7 +4,8 @@ import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
 import ChartControls from '../components/ChartControls';
 import Widget from '../components/Widget';
-import WidgetGrid from '../components/WidgetGrid';
+import DraggableGrid from '../components/DraggableGrid';
+import type { GridItem } from '../components/DraggableGrid';
 import type { ChartType, Resolution, DateRange } from '../data/priceTransforms';
 import type { DemandRow, AlignedRow } from '../data/demandTransforms';
 import {
@@ -23,6 +24,11 @@ const LIVE_REFRESH_MS = 30 * 1000;
 
 type ViewMode = 'zonal' | 'fva' | 'error';
 
+const DEFAULT_LAYOUT: GridItem[] = [
+  { i: 'chart', x: 0, y: 0, w: 12, h: 8, minH: 6 },
+  { i: 'raw',   x: 0, y: 8, w: 12, h: 3, minH: 3 },
+];
+
 export default function Demand() {
   const [resolution, setResolution] = useState<Resolution>('hourly');
   const [dateRange, setDateRange] = useState<DateRange>('today');
@@ -31,7 +37,6 @@ export default function Demand() {
   const [chartType, setChartType] = useState<ChartType>('line');
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('zonal');
-  const [showRaw, setShowRaw] = useState(false);
 
   const [aiSummary, setAiSummary] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -171,168 +176,143 @@ export default function Demand() {
         </p>
       </div>
 
-      <div className="price-summary-box">
-        <div className="price-summary-header">
-          <span className="price-summary-icon"></span>
-          <span className="price-summary-title">Demand Summary</span>
-          {aiLoading && <span className="price-summary-badge loading">Generating AI summary...</span>}
-          {!aiLoading && aiSummary && <span className="price-summary-badge ai">AI Enhanced</span>}
-          {!aiLoading && !aiSummary && <span className="price-summary-badge">Deterministic</span>}
+      {/* Fixed KPI Section */}
+      <div className="kpi-section">
+        <div className="kpi-section-header">
+          <div className="kpi-section-title">Demand Summary</div>
+          <span className="kpi-section-badge">
+            {aiLoading ? 'Generating...' : aiSummary ? 'AI Enhanced' : 'Deterministic'}
+          </span>
         </div>
-        <div className="price-summary-body">{displaySummary}</div>
-      </div>
+        {(fError || aError) && (
+          <div className="alert alert-danger" style={{ marginBottom: 12 }}>
+            Failed to load demand data: {fError || aError}
+          </div>
+        )}
+        <div className="kpi-summary-text">{displaySummary}</div>
 
-      {(fError || aError) && (
-        <div className="insight-card" style={{ background: 'var(--danger-light)', borderColor: 'var(--danger)' }}>
-          <div className="insight-title" style={{ color: 'var(--danger)' }}>Data Error</div>
-          <div className="insight-body">Failed to load demand data: {fError || aError}</div>
+        <div className="kpi-section-header" style={{ marginTop: 24 }}>
+          <div className="kpi-section-title">Key Demand Metrics</div>
+          {latestDate && <div className="kpi-section-subtitle">Latest day: {latestDate}</div>}
         </div>
-      )}
-
-      {loading && <div className="loading"><div className="spinner" /> Loading demand data...</div>}
-
-      {!loading && (
-        <div className="kpi-grid price-kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-label">On-Peak Avg Forecast</div>
-            <div className="kpi-value">
-              {kpis.onPeakAvgForecast != null ? <>{fmtLoad(kpis.onPeakAvgForecast)}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">On-Peak Avg Actual</div>
-            <div className="kpi-value">
-              {kpis.onPeakAvgActual != null ? <>{fmtLoad(kpis.onPeakAvgActual)}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Peak Forecast</div>
-            <div className="kpi-value">
-              {kpis.peakForecast ? <>{fmtLoad(kpis.peakForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.peakForecast && <div className="kpi-sub">{kpis.peakForecast.timestamp}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Peak Actual</div>
-            <div className="kpi-value">
-              {kpis.peakActual ? <>{fmtLoad(kpis.peakActual.value)}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.peakActual && <div className="kpi-sub">{kpis.peakActual.timestamp}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Low Forecast</div>
-            <div className="kpi-value">
-              {kpis.lowForecast ? <>{fmtLoad(kpis.lowForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.lowForecast && <div className="kpi-sub">{kpis.lowForecast.timestamp}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Low Actual</div>
-            <div className="kpi-value">
-              {kpis.lowActual ? <>{fmtLoad(kpis.lowActual.value)}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.lowActual && <div className="kpi-sub">{kpis.lowActual.timestamp}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Avg Forecast Error</div>
-            <div className="kpi-value">
-              {kpis.avgForecastError != null ? (
-                <span style={{ color: Math.abs(kpis.avgForecastError) > 500 ? 'var(--danger)' : 'var(--text)' }}>
-                  {kpis.avgForecastError > 0 ? '+' : ''}{fmtLoad(kpis.avgForecastError)}<span className="kpi-unit">MW</span>
-                </span>
-              ) : '—'}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Peak Abs Error</div>
-            <div className="kpi-value">
-              {kpis.peakForecastError ? <>{fmtLoad(Math.abs(kpis.peakForecastError.value))}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.peakForecastError && <div className="kpi-sub">{kpis.peakForecastError.timestamp}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Largest Under-Forecast</div>
-            <div className="kpi-value">
-              {kpis.largestUnderForecast ? <>{fmtLoad(Math.abs(kpis.largestUnderForecast.value))}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.largestUnderForecast && <div className="kpi-sub">{kpis.largestUnderForecast.timestamp}</div>}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Largest Over-Forecast</div>
-            <div className="kpi-value">
-              {kpis.largestOverForecast ? <>{fmtLoad(kpis.largestOverForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.largestOverForecast && <div className="kpi-sub">{kpis.largestOverForecast.timestamp}</div>}
-          </div>
-        </div>
-      )}
-
-      {!loading && (
-        <WidgetGrid>
-          <Widget
-            size="full"
-            title={
-              viewMode === 'zonal' ? 'System Load Forecast by Zone'
-              : viewMode === 'fva' ? 'Forecast vs Actual (NYISO Total)'
-              : 'Forecast Error (Forecast minus Actual)'
-            }
-            subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${selectedZones.length}/${allZones.length} zones · ${dateRange === 'today' ? 'Latest Day' : dateRange === 'all' ? 'All Dates' : `${startDate} — ${endDate}`}`}
-            badge={`${viewMode === 'zonal' ? zonalChartData.length : viewMode === 'fva' ? fvaChartData.length : errorChartData.length} points`}
-            actions={
-              <div className="widget-tabs">
-                {(['zonal', 'fva', 'error'] as ViewMode[]).map(m => (
-                  <button key={m} className={`widget-tab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)}>
-                    {m === 'zonal' ? 'Zonal Forecast' : m === 'fva' ? 'Forecast vs Actual' : 'Forecast Error'}
-                  </button>
-                ))}
+        {loading ? (
+          <div className="loading"><div className="spinner" /> Loading demand data...</div>
+        ) : (
+          <div className="kpi-grid-fixed">
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">On-Peak Avg Forecast</div>
+              <div className="kpi-value">
+                {kpis.onPeakAvgForecast != null ? <>{fmtLoad(kpis.onPeakAvgForecast)}<span className="kpi-unit">MW</span></> : '—'}
               </div>
-            }
-            controls={
-              <ChartControls
-                seriesLabel="Zones"
-                series={allZones}
-                selectedSeries={selectedZones}
-                onSeriesChange={setSelectedZones}
-                resolution={resolution}
-                onResolutionChange={setResolution}
-                dateRange={dateRange}
-                onDateRangeChange={handleDateRangeChange}
-                startDate={startDate}
-                endDate={endDate}
-                onStartDateChange={setStartDate}
-                onEndDateChange={setEndDate}
-                availableDates={availableDates}
-                chartType={chartType}
-                onChartTypeChange={setChartType}
-              />
-            }
-          >
-            <PriceChart
-              data={viewMode === 'zonal' ? zonalChartData : viewMode === 'fva' ? fvaChartData : errorChartData}
-              xKey="Date"
-              yKeys={viewMode === 'zonal' ? selectedZones : viewMode === 'fva' ? ['Forecast', 'Actual'] : ['Error']}
-              chartType={chartType}
-              height={420}
-              valuePrefix=""
-              valueSuffix=" MW"
-            />
-          </Widget>
-        </WidgetGrid>
-      )}
-
-      <div className="section-container">
-        <div className="collapsible-header" onClick={() => setShowRaw(!showRaw)}>
-          <span className="chevron">{showRaw ? '▾' : '▸'}</span>
-          Detailed Data ({RAW_DATASETS.length})
-        </div>
-        {showRaw && (
-          <div style={{ marginTop: 8 }}>
-            {RAW_DATASETS.map((key, i) => (
-              <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
-            ))}
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">On-Peak Avg Actual</div>
+              <div className="kpi-value">
+                {kpis.onPeakAvgActual != null ? <>{fmtLoad(kpis.onPeakAvgActual)}<span className="kpi-unit">MW</span></> : '—'}
+              </div>
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Peak Forecast</div>
+              <div className="kpi-value">
+                {kpis.peakForecast ? <>{fmtLoad(kpis.peakForecast.value)}<span className="kpi-unit">MW</span></> : '—'}
+              </div>
+              {kpis.peakForecast && <div className="kpi-sub">{kpis.peakForecast.timestamp}</div>}
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Peak Actual</div>
+              <div className="kpi-value">
+                {kpis.peakActual ? <>{fmtLoad(kpis.peakActual.value)}<span className="kpi-unit">MW</span></> : '—'}
+              </div>
+              {kpis.peakActual && <div className="kpi-sub">{kpis.peakActual.timestamp}</div>}
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Avg Forecast Error</div>
+              <div className="kpi-value">
+                {kpis.avgForecastError != null ? (
+                  <span style={{ color: Math.abs(kpis.avgForecastError) > 500 ? 'var(--danger)' : 'var(--text)' }}>
+                    {kpis.avgForecastError > 0 ? '+' : ''}{fmtLoad(kpis.avgForecastError)}<span className="kpi-unit">MW</span>
+                  </span>
+                ) : '—'}
+              </div>
+            </div>
+            <div className="kpi-card-fixed">
+              <div className="kpi-label">Peak Abs Error</div>
+              <div className="kpi-value">
+                {kpis.peakForecastError ? <>{fmtLoad(Math.abs(kpis.peakForecastError.value))}<span className="kpi-unit">MW</span></> : '—'}
+              </div>
+              {kpis.peakForecastError && <div className="kpi-sub">{kpis.peakForecastError.timestamp}</div>}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Draggable Widgets */}
+
+      {!loading && (
+        <DraggableGrid id="demand" defaultLayout={DEFAULT_LAYOUT} rowHeight={60}>
+          <div key="chart">
+            <Widget draggable
+              title={
+                viewMode === 'zonal' ? 'System Load Forecast by Zone'
+                : viewMode === 'fva' ? 'Forecast vs Actual (NYISO Total)'
+                : 'Forecast Error (Forecast minus Actual)'
+              }
+              subtitle={`${resolution === 'hourly' ? 'Hourly' : resolution === 'on_peak' ? 'On-Peak' : resolution === 'off_peak' ? 'Off-Peak' : 'Daily'} · ${selectedZones.length}/${allZones.length} zones`}
+              badge={`${viewMode === 'zonal' ? zonalChartData.length : viewMode === 'fva' ? fvaChartData.length : errorChartData.length} points`}
+              actions={
+                <div className="widget-tabs">
+                  {(['zonal', 'fva', 'error'] as ViewMode[]).map(m => (
+                    <button key={m} className={`widget-tab${viewMode === m ? ' active' : ''}`} onClick={() => setViewMode(m)}>
+                      {m === 'zonal' ? 'Zonal Forecast' : m === 'fva' ? 'Forecast vs Actual' : 'Forecast Error'}
+                    </button>
+                  ))}
+                </div>
+              }
+              controls={
+                <ChartControls
+                  seriesLabel="Zones"
+                  series={allZones}
+                  selectedSeries={selectedZones}
+                  onSeriesChange={setSelectedZones}
+                  resolution={resolution}
+                  onResolutionChange={setResolution}
+                  dateRange={dateRange}
+                  onDateRangeChange={handleDateRangeChange}
+                  startDate={startDate}
+                  endDate={endDate}
+                  onStartDateChange={setStartDate}
+                  onEndDateChange={setEndDate}
+                  availableDates={availableDates}
+                  chartType={chartType}
+                  onChartTypeChange={setChartType}
+                />
+              }
+            >
+              <PriceChart
+                data={viewMode === 'zonal' ? zonalChartData : viewMode === 'fva' ? fvaChartData : errorChartData}
+                xKey="Date"
+                yKeys={viewMode === 'zonal' ? selectedZones : viewMode === 'fva' ? ['Forecast', 'Actual'] : ['Error']}
+                chartType={chartType}
+                height={420}
+                valuePrefix=""
+                valueSuffix=" MW"
+              />
+            </Widget>
+          </div>
+
+          <div key="raw">
+            <Widget draggable
+              title={`Detailed Data (${RAW_DATASETS.length})`}
+              defaultCollapsed={true}
+              noPad
+            >
+              {RAW_DATASETS.map((key, i) => (
+                <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
+              ))}
+            </Widget>
+          </div>
+        </DraggableGrid>
+      )}
     </div>
   );
 }
