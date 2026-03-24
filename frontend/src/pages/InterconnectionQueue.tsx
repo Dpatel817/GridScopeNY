@@ -1,9 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback, useMemo } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import {
   BarChart as ReBarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
+import Widget from '../components/Widget';
+import DraggableGrid from '../components/DraggableGrid';
+import type { GridItem } from '../components/DraggableGrid';
 
 interface QueueRow {
   queue_pos: string;
@@ -71,23 +75,7 @@ function parseJsonSafe(s: string): Record<string, number> {
   try { return JSON.parse(s); } catch { return {}; }
 }
 
-function CollapsibleSection({
-  title, defaultOpen = true, badge, children,
-}: {
-  title: string; defaultOpen?: boolean; badge?: string; children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="section-container">
-      <div className="collapsible-header" onClick={() => setOpen(!open)}>
-        <span className="chevron">{open ? '▾' : '▸'}</span>
-        {title}
-        {badge && <span className="badge badge-primary" style={{ marginLeft: 8 }}>{badge}</span>}
-      </div>
-      {open && <div style={{ marginTop: 8 }}>{children}</div>}
-    </div>
-  );
-}
+
 
 function QueueBarChart({ data, xKey, yKey, layout = 'vertical', height = 280 }: {
   data: Record<string, unknown>[]; xKey: string; yKey: string;
@@ -165,6 +153,14 @@ const SHEET_LABELS: Record<string, string> = {
 };
 
 type SheetFilter = 'all' | 'active' | 'cluster' | 'in_service' | 'withdrawn';
+
+const DEFAULT_LAYOUT: GridItem[] = [
+  { i: 'summary',  x: 0, y: 0,  w: 12, h: 3, minH: 2 },
+  { i: 'analytics', x: 0, y: 3, w: 12, h: 8, minH: 6 },
+  { i: 'activity', x: 0, y: 11, w: 6,  h: 7, minH: 5 },
+  { i: 'largest',  x: 6, y: 11, w: 6,  h: 7, minH: 5 },
+  { i: 'table',    x: 0, y: 18, w: 12, h: 9, minH: 7 },
+];
 
 export default function InterconnectionQueue() {
   const { data: summaryData } = useDataset('iq_summary', 'raw');
@@ -397,276 +393,236 @@ export default function InterconnectionQueue() {
         </div>
       </div>
 
-      <CollapsibleSection title="Queue Intelligence" defaultOpen={true}>
+      {/* Fixed KPI Section */}
+      <div className="kpi-section">
+        <div className="kpi-section-header">
+          <div className="kpi-section-title">Queue Intelligence</div>
+          <span className="kpi-section-badge">Deterministic</span>
+        </div>
         {intelligenceSummary ? (
-          <div className="price-summary-box">
-            <div className="price-summary-header">
-              <span className="price-summary-title">Queue Intelligence Summary</span>
-              <span className="price-summary-badge">Deterministic</span>
-            </div>
-            <div className="price-summary-body">{intelligenceSummary}</div>
-          </div>
+          <div className="kpi-summary-text">{intelligenceSummary}</div>
         ) : (
-          <div className="iq-empty">No queue data available. Click "Scrape Queue" to fetch.</div>
+          <div className="kpi-summary-text" style={{ color: 'var(--text-muted)' }}>No queue data available. Click "Scrape Queue" to fetch.</div>
         )}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Queue KPIs" defaultOpen={true}>
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-          <div className="kpi-card">
-            <div className="kpi-label">Active Queue Capacity</div>
-            <div className="kpi-value">
-              {Math.round(kpis.activeMw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-            <div className="kpi-sub">{kpis.activeCount} projects</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Cluster Study Capacity</div>
-            <div className="kpi-value">
-              {Math.round(kpis.clusterMw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-            <div className="kpi-sub">{kpis.clusterCount} projects</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">In-Service Capacity</div>
-            <div className="kpi-value">
-              {Math.round(kpis.inServiceMw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-            <div className="kpi-sub">{kpis.inServiceCount} projects</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Withdrawn Capacity</div>
-            <div className="kpi-value">
-              {Math.round(kpis.withdrawnMw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-            <div className="kpi-sub">{kpis.withdrawnCount} projects</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Storage Capacity</div>
-            <div className="kpi-value">
-              {Math.round(kpis.storageMw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Solar Capacity</div>
-            <div className="kpi-value">
-              {Math.round(kpis.solarMw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Wind Capacity</div>
-            <div className="kpi-value">
-              {Math.round(kpis.windMw).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Largest Project</div>
-            <div className="kpi-value">
-              {kpis.largest ? <>{Math.round(Number(kpis.largest.sp_mw)).toLocaleString()}<span className="kpi-unit">MW</span></> : '—'}
-            </div>
-            {kpis.largest && <div className="kpi-sub">{kpis.largest.project_name ? (kpis.largest.project_name.length > 25 ? kpis.largest.project_name.slice(0, 23) + '...' : kpis.largest.project_name) : kpis.largest.queue_pos}</div>}
-          </div>
-          <div className="kpi-card accent">
-            <div className="kpi-label">Average Project Size</div>
-            <div className="kpi-value">
-              {Math.round(kpis.avgSize).toLocaleString()}<span className="kpi-unit">MW</span>
-            </div>
-          </div>
+        <div className="kpi-section-header" style={{ marginTop: 24 }}>
+          <div className="kpi-section-title">Key Queue Metrics</div>
         </div>
-      </CollapsibleSection>
+        <div className="kpi-grid-fixed">
+          <div className="kpi-card-fixed"><div className="kpi-label">Active Queue</div><div className="kpi-value">{Math.round(kpis.activeMw).toLocaleString()}<span className="kpi-unit">MW</span></div><div className="kpi-sub">{kpis.activeCount} projects</div></div>
+          <div className="kpi-card-fixed"><div className="kpi-label">Cluster Study</div><div className="kpi-value">{Math.round(kpis.clusterMw).toLocaleString()}<span className="kpi-unit">MW</span></div><div className="kpi-sub">{kpis.clusterCount} projects</div></div>
+          <div className="kpi-card-fixed"><div className="kpi-label">In Service</div><div className="kpi-value">{Math.round(kpis.inServiceMw).toLocaleString()}<span className="kpi-unit">MW</span></div><div className="kpi-sub">{kpis.inServiceCount} projects</div></div>
+          <div className="kpi-card-fixed"><div className="kpi-label">Storage</div><div className="kpi-value">{Math.round(kpis.storageMw).toLocaleString()}<span className="kpi-unit">MW</span></div></div>
+          <div className="kpi-card-fixed"><div className="kpi-label">Solar</div><div className="kpi-value">{Math.round(kpis.solarMw).toLocaleString()}<span className="kpi-unit">MW</span></div></div>
+          <div className="kpi-card-fixed"><div className="kpi-label">Wind</div><div className="kpi-value">{Math.round(kpis.windMw).toLocaleString()}<span className="kpi-unit">MW</span></div></div>
+          <div className="kpi-card-fixed accent"><div className="kpi-label">Avg Project Size</div><div className="kpi-value">{Math.round(kpis.avgSize).toLocaleString()}<span className="kpi-unit">MW</span></div></div>
+          <div className="kpi-card-fixed"><div className="kpi-label">Largest Project</div><div className="kpi-value">{kpis.largest ? <>{Math.round(Number(kpis.largest.sp_mw)).toLocaleString()}<span className="kpi-unit">MW</span></> : '—'}</div>{kpis.largest && <div className="kpi-sub">{kpis.largest.project_name ? kpis.largest.project_name.slice(0, 23) : kpis.largest.queue_pos}</div>}</div>
+        </div>
+      </div>
 
-      <CollapsibleSection title="Queue Analytics" defaultOpen={true}>
-        <div className="iq-pipeline-bar">
-          <div className="iq-pipeline-stage">
-            <div className="iq-pipeline-label">Cluster</div>
-            <div className="iq-pipeline-mw">{Math.round(kpis.clusterMw).toLocaleString()} MW</div>
-            <div className="iq-pipeline-count">{kpis.clusterCount} projects</div>
-          </div>
-          <div className="iq-pipeline-arrow">&rarr;</div>
-          <div className="iq-pipeline-stage active">
-            <div className="iq-pipeline-label">Active</div>
-            <div className="iq-pipeline-mw">{Math.round(kpis.activeMw).toLocaleString()} MW</div>
-            <div className="iq-pipeline-count">{kpis.activeCount} projects</div>
-          </div>
-          <div className="iq-pipeline-arrow">&rarr;</div>
-          <div className="iq-pipeline-stage done">
-            <div className="iq-pipeline-label">In Service</div>
-            <div className="iq-pipeline-mw">{Math.round(kpis.inServiceMw).toLocaleString()} MW</div>
-            <div className="iq-pipeline-count">{kpis.inServiceCount} projects</div>
-          </div>
+      <DraggableGrid id="interconnection-queue" defaultLayout={DEFAULT_LAYOUT} rowHeight={60}>
+
+        <div key="summary">
+          <Widget draggable title="Queue Intelligence Summary" subtitle="Pipeline overview and technology breakdown">
+            <div className="kpi-summary-text" style={{ padding: '12px 0' }}>{intelligenceSummary || 'No data yet.'}</div>
+          </Widget>
         </div>
 
-        <div className="iq-charts-row">
-          <div className="chart-card">
-            <div className="chart-card-header">
-              <div className="chart-card-title">Queue Capacity by Fuel Type</div>
-              <span className="badge badge-primary">{fuelChartData.length} types</span>
-            </div>
-            <QueueBarChart data={fuelChartData} xKey="Fuel" yKey="MW" layout="horizontal" height={Math.max(200, fuelChartData.length * 30)} />
-          </div>
-          <div className="chart-card">
-            <div className="chart-card-header">
-              <div className="chart-card-title">Queue Capacity by Zone</div>
-              <span className="badge badge-primary">{zoneChartData.length} zones</span>
-            </div>
-            <QueueBarChart data={zoneChartData} xKey="Zone" yKey="MW" layout="vertical" height={260} />
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        title="Recent Queue Activity"
-        defaultOpen={newCount > 0 || removedCount > 0}
-        badge={newCount + removedCount > 0 ? `${newCount + removedCount} changes` : undefined}
-      >
-        <div className="iq-activity-summary">
-          <div className="kpi-card" style={{ flex: 1 }}>
-            <div className="kpi-label">New Projects</div>
-            <div className="kpi-value">{newCount}</div>
-          </div>
-          <div className="kpi-card" style={{ flex: 1 }}>
-            <div className="kpi-label">Projects Withdrawn</div>
-            <div className="kpi-value">{removedCount}</div>
-          </div>
-          <div className="kpi-card" style={{ flex: 1 }}>
-            <div className="kpi-label">MW Added</div>
-            <div className="kpi-value">{Math.round(newMwAdded).toLocaleString()}<span className="kpi-unit">MW</span></div>
-          </div>
-        </div>
-        {changes.length > 0 ? (
-          <div className="iq-changes-list">
-            {changes.slice(0, 20).map((c, i) => (
-              <div className={`iq-change-item iq-change-${c.change_type}`} key={i}>
-                <span className={`iq-change-badge ${c.change_type}`}>{c.change_type}</span>
-                <span className="iq-change-pos">{c.queue_pos}</span>
-                <span className="iq-change-name">{c.project_name}</span>
-                <span className="iq-change-detail">
-                  {c.developer}{c.fuel_type ? ` | ${fuelLabel(c.fuel_type)}` : ''}
-                  {c.sp_mw ? ` | ${Number(c.sp_mw).toLocaleString()} MW` : ''}
-                  {c.zone ? ` | Zone ${c.zone}` : ''}
-                </span>
+        <div key="analytics">
+          <Widget draggable title="Queue Analytics" subtitle="Pipeline stages and capacity by fuel type and zone">
+            <div className="iq-pipeline-bar">
+              <div className="iq-pipeline-stage">
+                <div className="iq-pipeline-label">Cluster</div>
+                <div className="iq-pipeline-mw">{Math.round(kpis.clusterMw).toLocaleString()} MW</div>
+                <div className="iq-pipeline-count">{kpis.clusterCount} projects</div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="iq-empty" style={{ padding: '16px 0' }}>No recent changes detected.</div>
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Largest Projects" defaultOpen={false} badge="Top 15">
-        <div className="iq-table-wrap" style={{ maxHeight: 480 }}>
-          <table className="iq-table">
-            <thead>
-              <tr>
-                <th style={{ minWidth: 70 }}>Queue #</th>
-                <th style={{ minWidth: 180 }}>Project Name</th>
-                <th style={{ minWidth: 160 }}>Developer</th>
-                <th style={{ minWidth: 80 }}>Fuel Type</th>
-                <th style={{ minWidth: 70 }}>SP MW</th>
-                <th style={{ minWidth: 50 }}>Zone</th>
-              </tr>
-            </thead>
-            <tbody>
-              {largestProjects.map((r, i) => (
-                <tr key={i} className={Number(r.sp_mw) > 300 ? 'iq-row-highlight' : ''}>
-                  <td>{r.queue_pos}</td>
-                  <td>{r.project_name}</td>
-                  <td>{r.developer}</td>
-                  <td>{fuelLabel(r.fuel_type)}</td>
-                  <td className="numeric">{Math.round(Number(r.sp_mw)).toLocaleString()}</td>
-                  <td>{r.zone}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Full Queue Table" defaultOpen={false} badge={`${allRows.length} projects`}>
-        <div className="iq-table-header">
-          <div className="iq-tabs">
-            {sheetTabs.map(t => (
-              <button
-                key={t.key}
-                className={`iq-tab${sheetFilter === t.key ? ' active' : ''}`}
-                onClick={() => setSheetFilter(t.key)}
-              >
-                {t.label}
-                <span className="iq-tab-count">{t.count}</span>
-              </button>
-            ))}
-          </div>
-          <div className="iq-filter-row">
-            <select className="iq-filter-select" value={fuelFilter} onChange={e => setFuelFilter(e.target.value)}>
-              <option value="all">All Fuels</option>
-              {allFuelTypes.map(f => <option key={f} value={f}>{fuelLabel(f)} ({f})</option>)}
-            </select>
-            <select className="iq-filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
-              <option value="all">All Zones</option>
-              {allZones.map(z => <option key={z} value={z}>Zone {z}</option>)}
-            </select>
-            <input
-              type="text"
-              className="iq-search"
-              placeholder="Search projects, developers, counties..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-          </div>
+              <div className="iq-pipeline-arrow">&rarr;</div>
+              <div className="iq-pipeline-stage active">
+                <div className="iq-pipeline-label">Active</div>
+                <div className="iq-pipeline-mw">{Math.round(kpis.activeMw).toLocaleString()} MW</div>
+                <div className="iq-pipeline-count">{kpis.activeCount} projects</div>
+              </div>
+              <div className="iq-pipeline-arrow">&rarr;</div>
+              <div className="iq-pipeline-stage done">
+                <div className="iq-pipeline-label">In Service</div>
+                <div className="iq-pipeline-mw">{Math.round(kpis.inServiceMw).toLocaleString()} MW</div>
+                <div className="iq-pipeline-count">{kpis.inServiceCount} projects</div>
+              </div>
+            </div>
+            <div className="iq-charts-row">
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">Queue Capacity by Fuel Type</div>
+                  <span className="badge badge-primary">{fuelChartData.length} types</span>
+                </div>
+                <QueueBarChart data={fuelChartData} xKey="Fuel" yKey="MW" layout="horizontal" height={Math.max(200, fuelChartData.length * 30)} />
+              </div>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">Queue Capacity by Zone</div>
+                  <span className="badge badge-primary">{zoneChartData.length} zones</span>
+                </div>
+                <QueueBarChart data={zoneChartData} xKey="Zone" yKey="MW" layout="vertical" height={260} />
+              </div>
+            </div>
+          </Widget>
         </div>
 
-        <div className="iq-table-wrap">
-          <table className="iq-table">
-            <thead>
-              <tr>
-                {DISPLAY_COLS.map(col => {
-                  const isSortable = ['sp_mw', 'developer', 'zone', 'queue_pos', 'fuel_type', 'project_name'].includes(col.key);
-                  return (
-                    <th
-                      key={col.key}
-                      style={{ minWidth: col.width, cursor: isSortable ? 'pointer' : 'default' }}
-                      onClick={() => isSortable && handleSort(col.key as SortKey)}
-                    >
-                      {col.label}
-                      {sortKey === col.key && (
-                        <span className="iq-sort-icon">{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>
-                      )}
-                    </th>
-                  );
-                })}
-                {sheetFilter === 'all' && <th style={{ minWidth: 100 }}>Sheet</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.length === 0 ? (
-                <tr><td colSpan={DISPLAY_COLS.length + (sheetFilter === 'all' ? 1 : 0)} className="iq-empty">
-                  {allRows.length === 0 ? 'No data — click "Scrape Queue" to fetch' : 'No matching projects'}
-                </td></tr>
-              ) : (
-                filteredRows.slice(0, 500).map((row, i) => (
-                  <tr key={i} className={Number(row.sp_mw) > 300 ? 'iq-row-highlight' : ''}>
-                    {DISPLAY_COLS.map(col => (
-                      <td key={col.key} className={col.numeric ? 'numeric' : ''}>
-                        {col.key === 'fuel_type'
-                          ? fuelLabel(String(row[col.key] || ''))
-                          : col.numeric && row[col.key] != null
-                            ? Number(row[col.key]).toLocaleString(undefined, { maximumFractionDigits: 1 })
-                            : (row[col.key] as string) ?? ''}
-                      </td>
-                    ))}
-                    {sheetFilter === 'all' && (
-                      <td><span className="iq-sheet-badge">{SHEET_LABELS[row.source_sheet] || row.source_sheet}</span></td>
-                    )}
+        <div key="activity">
+          <Widget draggable title="Recent Queue Activity" badge={newCount + removedCount > 0 ? `${newCount + removedCount} changes` : undefined} noPad>
+            <div className="iq-activity-summary" style={{ padding: '12px 16px' }}>
+              <div className="kpi-card" style={{ flex: 1 }}>
+                <div className="kpi-label">New Projects</div>
+                <div className="kpi-value">{newCount}</div>
+              </div>
+              <div className="kpi-card" style={{ flex: 1 }}>
+                <div className="kpi-label">Projects Withdrawn</div>
+                <div className="kpi-value">{removedCount}</div>
+              </div>
+              <div className="kpi-card" style={{ flex: 1 }}>
+                <div className="kpi-label">MW Added</div>
+                <div className="kpi-value">{Math.round(newMwAdded).toLocaleString()}<span className="kpi-unit">MW</span></div>
+              </div>
+            </div>
+            {changes.length > 0 ? (
+              <div className="iq-changes-list">
+                {changes.slice(0, 20).map((c, i) => (
+                  <div className={`iq-change-item iq-change-${c.change_type}`} key={i}>
+                    <span className={`iq-change-badge ${c.change_type}`}>{c.change_type}</span>
+                    <span className="iq-change-pos">{c.queue_pos}</span>
+                    <span className="iq-change-name">{c.project_name}</span>
+                    <span className="iq-change-detail">
+                      {c.developer}{c.fuel_type ? ` | ${fuelLabel(c.fuel_type)}` : ''}
+                      {c.sp_mw ? ` | ${Number(c.sp_mw).toLocaleString()} MW` : ''}
+                      {c.zone ? ` | Zone ${c.zone}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="iq-empty" style={{ padding: '16px' }}>No recent changes detected.</div>
+            )}
+          </Widget>
+        </div>
+
+        <div key="largest">
+          <Widget draggable title="Largest Projects" badge="Top 15" noPad>
+            <div className="iq-table-wrap">
+              <table className="iq-table">
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 70 }}>Queue #</th>
+                    <th style={{ minWidth: 180 }}>Project Name</th>
+                    <th style={{ minWidth: 160 }}>Developer</th>
+                    <th style={{ minWidth: 80 }}>Fuel Type</th>
+                    <th style={{ minWidth: 70 }}>SP MW</th>
+                    <th style={{ minWidth: 50 }}>Zone</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {largestProjects.map((r, i) => (
+                    <tr key={i} className={Number(r.sp_mw) > 300 ? 'iq-row-highlight' : ''}>
+                      <td>{r.queue_pos}</td>
+                      <td>{r.project_name}</td>
+                      <td>{r.developer}</td>
+                      <td>{fuelLabel(r.fuel_type)}</td>
+                      <td className="numeric">{Math.round(Number(r.sp_mw)).toLocaleString()}</td>
+                      <td>{r.zone}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Widget>
         </div>
-        {filteredRows.length > 500 && (
-          <div className="iq-truncation">Showing 500 of {filteredRows.length.toLocaleString()} projects</div>
-        )}
-      </CollapsibleSection>
+
+        <div key="table">
+          <Widget draggable title="Full Queue Table" badge={`${allRows.length} projects`} noPad>
+            <div className="iq-table-header">
+              <div className="iq-tabs">
+                {sheetTabs.map(t => (
+                  <button
+                    key={t.key}
+                    className={`iq-tab${sheetFilter === t.key ? ' active' : ''}`}
+                    onClick={() => setSheetFilter(t.key)}
+                  >
+                    {t.label}
+                    <span className="iq-tab-count">{t.count}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="iq-filter-row">
+                <select className="iq-filter-select" value={fuelFilter} onChange={e => setFuelFilter(e.target.value)}>
+                  <option value="all">All Fuels</option>
+                  {allFuelTypes.map(f => <option key={f} value={f}>{fuelLabel(f)} ({f})</option>)}
+                </select>
+                <select className="iq-filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
+                  <option value="all">All Zones</option>
+                  {allZones.map(z => <option key={z} value={z}>Zone {z}</option>)}
+                </select>
+                <input
+                  type="text"
+                  className="iq-search"
+                  placeholder="Search projects, developers, counties..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="iq-table-wrap">
+              <table className="iq-table">
+                <thead>
+                  <tr>
+                    {DISPLAY_COLS.map(col => {
+                      const isSortable = ['sp_mw', 'developer', 'zone', 'queue_pos', 'fuel_type', 'project_name'].includes(col.key);
+                      return (
+                        <th
+                          key={col.key}
+                          style={{ minWidth: col.width, cursor: isSortable ? 'pointer' : 'default' }}
+                          onClick={() => isSortable && handleSort(col.key as SortKey)}
+                        >
+                          {col.label}
+                          {sortKey === col.key && (
+                            <span className="iq-sort-icon">{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>
+                          )}
+                        </th>
+                      );
+                    })}
+                    {sheetFilter === 'all' && <th style={{ minWidth: 100 }}>Sheet</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.length === 0 ? (
+                    <tr><td colSpan={DISPLAY_COLS.length + (sheetFilter === 'all' ? 1 : 0)} className="iq-empty">
+                      {allRows.length === 0 ? 'No data — click "Scrape Queue" to fetch' : 'No matching projects'}
+                    </td></tr>
+                  ) : (
+                    filteredRows.slice(0, 500).map((row, i) => (
+                      <tr key={i} className={Number(row.sp_mw) > 300 ? 'iq-row-highlight' : ''}>
+                        {DISPLAY_COLS.map(col => (
+                          <td key={col.key} className={col.numeric ? 'numeric' : ''}>
+                            {col.key === 'fuel_type'
+                              ? fuelLabel(String(row[col.key] || ''))
+                              : col.numeric && row[col.key] != null
+                                ? Number(row[col.key]).toLocaleString(undefined, { maximumFractionDigits: 1 })
+                                : (row[col.key] as string) ?? ''}
+                          </td>
+                        ))}
+                        {sheetFilter === 'all' && (
+                          <td><span className="iq-sheet-badge">{SHEET_LABELS[row.source_sheet] || row.source_sheet}</span></td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {filteredRows.length > 500 && (
+              <div className="iq-truncation">Showing 500 of {filteredRows.length.toLocaleString()} projects</div>
+            )}
+          </Widget>
+        </div>
+
+      </DraggableGrid>
     </div>
   );
 }

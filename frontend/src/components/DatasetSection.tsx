@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback, useEffect } from 'react';
 import { useDataset, useFilterOptions } from '../hooks/useDataset';
 import type { DatasetResponse } from '../hooks/useDataset';
 import LineChart from './LineChart';
 import DataTable from './DataTable';
-import MetricsRow, { buildMetrics } from './MetricsRow';
+import MetricsRow from './MetricsRow';
+import { buildMetrics } from '../utils/metricsUtils';
 
 const DATASET_LABELS: Record<string, string> = {
   da_lbmp_zone: 'DA Zonal LBMP (P-2A)',

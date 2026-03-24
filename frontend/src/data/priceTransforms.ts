@@ -81,12 +81,12 @@ export function pivotByZone(
     return pivotHourly(filtered, zones, field);
   }
   if (hasHE && resolution === 'on_peak') {
-    return pivotAggregated(filtered.filter(r => isOnPeak(r.HE)), zones, 'date', field);
+    return pivotAggregated(filtered.filter(r => isOnPeak(r.HE)), zones, field);
   }
   if (hasHE && resolution === 'off_peak') {
-    return pivotAggregated(filtered.filter(r => !isOnPeak(r.HE)), zones, 'date', field);
+    return pivotAggregated(filtered.filter(r => !isOnPeak(r.HE)), zones, field);
   }
-  return pivotAggregated(filtered, zones, 'date', field);
+  return pivotAggregated(filtered, zones, field);
 }
 
 function pivotHourly(rows: PriceRow[], zones: string[], field: LmpField = 'LMP'): PivotedRow[] {
@@ -108,10 +108,10 @@ function pivotHourly(rows: PriceRow[], zones: string[], field: LmpField = 'LMP')
   return Object.values(map).sort((a, b) => ((a._ts as number) || 0) - ((b._ts as number) || 0));
 }
 
+// Fix: remove unused _groupBy parameter to avoid lint error
 function pivotAggregated(
   rows: PriceRow[],
   zones: string[],
-  _groupBy: 'date' = 'date',
   field: LmpField = 'LMP'
 ): PivotedRow[] {
   const accum: Record<string, Record<string, { sum: number; count: number }>> = {};

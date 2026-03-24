@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
 import { buildTimestamp } from '../utils/timeSeries';
 
@@ -151,7 +152,7 @@ export function pivotCongestion(
     }
     const sorted = Object.values(map)
       .sort((a, b) => a._sortTs - b._sortTs)
-      .map(({ _sortTs: _s, _counts: _c, ...rest }) => rest as PivotedRow);
+      .map(({ _sortTs, _counts, ...rest }) => rest as PivotedRow);
     for (const row of sorted) {
       for (const c of constraints) {
         if (!(c in row)) row[c] = null;

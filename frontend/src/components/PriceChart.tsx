@@ -23,29 +23,36 @@ interface Props {
   valueSuffix?: string;
 }
 
-function makeTooltip(prefix: string, suffix: string, fmtLabel: (v: unknown) => string) {
-  return function ChartTooltip({ active, payload, label }: any) {
-    if (!active || !payload?.length) return null;
-    return (
-      <div className="price-tooltip">
-        <div className="price-tooltip-label">{fmtLabel(label)}</div>
-        {payload.filter((entry: any) => entry.value != null).map((entry: any, i: number) => {
-          const val = typeof entry.value === 'number'
-            ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
-            : entry.value;
-          return (
-            <div key={i} className="price-tooltip-row">
-              <span className="price-tooltip-dot" style={{ background: entry.color }} />
-              <span className="price-tooltip-name">{entry.name}</span>
-              <span className="price-tooltip-val">
-                {prefix}{val}{suffix}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+// Stable tooltip component defined outside render — avoids "component created during render" issue
+function ChartTooltip({
+  active, payload, label,
+  prefix, suffix, fmtLabel,
+}: {
+  active?: boolean;
+  payload?: { value: unknown; color: string; name: string }[];
+  label?: unknown;
+  prefix: string;
+  suffix: string;
+  fmtLabel: (v: unknown) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="price-tooltip">
+      <div className="price-tooltip-label">{fmtLabel(label)}</div>
+      {payload.filter(entry => entry.value != null).map((entry, i) => {
+        const val = typeof entry.value === 'number'
+          ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
+          : entry.value;
+        return (
+          <div key={i} className="price-tooltip-row">
+            <span className="price-tooltip-dot" style={{ background: entry.color }} />
+            <span className="price-tooltip-name">{entry.name}</span>
+            <span className="price-tooltip-val">{prefix}{val}{suffix}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function PriceChart({ data, xKey, yKeys, chartType, height = 340, valuePrefix = '$', valueSuffix = '' }: Props) {
@@ -58,7 +65,11 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
   if (!data.length || !yKeys.length) return <div className="iq-empty">No chart data available</div>;
 
   const showDots = chartType === 'line-markers';
-  const TooltipContent = makeTooltip(valuePrefix, valueSuffix, fmtTooltipLabel);
+
+  // Pass formatter and prefix/suffix as props to the stable ChartTooltip component
+  const tooltipEl = (
+    <ChartTooltip prefix={valuePrefix} suffix={valueSuffix} fmtLabel={fmtTooltipLabel} />
+  );
 
   const xAxisProps = useTs
     ? { dataKey: '_ts' as const, tickFormatter: fmtTick, tick: { fontSize: 11 }, type: 'number' as const, domain: ['dataMin', 'dataMax'] as [string, string], scale: 'time' as const }
@@ -71,7 +82,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis {...xAxisProps} />
           <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip content={<TooltipContent />} />
+          <Tooltip content={tooltipEl} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
           {yKeys.map((k, i) => (
             <Area key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]}
@@ -89,7 +100,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis {...xAxisProps} />
           <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip content={<TooltipContent />} />
+          <Tooltip content={tooltipEl} />
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
           {yKeys.map((k, i) => (
             <Bar key={k} dataKey={k} stackId="stack" fill={COLORS[i % COLORS.length]} maxBarSize={40} />
@@ -105,7 +116,7 @@ export default function PriceChart({ data, xKey, yKeys, chartType, height = 340,
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis {...xAxisProps} />
         <YAxis tick={{ fontSize: 11 }} />
-        <Tooltip content={<TooltipContent />} />
+        <Tooltip content={tooltipEl} />
         {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
         {yKeys.map((k, i) => (
           <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]}

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback } from 'react';
 import { useInventory, useDataset } from '../hooks/useDataset';
 import EmptyState from '../components/EmptyState';
@@ -5,8 +6,8 @@ import DatasetSection from '../components/DatasetSection';
 import ZoneLmpTable from '../components/ZoneLmpTable';
 import GeneratorMap from './GeneratorMap';
 import Widget from '../components/Widget';
-import WidgetGrid from '../components/WidgetGrid';
-
+import DraggableGrid from '../components/DraggableGrid';
+import type { GridItem } from '../components/DraggableGrid';
 
 const USEFUL_LINKS = [
   { label: 'Modo Energy NYISO Research', url: 'https://modoenergy.com/research?regions=nyiso' },
@@ -35,7 +36,7 @@ interface DailyEventsData {
   oper_messages_raw: string;
 }
 
-function LiveSystemContext() {
+function LiveSystemContextContent() {
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [data, setData] = useState<DailyEventsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,9 @@ function LiveSystemContext() {
   useEffect(() => { fetchEvents(selectedDate); }, [selectedDate, fetchEvents]);
 
   const availableDates = data?.available_dates || [];
+  const isToday = selectedDate === todayStr();
+  const canGoBack = availableDates.indexOf(selectedDate) < availableDates.length - 1;
+  const canGoForward = availableDates.indexOf(selectedDate) > 0;
 
   const navigateDate = (dir: number) => {
     const idx = availableDates.indexOf(selectedDate);
@@ -65,44 +69,29 @@ function LiveSystemContext() {
     }
   };
 
-  const isToday = selectedDate === todayStr();
-  const canGoBack = availableDates.indexOf(selectedDate) < availableDates.length - 1;
-  const canGoForward = availableDates.indexOf(selectedDate) > 0;
-
   const formatDate = (d: string) => {
     const date = new Date(d + 'T12:00:00');
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   return (
-    <div className="section-container">
-      <div className="daily-events-header">
-        <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
-          <span className="live-dot" />
-          Live System Context
-        </div>
-        <div className="date-nav">
-          <button className="date-nav-btn" onClick={() => navigateDate(-1)} disabled={!canGoBack}>&larr;</button>
-          <select
-            className="date-select"
-            value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
-          >
-            {availableDates.map(d => (
-              <option key={d} value={d}>{formatDate(d)}{d === todayStr() ? ' (Today)' : ''}</option>
-            ))}
-          </select>
-          <button className="date-nav-btn" onClick={() => navigateDate(1)} disabled={!canGoForward}>&rarr;</button>
-          {!isToday && (
-            <button className="date-today-btn" onClick={() => setSelectedDate(todayStr())}>Today</button>
-          )}
-        </div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="date-nav" style={{ flexShrink: 0 }}>
+        <button className="date-nav-btn" onClick={() => navigateDate(-1)} disabled={!canGoBack}>&larr;</button>
+        <select className="date-select" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}>
+          {availableDates.map(d => (
+            <option key={d} value={d}>{formatDate(d)}{d === todayStr() ? ' (Today)' : ''}</option>
+          ))}
+        </select>
+        <button className="date-nav-btn" onClick={() => navigateDate(1)} disabled={!canGoForward}>&rarr;</button>
+        {!isToday && (
+          <button className="date-today-btn" onClick={() => setSelectedDate(todayStr())}>Today</button>
+        )}
       </div>
-
       {loading ? (
         <div className="live-feed-empty">Loading events...</div>
       ) : (
-        <div className="live-context-grid">
+        <div className="live-context-grid" style={{ flex: 1, minHeight: 0 }}>
           <div className="live-feed-card">
             <div className="live-feed-card-header">
               <div className="live-feed-title">Real-Time Events</div>
@@ -127,7 +116,6 @@ function LiveSystemContext() {
               </div>
             )}
           </div>
-
           <div className="live-feed-card">
             <div className="live-feed-card-header">
               <div className="live-feed-title">Operational Announcements</div>
@@ -158,13 +146,19 @@ function LiveSystemContext() {
   );
 }
 
+const DEFAULT_LAYOUT: GridItem[] = [
+  { i: 'prices',  x: 0, y: 0,  w: 7, h: 7, minH: 5 },
+  { i: 'events',  x: 7, y: 0,  w: 5, h: 7, minH: 5 },
+  { i: 'map',     x: 0, y: 7,  w: 12, h: 8, minH: 6 },
+  { i: 'links',   x: 0, y: 15, w: 6, h: 5, minH: 4 },
+  { i: 'ref',     x: 6, y: 15, w: 6, h: 5, minH: 4 },
+];
+
 export default function Home() {
   const { inventory, loading } = useInventory();
 
-  // Price data for zone table
   const { data: daData } = useDataset('da_lbmp_zone', 'hourly', undefined, undefined, 50000, 1);
   const { data: rtData } = useDataset('rt_lbmp_zone', 'hourly', undefined, undefined, 50000, 1);
-  // Load data — isolf = DA load forecast, pal = RT actual load
   const { data: daLoadData } = useDataset('isolf', 'hourly', undefined, undefined, 20000, 1);
   const { data: rtLoadData } = useDataset('pal', 'hourly', undefined, undefined, 20000, 1);
 
@@ -185,81 +179,86 @@ export default function Home() {
 
       {availableDatasets === 0 && !loading && <EmptyState />}
 
-      <WidgetGrid>
-        {/* Zone LMP / Load KPI Table */}
-        <Widget
-          size="two-thirds"
-          title="Zonal Price & Load Summary"
-          subtitle="Latest day avg · All zones A–K"
-          badge={`${availableDatasets}/${totalDatasets} datasets`}
-          noPad
-        >
-          <ZoneLmpTable
-            daRows={(daData?.data ?? []) as any}
-            rtRows={(rtData?.data ?? []) as any}
-            daLoadRows={(daLoadData?.data ?? []) as any}
-            rtLoadRows={(rtLoadData?.data ?? []) as any}
-          />
-          <div style={{ display: 'flex', gap: 16, padding: '8px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
-            <span style={{ color: 'var(--success)', fontWeight: 600 }}>▲ positive spread</span>
-            <span style={{ color: 'var(--danger)', fontWeight: 600 }}>▼ negative spread</span>
-            <span>DA–RT spread = DA LMP minus RT LMP</span>
-          </div>
-        </Widget>
-      </WidgetGrid>
+      <DraggableGrid id="home" defaultLayout={DEFAULT_LAYOUT} rowHeight={60}>
 
-      <LiveSystemContext />
+        <div key="prices">
+          <Widget draggable
+            title="Zonal Price & Load Summary"
+            subtitle="Latest day avg · All zones A–K"
+            badge={`${availableDatasets}/${totalDatasets} datasets`}
+            noPad
+          >
+            <ZoneLmpTable
+              daRows={(daData?.data ?? []) as any}
+              rtRows={(rtData?.data ?? []) as any}
+              daLoadRows={(daLoadData?.data ?? []) as any}
+              rtLoadRows={(rtLoadData?.data ?? []) as any}
+            />
+            <div style={{ display: 'flex', gap: 16, padding: '8px 16px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
+              <span style={{ color: 'var(--success)', fontWeight: 600 }}>▲ positive spread</span>
+              <span style={{ color: 'var(--danger)', fontWeight: 600 }}>▼ negative spread</span>
+              <span>DA–RT spread = DA LMP minus RT LMP</span>
+            </div>
+          </Widget>
+        </div>
 
-      {/* Generator Price Map */}
-      <WidgetGrid>
-        <Widget size="full" title="Generator Price Map" subtitle="NYISO generator-level LMP visualization" noPad>
-          <GeneratorMap embedded={true} />
-        </Widget>
-      </WidgetGrid>
+        <div key="events">
+          <Widget draggable title="Live System Context" subtitle="Real-time events & operational announcements">
+            <LiveSystemContextContent />
+          </Widget>
+        </div>
 
+        <div key="map">
+          <Widget draggable title="Generator Price Map" subtitle="NYISO generator-level LMP visualization" noPad>
+            <GeneratorMap embedded={true} />
+          </Widget>
+        </div>
 
-      <WidgetGrid>
-        <Widget size="full" title="Resources">
-          <div className="links-grid">
-            {USEFUL_LINKS.map(l => (
-              <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" className="link-card">
-                <div className="link-label">{l.label}</div>
-                <div className="link-url">{l.url}</div>
-              </a>
-            ))}
-          </div>
-        </Widget>
-
-        <Widget size="full" title="Reference Data & System Tables" defaultCollapsed={true} noPad>
-          <DatasetSection datasetKey="generator_names" resolution="raw" />
-          <DatasetSection datasetKey="load_names" resolution="raw" />
-          <DatasetSection datasetKey="active_transmission_nodes" resolution="raw" />
-
-          {inventory && (
-            <div className="card" style={{ margin: '12px 0 0' }}>
-              <div className="card-title">Data Inventory</div>
-              {Object.entries(inventory).map(([page, datasets]: [string, any]) => (
-                <div key={page} style={{ marginBottom: 16 }}>
-                  <h3 style={{ textTransform: 'capitalize', marginBottom: 8 }}>{page}</h3>
-                  <div className="inventory-grid">
-                    {Object.entries(datasets).map(([key, info]: [string, any]) => (
-                      <div key={key} className="inv-item">
-                        <div className="inv-name">{info.label || key}</div>
-                        <div className="inv-rows">
-                          <span className={`badge badge-${info.status === 'available' ? 'success' : 'warning'}`}>
-                            {info.status}
-                          </span>
-                          {info.rows > 0 && ` ${info.rows.toLocaleString()} rows`}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+        <div key="links">
+          <Widget draggable title="Resources">
+            <div className="links-grid">
+              {USEFUL_LINKS.map(l => (
+                <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" className="link-card">
+                  <div className="link-label">{l.label}</div>
+                  <div className="link-url">{l.url}</div>
+                </a>
               ))}
             </div>
-          )}
-        </Widget>
-      </WidgetGrid>
+          </Widget>
+        </div>
+
+        <div key="ref">
+          <Widget draggable title="Reference Data & System Tables" noPad>
+            <DatasetSection datasetKey="generator_names" resolution="raw" />
+            <DatasetSection datasetKey="load_names" resolution="raw" />
+            <DatasetSection datasetKey="active_transmission_nodes" resolution="raw" />
+            {inventory && (
+              <div className="card" style={{ margin: '12px 0 0' }}>
+                <div className="card-title">Data Inventory</div>
+                {Object.entries(inventory).map(([page, datasets]: [string, any]) => (
+                  <div key={page} style={{ marginBottom: 16 }}>
+                    <h3 style={{ textTransform: 'capitalize', marginBottom: 8 }}>{page}</h3>
+                    <div className="inventory-grid">
+                      {Object.entries(datasets).map(([key, info]: [string, any]) => (
+                        <div key={key} className="inv-item">
+                          <div className="inv-name">{info.label || key}</div>
+                          <div className="inv-rows">
+                            <span className={`badge badge-${info.status === 'available' ? 'success' : 'warning'}`}>
+                              {info.status}
+                            </span>
+                            {info.rows > 0 && ` ${info.rows.toLocaleString()} rows`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Widget>
+        </div>
+
+      </DraggableGrid>
     </div>
   );
 }

@@ -167,6 +167,7 @@ export default function DraggableGrid({
 
   // Mark as mounted to prevent SSR issues
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

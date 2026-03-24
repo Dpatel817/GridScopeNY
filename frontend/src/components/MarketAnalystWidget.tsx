@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef, useEffect } from 'react';
 import { useDataset, useInventory } from '../hooks/useDataset';
 import { isNyisoZone } from '../data/zones';

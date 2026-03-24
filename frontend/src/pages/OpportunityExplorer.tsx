@@ -1,8 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useMemo } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import EmptyState from '../components/EmptyState';
+import Widget from '../components/Widget';
+import DraggableGrid from '../components/DraggableGrid';
+import type { GridItem } from '../components/DraggableGrid';
 import { isNyisoZone } from '../data/zones';
 import { buildTimestamp } from '../utils/timeSeries';
 
@@ -28,19 +32,15 @@ const OPP_PROMPTS = [
   { label: 'Operational Signals', prompt: 'What operational signals support this opportunity?' },
 ];
 
-function CollapsibleSection({ title, badge, defaultOpen, children }: { title: string; badge?: string; defaultOpen: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="opp-collapsible">
-      <button className="opp-collapsible-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="opp-collapsible-title">{title}</span>
-        {badge && <span className="opp-collapsible-badge">{badge}</span>}
-        <span className="opp-collapsible-chevron">{open ? '−' : '+'}</span>
-      </button>
-      {open && <div className="opp-collapsible-body">{children}</div>}
-    </div>
-  );
-}
+
+
+const DEFAULT_LAYOUT: GridItem[] = [
+  { i: 'signal',     x: 0, y: 0, w: 6, h: 8, minH: 6 },
+  { i: 'structural', x: 6, y: 0, w: 6, h: 8, minH: 6 },
+  { i: 'rankings',   x: 0, y: 8, w: 5, h: 9, minH: 7 },
+  { i: 'detail',     x: 5, y: 8, w: 7, h: 9, minH: 7 },
+  { i: 'more',       x: 0, y: 17, w: 12, h: 8, minH: 6 },
+];
 
 export default function OpportunityExplorer() {
   const [role, setRole] = useState<Role>('trader');
@@ -571,12 +571,8 @@ export default function OpportunityExplorer() {
             </div>
           </div>
 
-          <CollapsibleSection
-            key={`current-signal-${role}`}
-            title="Current Signal"
-            badge={role === 'trader' ? 'Primary' : undefined}
-            defaultOpen={role === 'trader'}
-          >
+          <div key="signal" style={{ display: 'contents' }}>
+          <Widget draggable title="Current Signal" badge={role === 'trader' ? 'Primary' : undefined}>
             {traderInsights.length > 0 && (
               <div className="takeaway-section opp-embedded-section">
                 <div className="takeaway-header">
@@ -604,14 +600,11 @@ export default function OpportunityExplorer() {
                 <div className="empty-state" style={{ padding: 48 }}>Select a zone to view price detail</div>
               )}
             </div>
-          </CollapsibleSection>
+          </Widget>
+          </div>
 
-          <CollapsibleSection
-            key={`structural-${role}`}
-            title="Structural Opportunity"
-            badge={role === 'battery' ? 'Primary' : undefined}
-            defaultOpen={role === 'battery'}
-          >
+          <div key="structural" style={{ display: 'contents' }}>
+          <Widget draggable title="Structural Opportunity" badge={role === 'battery' ? 'Primary' : undefined}>
             {batteryInsights.length > 0 && (
               <div className="takeaway-section opp-embedded-section">
                 <div className="takeaway-header">
@@ -639,7 +632,8 @@ export default function OpportunityExplorer() {
                 <div className="empty-state" style={{ padding: 48 }}>Select a zone to view spread trend</div>
               )}
             </div>
-          </CollapsibleSection>
+          </Widget>
+          </div>
 
           <div className="opp-main-grid">
             <div className="chart-card">

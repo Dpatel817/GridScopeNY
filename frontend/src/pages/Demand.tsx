@@ -303,7 +303,7 @@ export default function Demand() {
           <div key="raw">
             <Widget draggable
               title={`Detailed Data (${RAW_DATASETS.length})`}
-              defaultCollapsed={true}
+             
               noPad
             >
               {RAW_DATASETS.map((key, i) => (

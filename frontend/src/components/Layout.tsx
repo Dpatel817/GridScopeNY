@@ -21,7 +21,7 @@ function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem('gs-theme')
     if (stored === 'dark' || stored === 'light') return stored
-  } catch {}
+  } catch { /* ignore */ }
   return 'dark'
 }
 
@@ -37,11 +37,11 @@ export default function Layout() {
   // Apply theme to <html> element so CSS vars cascade everywhere
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    try { localStorage.setItem('gs-theme', theme) } catch {}
+    try { localStorage.setItem('gs-theme', theme) } catch { /* ignore */ }
   }, [theme])
 
   useEffect(() => {
-    try { localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed)) } catch {}
+    try { localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed)) } catch { /* ignore */ }
   }, [sidebarCollapsed])
 
   const currentPage = (() => {

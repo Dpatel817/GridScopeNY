@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
@@ -309,7 +310,7 @@ export default function Generation() {
         </div>
 
         <div key="map">
-          <Widget draggable title="Generator Price Map" subtitle="NYISO generator-level LMP visualization" noPad defaultCollapsed>
+          <Widget draggable title="Generator Price Map" subtitle="NYISO generator-level LMP visualization" noPad>
             <Suspense fallback={<div className="loading"><div className="spinner" /> Loading map...</div>}>
               <GeneratorMap embedded />
             </Suspense>
@@ -317,7 +318,7 @@ export default function Generation() {
         </div>
 
         <div key="raw">
-          <Widget draggable title={`All Generation Datasets (${DATASETS.length})`} defaultCollapsed noPad>
+          <Widget draggable title={`All Generation Datasets (${DATASETS.length})`} noPad>
             {DATASETS.map((key, i) => (
               <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
             ))}

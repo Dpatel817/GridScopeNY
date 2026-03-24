@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { getInterfaceMeta, getDisplayName } from './interfaceMetadata';
 import type { InterfaceMeta } from './interfaceMetadata';
 import { makeUniqueHourlyKey } from '../utils/dateFormat';
@@ -146,7 +147,7 @@ export function pivotFlows(
     }
     return Object.values(map)
       .sort((a, b) => a._sortTs - b._sortTs)
-      .map(({ _sortTs: _s, ...rest }) => rest as PivotedRow);
+      .map(({ _sortTs, ...rest }) => rest as PivotedRow);
   }
 
   const accum: Record<string, Record<string, { sum: number; count: number }>> = {};

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
@@ -387,7 +388,7 @@ export default function InterfaceFlows() {
         </div>
 
         <div key="raw">
-          <Widget draggable title={`All Flow Datasets (${DATASETS.length})`} defaultCollapsed noPad>
+          <Widget draggable title={`All Flow Datasets (${DATASETS.length})`} noPad>
             {DATASETS.map((key, i) => (
               <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
             ))}

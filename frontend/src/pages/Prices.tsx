@@ -313,7 +313,7 @@ export default function Prices() {
         </div>
 
         <div key="raw">
-          <Widget title={`All Price Datasets (${RAW_DATASETS.length})`} draggable defaultCollapsed noPad>
+          <Widget title={`All Price Datasets (${RAW_DATASETS.length})`} draggable noPad>
             {RAW_DATASETS.map((key, i) => (
               <DatasetSection key={key} datasetKey={key} resolution="hourly" defaultExpanded={i === 0} />
             ))}

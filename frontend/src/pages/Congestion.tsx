@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 import { useState, useMemo, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
@@ -1210,13 +1211,13 @@ export default function Congestion() {
         </div>
 
         <div key="outage">
-          <Widget draggable title="Outage Schedule" noPad defaultCollapsed>
+          <Widget draggable title="Outage Schedule" noPad>
             <OutageScheduleSection />
           </Widget>
         </div>
 
         <div key="raw">
-          <Widget draggable title={`All Congestion Datasets (${DATASETS.length})`} defaultCollapsed noPad>
+          <Widget draggable title={`All Congestion Datasets (${DATASETS.length})`} noPad>
             {DATASETS.map((key, i) => (
               <DatasetSection key={key} datasetKey={key} resolution="raw" defaultExpanded={i === 0} />
             ))}

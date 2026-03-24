@@ -37,27 +37,29 @@ const COMPARE_MODES: { key: CompareMode; label: string }[] = [
 const LMP_COLORS = { da: '#2563eb', rt: '#ef4444' };
 const ASP_COLORS = { da: '#8b5cf6', rt: '#f59e0b' };
 
-function makeDualTooltip(fmtLabel: (v: unknown) => string) {
-  return function DualTooltip({ active, payload, label }: any) {
-    if (!active || !payload?.length) return null;
-    return (
-      <div className="price-tooltip">
-        <div className="price-tooltip-label">{fmtLabel(label)}</div>
-        {payload.map((entry: any, i: number) => {
-          const val = typeof entry.value === 'number'
-            ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
-            : entry.value;
-          return (
-            <div key={i} className="price-tooltip-row">
-              <span className="price-tooltip-dot" style={{ background: entry.color }} />
-              <span className="price-tooltip-name">{entry.name}</span>
-              <span className="price-tooltip-val">${val}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+// Stable tooltip component — receives formatter via prop to avoid re-creation during render
+function DualTooltip({ active, payload, label, fmtLabel }: {
+  active?: boolean; payload?: { value: unknown; color: string; name: string }[]; label?: unknown;
+  fmtLabel: (v: unknown) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="price-tooltip">
+      <div className="price-tooltip-label">{fmtLabel(label)}</div>
+      {payload.map((entry, i) => {
+        const val = typeof entry.value === 'number'
+          ? (Number.isInteger(entry.value) ? entry.value.toLocaleString() : entry.value.toFixed(2))
+          : entry.value;
+        return (
+          <div key={i} className="price-tooltip-row">
+            <span className="price-tooltip-dot" style={{ background: entry.color }} />
+            <span className="price-tooltip-name">{entry.name}</span>
+            <span className="price-tooltip-val">${val}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function ScarcitySignalSection() {
@@ -86,6 +88,7 @@ export default function ScarcitySignalSection() {
     if (allZones.length && !selectedZone) {
       setSelectedZone(allZones.includes('N.Y.C.') ? 'N.Y.C.' : allZones[0]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allZones]);
 
   useEffect(() => {
@@ -93,6 +96,7 @@ export default function ScarcitySignalSection() {
       setStartDate(availableDates[0]);
       setEndDate(availableDates[availableDates.length - 1]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableDates]);
 
   const aligned = useMemo(() =>
@@ -128,13 +132,11 @@ export default function ScarcitySignalSection() {
   const lmpInterval = useMemo(() => getTickInterval(lmpData, lmpXKey), [lmpData, lmpXKey]);
   const lmpFmtTick = useMemo(() => makeTickFormatter(lmpData, lmpXKey), [lmpData, lmpXKey]);
   const lmpFmtTooltipLabel = useMemo(() => tooltipLabelFormatter(lmpData, lmpXKey), [lmpData, lmpXKey]);
-  const LmpTooltip = useMemo(() => makeDualTooltip(lmpFmtTooltipLabel), [lmpFmtTooltipLabel]);
   const aspUseTs = aspData.length > 0 && '_ts' in (aspData[0] || {});
   const aspXKey = aspUseTs ? '_ts' : 'Date';
   const aspInterval = useMemo(() => getTickInterval(aspData, aspXKey), [aspData, aspXKey]);
   const aspFmtTick = useMemo(() => makeTickFormatter(aspData, aspXKey), [aspData, aspXKey]);
   const aspFmtTooltipLabel = useMemo(() => tooltipLabelFormatter(aspData, aspXKey), [aspData, aspXKey]);
-  const AspTooltip = useMemo(() => makeDualTooltip(aspFmtTooltipLabel), [aspFmtTooltipLabel]);
 
   const lmpColors = compareMode === 'spread' ? ['#2563eb'] : [LMP_COLORS.da, LMP_COLORS.rt];
   const aspColorsArr = compareMode === 'spread' ? ['#8b5cf6'] : [ASP_COLORS.da, ASP_COLORS.rt];
@@ -280,7 +282,7 @@ export default function ScarcitySignalSection() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey={lmpXKey} tickFormatter={lmpFmtTick} tick={{ fontSize: 11 }} {...(lmpUseTs ? { type: 'number' as const, domain: ['dataMin', 'dataMax'], scale: 'time' as const } : { interval: lmpInterval })} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip content={<LmpTooltip />} />
+                <Tooltip content={<DualTooltip fmtLabel={lmpFmtTooltipLabel} />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {lmpKeys.map((k, i) => (
                   <Line key={k} type="monotone" dataKey={k} stroke={lmpColors[i % lmpColors.length]}
@@ -304,7 +306,7 @@ export default function ScarcitySignalSection() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey={aspXKey} tickFormatter={aspFmtTick} tick={{ fontSize: 11 }} {...(aspUseTs ? { type: 'number' as const, domain: ['dataMin', 'dataMax'], scale: 'time' as const } : { interval: aspInterval })} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip content={<AspTooltip />} />
+                <Tooltip content={<DualTooltip fmtLabel={aspFmtTooltipLabel} />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {aspKeys.map((k, i) => (
                   <Line key={k} type="monotone" dataKey={k} stroke={aspColorsArr[i % aspColorsArr.length]}
