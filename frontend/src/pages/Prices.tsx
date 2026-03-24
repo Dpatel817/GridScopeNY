@@ -302,7 +302,6 @@ export default function Prices() {
                 xKey="Date"
                 yKeys={selectedZones}
                 chartType={chartType}
-                height={420}
               />
             )}
           </Widget>

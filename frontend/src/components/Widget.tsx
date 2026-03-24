@@ -50,13 +50,13 @@ export default function Widget({
         </div>
       </div>
 
-      <div className={noPad ? 'widget-body-nopad' : 'widget-body'} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div className={noPad ? 'widget-body-nopad' : 'widget-body'} style={{ flex: 1, overflow: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {controls && (
-          <div className="widget-controls-sidebar">
+          <div className="widget-controls-bar">
             {controls}
           </div>
         )}
-        <div className={controls ? 'widget-content-with-controls' : undefined} style={{ height: '100%' }}>
+        <div className={controls ? 'widget-content-with-controls' : undefined} style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {children}
         </div>
       </div>

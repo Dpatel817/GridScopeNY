@@ -22,16 +22,22 @@ def _find_clean_prints(constr_df: pd.DataFrame, facility: str, contingency: str)
     if constr_df.empty or not facility or not contingency:
         return [], []
     COST_THRESHOLD = 1.0
-    grouped = constr_df.groupby(["Date", "HE"]).apply(
-        lambda g: g[g["Constraint Cost"].abs() >= COST_THRESHOLD][["Limiting Facility", "Contingency"]].drop_duplicates().shape[0],
-        include_groups=False,
-    ).reset_index(name="active_constraints")
-    target_rows = constr_df[
-        (constr_df["Limiting Facility"] == facility) &
-        (constr_df["Contingency"] == contingency) &
-        (constr_df["Constraint Cost"].abs() >= COST_THRESHOLD)
+    # Use transform+nunique instead of groupby.apply for much better performance
+    active = constr_df[constr_df["Constraint Cost"].abs() >= COST_THRESHOLD].copy()
+    if active.empty:
+        return [], []
+    # Count distinct (facility, contingency) pairs per (Date, HE)
+    active["_fc"] = active["Limiting Facility"].astype(str) + "||" + active["Contingency"].astype(str)
+    counts = (
+        active.groupby(["Date", "HE"])["_fc"]
+        .nunique()
+        .reset_index(name="active_constraints")
+    )
+    target_rows = active[
+        (active["Limiting Facility"] == facility) &
+        (active["Contingency"] == contingency)
     ][["Date", "HE"]].drop_duplicates()
-    merged = target_rows.merge(grouped, on=["Date", "HE"], how="left")
+    merged = target_rows.merge(counts, on=["Date", "HE"], how="left")
     clean = merged[merged["active_constraints"] == 1]
     mixed = merged[merged["active_constraints"] > 1]
     clean_prints = [{"date": r["Date"], "he": int(r["HE"])} for _, r in clean.iterrows()]

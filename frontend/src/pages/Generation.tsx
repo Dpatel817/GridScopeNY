@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
-import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDataset } from '../hooks/useDataset';
 import DatasetSection from '../components/DatasetSection';
 import PriceChart from '../components/PriceChart';
@@ -21,8 +21,6 @@ import {
   buildGenerationSummaryContext, deterministicGenerationSummary,
   fetchAIGenerationSummary,
 } from '../data/generationSummary';
-
-const GeneratorMap = lazy(() => import('./GeneratorMap'));
 
 const DATASETS = [
   'rtfuelmix', 'gen_maint_report', 'op_in_commit',
@@ -171,8 +169,7 @@ const LIVE_REFRESH_MS = 30 * 1000;
 const DEFAULT_LAYOUT: GridItem[] = [
   { i: 'chart', x: 0, y: 0,  w: 12, h: 8, minH: 6 },
   { i: 'oic',   x: 0, y: 8,  w: 12, h: 9, minH: 6 },
-  { i: 'map',   x: 0, y: 17, w: 12, h: 7, minH: 5 },
-  { i: 'raw',   x: 0, y: 24, w: 12, h: 3, minH: 3 },
+  { i: 'raw',   x: 0, y: 17, w: 12, h: 3, minH: 3 },
 ];
 
 export default function Generation() {
@@ -296,7 +293,6 @@ export default function Generation() {
                 xKey="Date"
                 yKeys={viewMode === 'total' ? ['Total'] : selectedFuels}
                 chartType={viewMode === 'stacked' ? 'area' : chartType}
-                height={380}
                 valuePrefix="" valueSuffix=" MW"
               />
             )}
@@ -306,14 +302,6 @@ export default function Generation() {
         <div key="oic">
           <Widget draggable title="Operating In Commitment (OIC) Analytics" subtitle="Generator commitment data">
             <OICCommitmentContent />
-          </Widget>
-        </div>
-
-        <div key="map">
-          <Widget draggable title="Generator Price Map" subtitle="NYISO generator-level LMP visualization" noPad>
-            <Suspense fallback={<div className="loading"><div className="spinner" /> Loading map...</div>}>
-              <GeneratorMap embedded />
-            </Suspense>
           </Widget>
         </div>
 

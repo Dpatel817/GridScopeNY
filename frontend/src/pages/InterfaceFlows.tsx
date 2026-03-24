@@ -154,50 +154,102 @@ interface FlowControlsProps {
 function FlowChartControls({ classFilter, onClassFilterChange, internalCount, externalCount, interfaces, selectedInterfaces, onInterfacesChange, resolution, onResolutionChange, dateRange, onDateRangeChange, startDate, endDate, onStartDateChange, onEndDateChange, availableDates, chartType, onChartTypeChange }: FlowControlsProps) {
   const allSelected = selectedInterfaces.length === interfaces.length;
   return (
-    <div className="pcc-panel">
-      <div className="pcc-title">Chart Controls</div>
-      <div className="pcc-section">
-        <div className="pcc-label">Class</div>
-        <div className="pcc-btn-group">
-          {([['all', `All (${internalCount + externalCount})`], ['Internal', `Int (${internalCount})`], ['External', `Ext (${externalCount})`]] as [ClassFilter, string][]).map(([val, lbl]) => (
-            <button key={val} className={`pcc-btn${classFilter === val ? ' active' : ''}`} onClick={() => onClassFilterChange(val)}>{lbl}</button>
-          ))}
-        </div>
+    <div className="ctrl-toolbar">
+      <div className="ctrl-group">
+        <span className="ctrl-label">Class</span>
+        {([['all', `All (${internalCount + externalCount})`], ['Internal', `Int (${internalCount})`], ['External', `Ext (${externalCount})`]] as [ClassFilter, string][]).map(([val, lbl]) => (
+          <button key={val} className={`ctrl-pill${classFilter === val ? ' active' : ''}`} onClick={() => onClassFilterChange(val)}>{lbl}</button>
+        ))}
       </div>
-      <div className="pcc-section">
-        <div className="pcc-label">Interfaces</div>
-        <div className="pcc-zone-actions">
-          <button className={`pcc-mini-btn${allSelected ? ' active' : ''}`} onClick={() => onInterfacesChange(allSelected ? [] : [...interfaces])}>{allSelected ? 'Clear' : 'All'}</button>
-        </div>
-        <div className="pcc-zone-grid">
-          {interfaces.map(s => (
-            <label key={s} className="pcc-zone-item">
-              <input type="checkbox" checked={selectedInterfaces.includes(s)} onChange={() => onInterfacesChange(selectedInterfaces.includes(s) ? selectedInterfaces.filter(x => x !== s) : [...selectedInterfaces, s])} />
-              <span>{s}</span>
-            </label>
-          ))}
-        </div>
+      <div className="ctrl-divider" />
+      <div className="ctrl-group">
+        <span className="ctrl-label">Interfaces</span>
+        <button className={`ctrl-pill${allSelected ? ' active' : ''}`} onClick={() => onInterfacesChange(allSelected ? [] : [...interfaces])}>{allSelected ? 'Clear' : 'All'}</button>
+        {interfaces.map(s => (
+          <label key={s} className="ctrl-check">
+            <input type="checkbox" checked={selectedInterfaces.includes(s)} onChange={() => onInterfacesChange(selectedInterfaces.includes(s) ? selectedInterfaces.filter(x => x !== s) : [...selectedInterfaces, s])} />
+            <span>{s}</span>
+          </label>
+        ))}
       </div>
-      <div className="pcc-section">
-        <div className="pcc-label">Resolution</div>
-        <div className="pcc-btn-group">{RESOLUTIONS.map(r => <button key={r.key} className={`pcc-btn${resolution === r.key ? ' active' : ''}`} onClick={() => onResolutionChange(r.key)}>{r.label}</button>)}</div>
+      <div className="ctrl-divider" />
+      <div className="ctrl-group">
+        <span className="ctrl-label">Resolution</span>
+        {RESOLUTIONS.map(r => <button key={r.key} className={`ctrl-pill${resolution === r.key ? ' active' : ''}`} onClick={() => onResolutionChange(r.key)}>{r.label}</button>)}
       </div>
-      <div className="pcc-section">
-        <div className="pcc-label">Date Range</div>
-        <div className="pcc-btn-group">{DATE_RANGES.map(d => <button key={d.key} className={`pcc-btn${dateRange === d.key ? ' active' : ''}`} onClick={() => onDateRangeChange(d.key)}>{d.label}</button>)}</div>
+      <div className="ctrl-divider" />
+      <div className="ctrl-group">
+        <span className="ctrl-label">Range</span>
+        {DATE_RANGES.map(d => <button key={d.key} className={`ctrl-pill${dateRange === d.key ? ' active' : ''}`} onClick={() => onDateRangeChange(d.key)}>{d.label}</button>)}
         {dateRange === 'custom' && (
-          <div className="pcc-date-inputs">
-            <input type="date" className="pcc-date" value={startDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onStartDateChange(e.target.value)} />
-            <span className="pcc-date-sep">to</span>
-            <input type="date" className="pcc-date" value={endDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onEndDateChange(e.target.value)} />
-          </div>
+          <>
+            <input type="date" className="ctrl-date" value={startDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onStartDateChange(e.target.value)} />
+            <span className="ctrl-sep">–</span>
+            <input type="date" className="ctrl-date" value={endDate} min={availableDates[0]} max={availableDates[availableDates.length - 1]} onChange={e => onEndDateChange(e.target.value)} />
+          </>
         )}
       </div>
-      <div className="pcc-section">
-        <div className="pcc-label">Chart Type</div>
-        <div className="pcc-btn-group">{CHART_TYPES.map(t => <button key={t.key} className={`pcc-btn${chartType === t.key ? ' active' : ''}`} onClick={() => onChartTypeChange(t.key)}>{t.label}</button>)}</div>
+      <div className="ctrl-divider" />
+      <div className="ctrl-group">
+        <span className="ctrl-label">Type</span>
+        {CHART_TYPES.map(t => <button key={t.key} className={`ctrl-pill${chartType === t.key ? ' active' : ''}`} onClick={() => onChartTypeChange(t.key)}>{t.label}</button>)}
       </div>
     </div>
+  );
+}
+
+function InterfaceSummaryWidget({ interfaceStats, highlightedInterface, onRowClick }: {
+  interfaceStats: InterfaceStat[];
+  highlightedInterface: string | null;
+  onRowClick: (display: string) => void;
+}) {
+  const [tableClass, setTableClass] = useState<ClassFilter>('all');
+  const filtered = tableClass === 'all' ? interfaceStats : interfaceStats.filter(s => s.meta.classification === tableClass);
+  const internalCount = interfaceStats.filter(s => s.meta.classification === 'Internal').length;
+  const externalCount = interfaceStats.filter(s => s.meta.classification === 'External').length;
+
+  return (
+    <Widget draggable
+      title="Interface Summary"
+      subtitle={`${filtered.length} interfaces${tableClass !== 'all' ? ` · ${tableClass} only` : ''}`}
+      noPad
+      actions={
+        <div className="widget-tabs">
+          {([['all', `All (${interfaceStats.length})`], ['Internal', `Internal (${internalCount})`], ['External', `External (${externalCount})`]] as [ClassFilter, string][]).map(([val, lbl]) => (
+            <button key={val} className={`widget-tab${tableClass === val ? ' active' : ''}`} onClick={() => setTableClass(val)}>{lbl}</button>
+          ))}
+        </div>
+      }
+    >
+      {filtered.length > 0 ? (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="rank-table" style={{ borderSpacing: 0 }}>
+            <thead>
+              <tr>
+                <th>Interface</th><th>Class</th><th>Region / Path</th><th>Direction</th>
+                <th>Avg Flow (MW)</th><th>Max Flow (MW)</th><th>Min Flow (MW)</th><th>Observations</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(s => (
+                <tr key={s.raw} onClick={() => onRowClick(s.display)} style={{ cursor: 'pointer', background: highlightedInterface === s.display ? 'var(--primary-light)' : undefined }}>
+                  <td style={{ fontWeight: 600 }}>{s.display}</td>
+                  <td><span className={`intf-class-tag ${s.meta.classification === 'Internal' ? 'intf-internal' : 'intf-external'}`}>{s.meta.classification}</span></td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.region}</td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.direction}</td>
+                  <td>{s.avg.toFixed(1)}</td>
+                  <td style={{ fontWeight: 600, color: s.max > 2000 ? 'var(--danger)' : 'var(--text)' }}>{s.max.toFixed(0)}</td>
+                  <td>{s.min.toFixed(0)}</td>
+                  <td>{s.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="loading"><div className="spinner" /> Loading interface stats...</div>
+      )}
+    </Widget>
   );
 }
 
@@ -342,47 +394,22 @@ export default function InterfaceFlows() {
                     Stacked charts disabled — data contains negative flows. Showing line chart instead.
                   </div>
                 )}
-                <PriceChart data={chartData} xKey="Date" yKeys={activeForChart} chartType={effectiveChartType} height={380} valuePrefix="" valueSuffix=" MW" />
+                <PriceChart data={chartData} xKey="Date" yKeys={activeForChart} chartType={effectiveChartType} valuePrefix="" valueSuffix=" MW" />
               </>
             )}
           </Widget>
         </div>
 
         <div key="stats">
-          <Widget draggable title={`Interface Summary`} subtitle={`${interfaceStats.length} interfaces${classFilter !== 'all' ? ` · ${classFilter} only` : ''}`} noPad>
-            {interfaceStats.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="rank-table" style={{ borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Interface</th><th>Class</th><th>Region / Path</th><th>Direction</th>
-                      <th>Avg Flow (MW)</th><th>Max Flow (MW)</th><th>Min Flow (MW)</th><th>Observations</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {interfaceStats.map(s => (
-                      <tr key={s.raw} onClick={() => handleRowClick(s.display)} style={{ cursor: 'pointer', background: highlightedInterface === s.display ? 'var(--primary-light)' : undefined }}>
-                        <td style={{ fontWeight: 600 }}>{s.display}</td>
-                        <td><span className={`intf-class-tag ${s.meta.classification === 'Internal' ? 'intf-internal' : 'intf-external'}`}>{s.meta.classification}</span></td>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.region}</td>
-                        <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.meta.direction}</td>
-                        <td>{s.avg.toFixed(1)}</td>
-                        <td style={{ fontWeight: 600, color: s.max > 2000 ? 'var(--danger)' : 'var(--text)' }}>{s.max.toFixed(0)}</td>
-                        <td>{s.min.toFixed(0)}</td>
-                        <td>{s.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="loading"><div className="spinner" /> Loading interface stats...</div>
-            )}
-          </Widget>
+          <InterfaceSummaryWidget
+            interfaceStats={interfaceStats}
+            highlightedInterface={highlightedInterface}
+            onRowClick={handleRowClick}
+          />
         </div>
 
         <div key="ttcf">
-          <Widget draggable title="TTCF Derates" subtitle="Transfer capability reductions from NYISO's TTCF postings">
+          <Widget draggable title="Interface Derates (TTCF)" subtitle="Transfer capability reductions from NYISO's TTCF postings">
             <TTCFDeratesContent />
           </Widget>
         </div>

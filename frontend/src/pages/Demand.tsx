@@ -293,7 +293,6 @@ export default function Demand() {
                 xKey="Date"
                 yKeys={viewMode === 'zonal' ? selectedZones : viewMode === 'fva' ? ['Forecast', 'Actual'] : ['Error']}
                 chartType={chartType}
-                height={420}
                 valuePrefix=""
                 valueSuffix=" MW"
               />

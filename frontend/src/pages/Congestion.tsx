@@ -307,8 +307,10 @@ function ConstraintImpactAnalysis() {
                   <option value="">Select contingency...</option>
                   {contingencies.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-              ) : (
+              ) : loading ? (
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading...</span>
+              ) : (
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No contingencies found</span>
               )}
             </div>
           )}
@@ -909,91 +911,68 @@ function CongestionChartControls({
 }) {
   const allSelected = selectedConstraints.length === constraints.length;
   return (
-    <div className="pcc-panel">
-      <div className="pcc-title">Chart Controls</div>
-
-      <div className="pcc-section">
-        <div className="pcc-label">Constraints</div>
-        <div className="pcc-zone-actions">
-          <button
-            className={`pcc-mini-btn${allSelected ? ' active' : ''}`}
-            onClick={() => onConstraintsChange(allSelected ? [] : [...constraints])}
-          >
-            {allSelected ? 'Clear' : 'All'}
-          </button>
-        </div>
-        <div className="pcc-zone-grid">
-          {constraints.map(s => (
-            <label key={s} className="pcc-zone-item">
-              <input
-                type="checkbox"
-                checked={selectedConstraints.includes(s)}
-                onChange={() => {
-                  onConstraintsChange(
-                    selectedConstraints.includes(s)
-                      ? selectedConstraints.filter(x => x !== s)
-                      : [...selectedConstraints, s]
-                  );
-                }}
-              />
-              <span style={{ fontSize: 11 }}>{s.length > 30 ? s.slice(0, 28) + '…' : s}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="pcc-section">
-        <div className="pcc-label">Resolution</div>
-        <div className="pcc-btn-group">
-          {RESOLUTIONS.map(r => (
-            <button key={r.key} className={`pcc-btn${resolution === r.key ? ' active' : ''}`} onClick={() => onResolutionChange(r.key)}>
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="pcc-section">
-        <div className="pcc-label">Date Range</div>
-        <div className="pcc-btn-group">
-          {DATE_RANGES.map(d => (
-            <button key={d.key} className={`pcc-btn${dateRange === d.key ? ' active' : ''}`} onClick={() => onDateRangeChange(d.key)}>
-              {d.label}
-            </button>
-          ))}
-        </div>
-        {dateRange === 'custom' && (
-          <div className="pcc-date-inputs">
+    <div className="ctrl-toolbar">
+      <div className="ctrl-group">
+        <span className="ctrl-label">Constraints</span>
+        <button className={`ctrl-pill${allSelected ? ' active' : ''}`} onClick={() => onConstraintsChange(allSelected ? [] : [...constraints])}>
+          {allSelected ? 'Clear' : 'All'}
+        </button>
+        {constraints.map(s => (
+          <label key={s} className="ctrl-check">
             <input
-              type="date"
-              className="pcc-date"
-              value={startDate}
+              type="checkbox"
+              checked={selectedConstraints.includes(s)}
+              onChange={() => onConstraintsChange(
+                selectedConstraints.includes(s)
+                  ? selectedConstraints.filter(x => x !== s)
+                  : [...selectedConstraints, s]
+              )}
+            />
+            <span style={{ fontSize: 11 }}>{s.length > 30 ? s.slice(0, 28) + '…' : s}</span>
+          </label>
+        ))}
+      </div>
+      <div className="ctrl-divider" />
+      <div className="ctrl-group">
+        <span className="ctrl-label">Resolution</span>
+        {RESOLUTIONS.map(r => (
+          <button key={r.key} className={`ctrl-pill${resolution === r.key ? ' active' : ''}`} onClick={() => onResolutionChange(r.key)}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+      <div className="ctrl-divider" />
+      <div className="ctrl-group">
+        <span className="ctrl-label">Range</span>
+        {DATE_RANGES.map(d => (
+          <button key={d.key} className={`ctrl-pill${dateRange === d.key ? ' active' : ''}`} onClick={() => onDateRangeChange(d.key)}>
+            {d.label}
+          </button>
+        ))}
+        {dateRange === 'custom' && (
+          <>
+            <input type="date" className="ctrl-date" value={startDate}
               min={availableDates.length > 0 ? availableDates[0] : undefined}
               max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
               onChange={e => onStartDateChange(e.target.value)}
             />
-            <span className="pcc-date-sep">to</span>
-            <input
-              type="date"
-              className="pcc-date"
-              value={endDate}
+            <span className="ctrl-sep">–</span>
+            <input type="date" className="ctrl-date" value={endDate}
               min={availableDates.length > 0 ? availableDates[0] : undefined}
               max={availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined}
               onChange={e => onEndDateChange(e.target.value)}
             />
-          </div>
+          </>
         )}
       </div>
-
-      <div className="pcc-section">
-        <div className="pcc-label">Chart Type</div>
-        <div className="pcc-btn-group">
-          {CHART_TYPES.map(t => (
-            <button key={t.key} className={`pcc-btn${chartType === t.key ? ' active' : ''}`} onClick={() => onChartTypeChange(t.key)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+      <div className="ctrl-divider" />
+      <div className="ctrl-group">
+        <span className="ctrl-label">Type</span>
+        {CHART_TYPES.map(t => (
+          <button key={t.key} className={`ctrl-pill${chartType === t.key ? ' active' : ''}`} onClick={() => onChartTypeChange(t.key)}>
+            {t.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1173,7 +1152,7 @@ export default function Congestion() {
             {loading ? (
               <div className="loading"><div className="spinner" /> Loading...</div>
             ) : (
-              <PriceChart data={chartData} xKey="Date" yKeys={activeForChart} chartType={chartType} height={380} valuePrefix="$" valueSuffix="" />
+              <PriceChart data={chartData} xKey="Date" yKeys={activeForChart} chartType={chartType} valuePrefix="$" valueSuffix="" />
             )}
           </Widget>
         </div>

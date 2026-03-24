@@ -426,8 +426,8 @@ h3 { font-size: 1rem; font-weight: 600; }
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px 24px;
-  margin-bottom: 24px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -476,15 +476,15 @@ h3 { font-size: 1rem; font-weight: 600; }
 
 .kpi-grid-fixed {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
 }
 
 .kpi-card-fixed {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 14px 16px;
+  padding: 10px 12px;
   transition: all var(--transition);
 }
 
@@ -1223,12 +1223,94 @@ tr:hover td { background: var(--bg-hover); }
 .widget-controls-panel .pcc-label { margin-bottom: 6px; }
 .widget-controls-panel .pcc-zone-grid { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow-y: auto; }
 .widget-controls-panel .pcc-btn-group { flex-direction: row; flex-wrap: wrap; }
-.widget-body { padding: 16px; flex: 1; min-width: 0; overflow: hidden; display: flex; gap: 16px; }
+.widget-body { padding: 16px; flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0; min-height: 0; }
 .widget-body .price-summary-body { padding: 0; }
 .widget-body .kpi-grid:last-child { margin-bottom: 0; }
-.widget-body-nopad { flex: 1; overflow: hidden; min-width: 0; }
+.widget-body-nopad { flex: 1; overflow: hidden; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 
-/* Controls sidebar (left side) */
+/* Controls bar (top, horizontal toolbar) */
+.widget-controls-bar {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.widget-content-with-controls {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Horizontal chart control toolbar */
+.ctrl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+}
+.ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.ctrl-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.ctrl-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font);
+  white-space: nowrap;
+}
+.ctrl-pill:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.ctrl-pill.active { background: var(--accent-primary); color: white; border-color: var(--accent-primary); }
+.ctrl-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ctrl-check input { accent-color: var(--accent-primary); width: 13px; height: 13px; }
+.ctrl-date {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: var(--font);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-card);
+  color: var(--text);
+  min-width: 0;
+}
+.ctrl-date:focus { border-color: var(--accent-primary); outline: none; }
+.ctrl-sep { color: var(--text-muted); font-size: 11px; }
+.ctrl-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Controls sidebar (left side — legacy, kept for compatibility) */
 .widget-controls-sidebar {
   width: 180px;
   min-width: 160px;
@@ -1236,13 +1318,6 @@ tr:hover td { background: var(--bg-hover); }
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-.widget-content-with-controls {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -1298,9 +1373,9 @@ tr:hover td { background: var(--bg-hover); }
 }
 /* Make widgets fill their grid cell height */
 .react-grid-item .widget { height: 100%; display: flex; flex-direction: column; }
-.react-grid-item .widget .widget-body { flex: 1; overflow: auto; }
-.react-grid-item .widget .widget-body-nopad { flex: 1; overflow: auto; min-width: 0; }
-.react-grid-item .widget .widget-content-with-controls { flex: 1; overflow: auto; }
+.react-grid-item .widget .widget-body { flex: 1; overflow: auto; display: flex; flex-direction: column; min-height: 0; }
+.react-grid-item .widget .widget-body-nopad { flex: 1; overflow: auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.react-grid-item .widget .widget-content-with-controls { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
 
 /* ============================================================
    RESPONSIVE
