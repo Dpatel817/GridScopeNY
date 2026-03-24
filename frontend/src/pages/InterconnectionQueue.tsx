@@ -7,12 +7,7 @@ import {
 } from 'recharts';
 import Widget from '../components/Widget';
 import DraggableGrid from '../components/DraggableGrid';
-import type { GridItem } from '../components/DraggableGrid';ooltip, ResponsiveContainer, Cell, LabelList,
-} from 'recharts';
-import Widget from '../components/Widget';
-import DraggableGrid from '../components/DraggableGrid';
 import type { GridItem } from '../components/DraggableGrid';
-
 interface QueueRow {
   queue_pos: string; string; developer: string; fuel_type: string;
   sp_mw: number; wp_mw: number; zone: string; county: string; state: string;
